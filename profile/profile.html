@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGU - Hồ Sơ Của Bạn</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="profile.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <div class="profile-topbar">
+        <div class="topbar-left">
+            <button class="back-btn" onclick="goBackFromProfile()" title="Quay lại">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            <div class="topbar-titles">
+                <h1>Hồ Sơ Của Bạn</h1>
+                <p id="user-email">Đang kiểm tra bảo mật...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-shell bento-grid">
+
+        <div class="profile-card avatar-card bento-avatar">
+            <div class="card-label"><i class="fas fa-image"></i> ẢNH ĐẠI DIỆN</div>
+            <div class="avatar-preview" id="avatar-container">
+                <i class="fas fa-user-astronaut"></i>
+            </div>
+            <div class="avatar-actions">
+                <p class="hint">Ảnh sẽ hiện ở góc Dashboard và trong Workspace thay cho tên của bạn.</p>
+                <div class="avatar-btn-row">
+                    <input type="file" id="file-input" accept="image/png, image/jpeg, image/webp" hidden>
+                    <label class="btn-pill" for="file-input"><i class="fas fa-camera"></i> Đổi ảnh</label>
+                    <button class="btn-pill danger" id="remove-avatar-btn" style="display:none;" onclick="removeAvatar()"><i class="fas fa-trash"></i> Xóa ảnh</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="profile-card bento-info">
+            <div class="card-label"><i class="fas fa-id-card"></i> THÔNG TIN CƠ BẢN</div>
+
+            <div class="form-group">
+                <label>Tên hiển thị</label>
+                <input type="text" id="display-name" placeholder="Ví dụ: Nguyễn Văn A" autocomplete="off">
+            </div>
+
+            <div class="form-group">
+                <label>Email đăng nhập</label>
+                <div class="readonly-field">
+                    <span id="user-email-2">—</span>
+                    <span class="badge-small">Không thể đổi</span>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: auto; margin-bottom: 0;">
+                <label>Ngày tham gia</label>
+                <div class="readonly-field">
+                    <span id="user-joined">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="profile-card bento-privacy">
+            <div class="card-label"><i class="fas fa-eye-slash"></i> QUYỀN RIÊNG TƯ</div>
+            <div class="toggle-inner-box">
+                <div class="toggle-copy">
+                    <h4>Ẩn Email công khai</h4>
+                    <p>Khi bật, hệ thống sẽ hiện "Người dùng SGU" thay vì Email thật.</p>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="hide-email-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="profile-card bento-save">
+            <span class="save-status" id="save-status"></span>
+            <button class="save-btn" id="save-btn" onclick="saveProfile()">LƯU THAY ĐỔI</button>
+        </div>
+
+    </div>
+
+    <script src="profile.js"></script>
+</body>
+</html>

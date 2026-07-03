@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>SGU Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+   <div id="global-loader" class="global-loader">
+        <div class="loader" role="status" aria-label="Loading">
+            <div class="loader__dot"></div>
+            <div class="loader__dot"></div>
+            <div class="loader__dot"></div>
+            <div class="loader__shadow"></div>
+            <div class="loader__shadow"></div>
+            <div class="loader__shadow"></div>
+        </div>
+    </div>
+    <div class="desktop-container" id="main-dashboard-ui" style="opacity: 0; pointer-events: none; transition: opacity 0.5s ease;">
+        
+        <div class="character-tkb-mini" onclick="navigateWithFade('tkb/index.html')">
+            <div class="tkb-content">
+                <div class="badge-status">
+                    <span class="dot"></span>
+                    <span id="hero-status">ĐANG KHỞI ĐỘNG...</span>
+                </div>
+                <h1 id="mini-tkb-name">ĐANG TẢI</h1>
+                <p id="mini-tkb-time">Vui lòng đợi đồng bộ dữ liệu hệ thống</p>
+                <div class="tkb-details">
+                    <span><i class="fas fa-map-marker-alt"></i> Phòng: <b id="mini-tkb-room">---</b></span>
+                    <span><i class="fas fa-user-tie"></i> Giảng viên: <b id="mini-tkb-gv">---</b></span>
+                </div>
+                <div class="tkb-next-line" id="tkb-next-line" style="display:none;">
+                    <i class="fas fa-forward"></i> Tiếp theo: <b id="tkb-next-text">—</b>
+                </div>
+            </div>
+            <div class="bg-text" id="val-bg-text">SGU</div>
+        </div>
+
+        <div class="bottom-widgets-container">
+            <div class="widget-box">
+                <div class="widget-header">
+                    <div class="widget-tabs">
+                        <button class="active" onclick="switchWidget(0, this)">BÀI TẬP</button>
+                        <button onclick="switchWidget(1, this)">GHI CHÚ</button>
+                    </div>
+                </div>
+                <div class="widget-body" id="widget-dynamic-content">
+                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i> Đang tải dữ liệu...</div>
+                </div>
+            </div>
+
+            <div class="widget-box">
+                <div class="widget-header">
+                    <div class="widget-tabs">
+                        <button class="active">THỐNG KÊ DỮ LIỆU</button>
+                    </div>
+                </div>
+                <div class="widget-body stat-body">
+                    <div class="stat-item main-stat">
+                        <h2 id="stat-total-subs">0</h2>
+                        <p>MÔN HỌC</p>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-group-right">
+                        <div class="stat-item mini">
+                            <h2 id="stat-tkb-count">0</h2>
+                            <p>TIẾT HỌC</p>
+                        </div>
+                        <div class="stat-item mini">
+                            <h2 id="stat-exam-count">0</h2>
+                            <p>MÔN THI</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="top-right-profile">
+    <div class="profile-avatar"><i class="fas fa-user-graduate"></i></div>
+    <div class="profile-info">
+        <span>Đang đăng nhập:</span>
+        <b id="user-email-display">Đang tải...</b>
+    </div>
+</div>
+
+        <div class="right-icons-container">
+            <div class="icon-btn" onclick="goToTab('timetable')" title="Vào Thời Khóa Biểu" role="button" tabindex="0" aria-label="Vào Thời Khóa Biểu" onkeydown="if(event.key==='Enter')goToTab('timetable')">
+                <i class="fas fa-calendar-alt"></i>
+            </div>
+            <div class="icon-btn" onclick="goToTab('exams')" title="Vào Lịch Thi" role="button" tabindex="0" aria-label="Vào Lịch Thi" onkeydown="if(event.key==='Enter')goToTab('exams')">
+                <i class="fas fa-file-signature"></i>
+            </div>
+            <div class="icon-btn" onclick="goToTab('settings')" title="Cài Đặt Hệ Thống" role="button" tabindex="0" aria-label="Cài Đặt Hệ Thống" onkeydown="if(event.key==='Enter')goToTab('settings')">
+                <i class="fas fa-cog"></i>
+            </div>
+            <div class="icon-btn logout-btn" onclick="logout()" title="Đăng xuất" role="button" tabindex="0" aria-label="Đăng xuất" onkeydown="if(event.key==='Enter')logout()">
+                <i class="fas fa-power-off"></i>
+            </div>
+        </div>
+
+    </div>
+    <script src="dashboard.js"></script>
+</body>
+</html>

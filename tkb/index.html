@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>SGU Workspace Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
+</head>
+<body>
+
+    <div id="global-loader" class="global-loader">
+        <div class="loader" role="status" aria-label="Loading">
+            <div class="loader__dot"></div>
+            <div class="loader__dot"></div>
+            <div class="loader__dot"></div>
+            <div class="loader__shadow"></div>
+            <div class="loader__shadow"></div>
+            <div class="loader__shadow"></div>
+        </div>
+    </div>
+
+    <div id="auth-screen" class="auth-overlay hidden">
+        <div class="auth-ambient-bg"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
+        <div class="auth-panel glass-panel-3d">
+            <div class="auth-avatar-wrapper" id="auth-avatar-wrapper">
+                <svg id="auth-icon-login" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                <svg id="auth-icon-register" style="display: none;" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+            </div>
+            <div class="logo-area" style="text-align: center; margin-bottom: 25px;">
+                <h3 style="font-size: 1.8rem; margin: 0; background: linear-gradient(135deg, #fff, #DFB6B2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 600;">SGU Workspace</h3>
+                <p id="auth-greeting" style="color: rgba(255,255,255,0.5); font-size: 0.9rem; margin-top: 5px;">Mừng bạn quay trở lại</p>
+            </div>
+            <div class="auth-tabs">
+                <div class="tab-slider" id="tab-slider"></div>
+                <button id="tab-login" class="active" onclick="switchAuthTab('login')">Đăng Nhập</button>
+                <button id="tab-register" onclick="switchAuthTab('register')">Đăng Ký</button>
+            </div>
+            <form id="auth-form" onsubmit="handleAuth(event)">
+                <div class="auth-form-content" id="auth-form-content">
+                    <div class="input-mac-style auth-input">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: rgba(255,255,255,0.5); margin-right: 10px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                        <input type="email" id="auth-email" placeholder="Email của bạn..." required>
+                    </div>
+                    <div class="input-mac-style auth-input" style="margin-top: 15px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: rgba(255,255,255,0.5); margin-right: 10px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        <input type="password" id="auth-password" placeholder="Mật khẩu bảo mật..." required>
+                    </div>
+                </div>
+                <button type="submit" id="auth-submit-btn" class="glass-btn" style="width: 100%; margin-top: 20px; box-sizing: border-box;">Bắt Đầu</button>
+                <p id="auth-error" class="auth-error-msg"></p>
+            </form>
+        </div>
+    </div>
+
+    <div class="desktop-environment" id="main-app" style="opacity: 0; pointer-events: none; transition: opacity 0.5s;">
+
+        <nav class="floating-left-dock glass-panel-3d" aria-label="Dock chính">
+            <button class="dock-search" type="button" aria-label="Tìm kiếm">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </button>
+            <ul class="nav-links">
+            <li title="Trang Chủ" onclick="navigateWithFade('../dashboard.html')">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            </li>
+            
+            <li class="active" title="Thời Khóa Biểu" onclick="switchTab('timetable', this, 'Thời Khóa Biểu')">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </li>
+            
+            <li onclick="switchTab('exams', this, 'Lịch Thi Học Kỳ')" title="Lịch Thi">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15l2 2 4-4"></path></svg>
+            </li>
+            
+            <li title="Cài Đặt" onclick="switchTab('settings', this, 'Cài Đặt Workspace')">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </li>
+            
+            <li title="Đăng xuất" onclick="logout()" style="margin-top: auto; color: rgba(255, 70, 85, 0.8);">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M21 3v18"></path></svg>
+            </li>
+        </ul>
+        </nav>
+
+        <main class="main-glass-dashboard">
+            <header class="dashboard-topbar">
+                <div class="clock-widget">
+                    <h1 id="live-time">00:00</h1>
+                    <p id="live-date">Monday 05/27</p>
+                </div>
+                <div class="center-title">
+                    <span>SGU Workspace</span>
+                    <h2 id="topbar-title">Thời Khóa Biểu</h2>
+                </div>
+                <div class="top-actions">
+                    <!-- Gộp 2 cổng nạp dữ liệu lên đầu -->
+                    <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" hidden>
+                    <input type="file" id="excel-exam-file" accept=".xlsx, .xls, .csv" hidden>
+                    
+                    <!-- Nút nạp thông minh (Sẽ được JS tự động đổi tên và đổi chức năng) -->
+                    <label for="excel-file" id="top-import-label" class="glass-btn import-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <span id="top-import-text">Nhập TKB</span>
+                    </label>
+
+                    <!-- Bọc lại Profile Pill để hỗ trợ Dropdown -->
+<div class="profile-pill custom-select-container" id="profile-dropdown-container" onclick="toggleProfileDropdown(event)" style="cursor: pointer; position: relative; overflow: visible;">
+    <div class="profile-display" id="profile-display-area" style="display: flex; align-items: center; gap: 8px;">
+        <span id="user-email-display">Đang tải...</span>
+        <svg class="select-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position: static; transform: none;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </div>
+    
+    <!-- Dropdown Menu Kính Mờ -->
+    <ul class="custom-dropdown-list hidden-dropdown" id="profile-dropdown-list" style="top: calc(100% + 15px); right: 0; left: auto; transform: translateY(0); width: 220px;">
+        <li onclick="goToProfileFromTkb()" style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> 
+            Hồ sơ của bạn
+        </li>
+        <li onclick="switchTab('settings', document.querySelector(`.nav-links li[title='Cài Đặt Workspace']`) || document.querySelector(`.nav-links li[title='Cài Đặt']`), 'Cài Đặt Workspace')" style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> 
+    Cài đặt giao diện
+</li>
+        <hr style="border-color: rgba(255,255,255,0.08); margin: 6px 0;">
+        <li onclick="logout()" style="color: #ff5858; display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M21 3v18"></path></svg> 
+            Đăng xuất
+        </li>
+    </ul>
+</div>
+                </div>
+            </header>
+
+            <section id="tab-timetable" class="tab-pane active">
+                <!-- THÊM THANH ĐIỀU KHIỂN CHỌN TUÀN Ở ĐÂY -->
+                <div class="timetable-controls glass-panel-3d">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        <span style="font-weight: 600; color: var(--text-main);">Chọn tuần học:</span>
+                        <!-- CỤM CHỌN TUẦN CAO CẤP (CUSTOM DROPDOWN) -->
+                        <div class="week-selector-wrapper glass-panel-3d">
+                            <!-- Nút Lùi Tuần -->
+                            <button id="prev-week-btn" class="week-nav-btn" onclick="changeWeek(-1)" title="Tuần trước">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </button>
+                            <!-- Dropdown Custom -->
+                            <div class="custom-select-container" id="week-dropdown-container">
+                                <div class="custom-select-display" onclick="toggleWeekDropdown(event)">
+                                    <span id="current-week-text">Đang tải dữ liệu...</span>
+                                </div>
+                                <div class="select-arrow">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                </div>
+                                
+                                <!-- Danh sách kính mờ thả xuống -->
+                                <ul class="custom-dropdown-list hidden-dropdown" id="week-options-list">
+                                    <!-- Options sẽ được JS render -->
+                                </ul>
+
+                                <!-- Giữ lại thẻ select gốc ẩn đi để bộ máy JS cũ vẫn chạy mượt -->
+                                <select id="week-selector" style="display: none;"></select>
+                            </div>
+                            <!-- Nút Tiến Tuần -->
+                            <button id="next-week-btn" class="week-nav-btn" onclick="changeWeek(1)" title="Tuần sau">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="timetable-wrapper" class="timetable-wrapper glass-panel-3d"></div>
+            </section>
+
+            <!-- =========================================
+                 TAB: LỊCH THI HỌC KỲ
+            ========================================= -->
+            <section id="tab-exams" class="tab-pane" style="padding-top: 10px;">
+                
+                <!-- Tiêu đề Không gian mở (Minimalist Header) -->
+                <div style="padding: 0 25px; margin-bottom: 25px; flex-shrink: 0;">
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 18px;">
+                        <div style="width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15l2 2 4-4"></path></svg>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.6rem; font-weight: 600; color: var(--text-main); letter-spacing: -0.5px;">Danh Sách Môn Thi</h3>
+                            <p style="margin: 4px 0 0 0; font-size: 0.95rem; color: var(--text-muted);">Kiểm tra chính xác giờ giấc và phòng thi để chuẩn bị thật tốt</p>
+                        </div>
+                    </div>
+                    <div style="height: 1px; width: 100%; background: linear-gradient(90deg, rgba(150,150,150,0.25) 0%, rgba(150,150,150,0) 100%);"></div>
+                </div>
+
+                <!-- Không gian thả nổi Thẻ Thi (Đã gỡ bỏ glass-panel-3d) -->
+                <div id="exams-wrapper" class="scrollable" style="flex: 1; min-height: 0; padding: 0 25px;">
+                    <!-- Trạng thái trống -->
+                    <div style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.6; min-height: 400px;">
+                        <div style="width: 100px; height: 100px; border-radius: 50%; background: rgba(150,150,150,0.05); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: inset 0 0 20px rgba(150,150,150,0.05);">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M9 16l2 2 4-4"></path></svg>
+                        </div>
+                        <h5 style="font-size: 1.2rem; font-weight: 500; margin-bottom: 8px; color: var(--text-main);">Chưa có lịch thi nào</h5>
+                        <p style="font-size: 0.95rem; color: var(--text-muted);">Nhấn nút <strong style="color:var(--text-main);">"Nhập Lịch Thi" ở góc trên bên phải</strong> để đồng bộ dữ liệu.</p>
+                    </div>
+                </div>
+
+            </section>
+            <section id="tab-settings" class="tab-pane">
+                <div class="settings-wrapper glass-panel-3d" style="padding: 30px; height: 100%; overflow-y: auto;">
+                    <h3 style="font-weight: 500; margin-bottom: 30px;">Cá Nhân Hóa Giao Diện</h3>
+
+                    <div class="setting-group">
+                        <h4>Môi trường làm việc (Sáng/Tối)</h4>
+                        <div style="margin-top: 15px;">
+                            <input type="checkbox" id="theme-toggle" class="switch">
+                        </div>
+                    </div>
+
+                    <div class="setting-group" style="margin-top: 30px;">
+                        <h4>Đổi hình nền Desktop (Link URL hoặc Tải từ máy)</h4>
+                        
+                        <div style="display: flex; gap: 15px; margin-top: 15px; align-items: center; flex-wrap: wrap;">
+                            <!-- Ô nhập Link URL -->
+                            <div class="input-mac-style" style="flex: 1; max-width: 450px; margin-top: 0;">
+                                <input type="text" id="custom-bg-url" placeholder="Nhập địa chỉ URL hình ảnh...">
+                                <button onclick="applyCustomBG()" class="glass-btn small">Áp dụng</button>
+                            </div>
+                            
+                            <span style="color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 1px;">HOẶC</span>
+                            
+                            <!-- Nút Tải ảnh lên ẩn đi, dùng label để làm nút bấm -->
+                            <input type="file" id="custom-bg-file" accept="image/png, image/jpeg, image/gif, image/webp" hidden>
+                            <label for="custom-bg-file" class="glass-btn small" style="cursor: pointer; margin: 0; padding: 8px 20px;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                Tải ảnh lên
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="setting-group" style="margin-top: 30px;">
+                        <h4>Đổi màu Môn học (Card)</h4>
+                        <div id="neon-color-presets" style="display: flex; gap: 10px; margin: 15px 0;"></div>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <div class="input-mac-style" style="padding: 2px 6px;">
+                                <select id="subject-color-select" style="background: transparent; border: none; padding: 8px; color: var(--text-main); outline: none;">
+                                    <option value="" style="color: black;">-- Chọn môn học --</option>
+                                </select>
+                            </div>
+                            <input type="color" id="custom-subject-color" value="#FF3366" class="mac-color-picker">
+                            <button onclick="applySubjectColor()" class="glass-btn small">Áp màu tự pha</button>
+                            <button onclick="resetSubjectColors()" class="glass-btn small" style="color: #ff5858;">Khôi phục màu Môn</button>
+                        </div>
+                    </div>
+
+                    <hr style="border-color: rgba(255,255,255,0.1); margin: 40px 0 20px 0;">
+                    <button onclick="resetPersonalization()" class="glass-btn" style="color: #ff5858; border-color: rgba(255,88,88,0.3);">Khôi phục giao diện mặc định</button>
+                </div>
+            </section>
+        </main>
+
+        <div class="floating-bottom-dock glass-panel-3d" aria-hidden="true">
+            <div class="bottom-icon win-icon"></div>
+            <div class="bottom-icon spotify-icon"></div>
+            <div class="bottom-icon ps-icon">Ps</div>
+            <div class="bottom-icon chrome-icon"></div>
+            <div class="bottom-icon ae-icon">Ae</div>
+            <div class="bottom-icon discord-icon"></div>
+        </div>
+    </div>
+
+    <div id="subject-modal" class="modal hidden">
+        <div class="popup-panel glass-panel-3d">
+            <button id="close-modal-btn" class="glass-btn circle close-btn" type="button">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="modal-header">
+                <span class="modal-subtitle">Workspace / Chi tiết môn học</span>
+                <h3 id="modal-subject-name">Tên môn học</h3>
+                <div id="modal-subject-meta" class="subject-meta-grid"></div>
+            </div>
+
+            <div class="modal-sections">
+
+                <div class="section" style="display: flex; flex-direction: column; height: 100%;">
+                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h4 style="margin: 0;">Ghi chú & Thông báo</h4>
+
+                        <div style="display: flex; gap: 10px; align-items: center;">
+
+                            <button id="notes-clear-all-btn" class="clear-all-btn hidden-trash" type="button" onclick="clearAllActiveItems(this, 'note')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <g class="trash-lid"><path d="M3 6h18 M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></g>
+                                    <rect class="trash-paper" x="10" y="0" width="4" height="6" rx="1" fill="currentColor" stroke="none"></rect>
+                                    <path class="trash-bin" d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                </svg>
+                                <span>Xóa hết</span>
+                            </button>
+
+                            <div id="notes-trash-actions" class="hidden-trash" style="display: flex; gap: 8px; align-items: center;">
+                                <button id="notes-empty-btn" class="fancy-delete-btn header-trash-btn" type="button" onclick="emptyTrashBin(this, 'note')">
+                                    <div class="trash" aria-hidden="true"><div class="trash__lid"><div class="trash__paper"></div></div><div class="trash__bin"></div><div class="trash__check"><svg viewBox="0 0 8 6"><polyline points="1 3.4 2.71428571 5 7 1"></polyline></svg></div></div>
+                                    <span class="fancy-delete-btn__label">Dọn rác</span>
+                                </button>
+
+                                <button class="restore-all-btn" type="button" title="Khôi phục tất cả" onclick="restoreAllTrashItems(this, 'note')">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                                </button>
+                            </div>
+
+                            <div id="notes-trash-toggle" class="trash-toggle" onclick="toggleTrash('notes-trash-wrapper', 'notes-trash-actions')" style="margin: 0; background: rgba(255,255,255,0.05);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>
+                                <span id="notes-trash-count">(0)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="scrollable">
+                        <ul id="notes-list" class="glass-list"></ul>
+                        <div id="notes-trash-wrapper" class="hidden-trash">
+                            <ul id="notes-trash" class="glass-list"></ul>
+                        </div>
+                    </div>
+
+                    <div class="input-mac-style" onmouseenter="this.querySelector('input').focus()">
+                        <input type="text" id="new-note" placeholder="Nhập ghi chú mới..." onkeypress="handleEnter(event, 'note')">
+                        <button onclick="addDetail('note')" class="send-btn" title="Gửi (Enter)" type="button">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="section" style="display: flex; flex-direction: column; height: 100%;">
+                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h4 style="margin: 0;">Tiến độ công việc</h4>
+
+                        <div style="display: flex; gap: 10px; align-items: center;">
+
+                            <div id="tasks-trash-actions" class="hidden-trash" style="display: flex; gap: 8px; align-items: center;">
+                                <button id="tasks-empty-btn" class="fancy-delete-btn header-trash-btn" type="button" onclick="emptyTrashBin(this, 'task')">
+                                    <div class="trash" aria-hidden="true"><div class="trash__lid"><div class="trash__paper"></div></div><div class="trash__bin"></div><div class="trash__check"><svg viewBox="0 0 8 6"><polyline points="1 3.4 2.71428571 5 7 1"></polyline></svg></div></div>
+                                    <span class="fancy-delete-btn__label">Dọn rác</span>
+                                </button>
+
+                                <button class="restore-all-btn" type="button" title="Khôi phục tất cả" onclick="restoreAllTrashItems(this, 'task')">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                                </button>
+                            </div>
+
+                            <div id="tasks-trash-toggle" class="trash-toggle" onclick="toggleTrash('tasks-trash-wrapper', 'tasks-trash-actions')" style="margin: 0; background: rgba(255,255,255,0.05);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>
+                                <span id="tasks-trash-count">(0)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="scrollable">
+                        <div class="task-category">
+                            <h5>Sắp tới</h5>
+                            <ul id="tasks-upcoming" class="glass-list"></ul>
+                        </div>
+                        <div class="task-category" style="margin-top: 15px;">
+                            <h5>Đã hoàn thành</h5>
+                            <ul id="tasks-done" class="glass-list done-list"></ul>
+                        </div>
+
+                        <div id="tasks-trash-wrapper" class="hidden-trash" style="margin-top: 15px;">
+                            <ul id="tasks-trash" class="glass-list"></ul>
+                        </div>
+                    </div>
+
+                    <div class="input-mac-style" onmouseenter="this.querySelector('input').focus()">
+                        <input type="text" id="new-task" placeholder="Thêm công việc mới..." onkeypress="handleEnter(event, 'task')">
+                        <button onclick="addDetail('task')" class="send-btn" title="Gửi (Enter)" type="button">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- =========================================
+         CUSTOM DIALOG ALERT / CONFIRM 
+    ========================================= -->
+    <div id="custom-dialog-overlay" class="custom-dialog-overlay hidden">
+        <div class="custom-dialog-box">
+            <div class="dialog-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <div class="dialog-content">
+                <h3 id="custom-dialog-title">Thông báo</h3>
+                <p id="custom-dialog-msg">Nội dung thông báo...</p>
+            </div>
+            <div class="dialog-actions">
+                <button id="custom-dialog-cancel" class="glass-btn" type="button">Hủy bỏ</button>
+                <button id="custom-dialog-ok" class="glass-btn" type="button">Đồng ý</button>
+            </div>
+        </div>
+    </div>
+    <div class="share-menu" id="share-menu-widget">
+        <div class="toggle" id="share-toggle-btn">
+            <ion-icon name="share-social"></ion-icon>
+        </div>
+        <li style="--i: 0; --clr: #1877f2"><a href="404-error-face.html"><i class="fab fa-facebook-f"></i></a></li>
+        <li style="--i: 1; --clr: #25d366"><a href="404-error-face.html"><i class="fab fa-whatsapp"></i></a></li>
+        <li style="--i: 2; --clr: #fff"><a href="404-error-face.html"><i class="fab fa-x-twitter"></i></a></li>
+        <li style="--i: 3; --clr: #ff5733"><a href="404-error-face.html"><i class="fab fa-reddit-alien"></i></a></li>
+        <li style="--i: 4; --clr: #0a66c2"><a href="404-error-face.html"><i class="fab fa-linkedin-in"></i></a></li>
+        <li style="--i: 5; --clr: #c32aa3"><a href="404-error-face.html"><i class="fab fa-instagram"></i></a></li>
+        <li style="--i: 6; --clr: #fff"><a href="404-error-face.html"><i class="fab fa-github"></i></a></li>
+        <li style="--i: 7; --clr: #ff0000"><a href="404-error-face.html"><i class="fab fa-youtube"></i></a></li>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
