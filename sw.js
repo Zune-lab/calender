@@ -10,7 +10,7 @@
 // FIX: Dùng path TƯƠNG ĐỐI (không có dấu / ở đầu) và tự tính theo self.registration.scope,
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
-const CACHE_NAME = 'sgu-workspace-v3'; // BUMP VERSION MỖI KHI SỬA index.js/css/html để SW xóa cache cũ và nạp lại bản mới
+const CACHE_NAME = 'sgu-workspace-v4'; // BUMP lần này để xoá sạch cache CŨ đang bị kẹt (bug cache-first ở dưới) — từ v4 trở đi không bắt buộc phải bump tay nữa vì đã chuyển sang stale-while-revalidate
 const APP_SHELL_RELATIVE = [
     'index.html', 'index.css', 'index.js', 'shared.js',
     'profile/profile.html', 'profile/profile.css', 'profile/profile.js',
@@ -57,12 +57,22 @@ self.addEventListener('fetch', (event) => {
             }).catch(() => caches.match(req).then((c) => c || caches.match(scopedUrl('index.html'))))
         );
     } else {
+        // FIX BUG "PUSH GITHUB XONG VẪN THẤY BẢN CŨ": trước đây là cache-first THUẦN TÚY —
+        // hễ cache đã có bản nào thì trả thẳng bản đó, KHÔNG BAO GIỜ hỏi lại mạng nữa, nên
+        // index.js/index.css/calendar.js/calendar.css mới push lên GitHub Pages bị kẹt cứng
+        // sau bản cache đầu tiên (trong khi Live Server là origin khác, cache riêng, luôn mới).
+        // Giờ đổi sang stale-while-revalidate: vẫn trả cache ngay cho nhanh (giữ trải nghiệm
+        // mở nhanh/offline), NHƯNG luôn âm thầm gọi mạng song song để lấy bản mới nhất và ghi
+        // đè lại cache -> lần mở SAU sẽ tự động là bản mới, không cần bump CACHE_NAME tay nữa.
         event.respondWith(
-            caches.match(req).then((cached) => cached || fetch(req).then((res) => {
-                const clone = res.clone();
-                caches.open(CACHE_NAME).then((c) => c.put(req, clone));
-                return res;
-            }))
+            caches.match(req).then((cached) => {
+                const networkFetch = fetch(req).then((res) => {
+                    const clone = res.clone();
+                    caches.open(CACHE_NAME).then((c) => c.put(req, clone));
+                    return res;
+                }).catch(() => cached); // mất mạng thật sự thì mới rơi về cache
+                return cached || networkFetch;
+            })
         );
     }
 });
@@ -105,4 +115,4 @@ self.addEventListener('notificationclick', (event) => {
             if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
         })
     );
-});
+}); 

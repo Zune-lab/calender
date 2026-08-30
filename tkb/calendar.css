@@ -7,6 +7,10 @@
    toàn bộ chữ "rem" trong trang tự động scale mượt theo bề rộng màn hình. */
 html {
     font-size: clamp(14px, 12px + 0.45vw, 17px);
+    /* FIX BUG "MENU CHỮ 1 TO 1 NHỎ" TRÊN IPHONE/SAFARI: tắt auto-boost cỡ chữ theo bề rộng
+       riêng từng phần tử (xem giải thích chi tiết ở index.css) -> đồng bộ với trang Dashboard,
+       để label menu dưới (Trang chủ/Lịch/Lịch thi/...) luôn hiện đúng 1 cỡ như nhau. */
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
 }
 
 :root {
@@ -318,13 +322,19 @@ body.light-mode .swipe-hint-mobile { color: rgba(30, 41, 59, 0.5); }
     vertical-align: middle; 
     
     z-index: 50; 
-    background: transparent; border: none; box-shadow: none; backdrop-filter: none;
+    /* FIX BUG "THẺ MÔN ĐÈ LÊN HÀNG THỨ KHI CUỘN": trước đây để transparent + backdrop-filter:none
+       -> hàng "THỨ 2, THỨ 3..." dính sticky top:0 nhưng KHÔNG có nền che, nên khi cuộn dọc, đáy
+       thẻ môn của hàng Tiết phía trên (đã cuộn qua) vẫn lộ/đè lên ngay dưới chữ "THỨ X" (đúng như
+       ảnh chụp thực tế). Thêm nền mờ + blur để hàng sticky thật sự CHE được nội dung cuộn qua nó. */
+    background: rgba(10, 11, 15, 0.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: none; box-shadow: 0 6px 14px -6px rgba(0,0,0,0.35);
     color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,0.4); 
     /* FIX SCALE (container query): chữ "THỨ X" co theo bề rộng THẬT của khung bảng (cqw),
        không phải bề rộng cả trang -> luôn co giãn đúng dù main-dashboard/sidebar/mobile
        có ép khung bảng hẹp lại cỡ nào. */
     font-size: clamp(0.6rem, 1.3cqw, 0.85rem); font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
 }
+body.light-mode .timetable-table th { background: rgba(255, 255, 255, 0.82); box-shadow: 0 6px 14px -6px rgba(0,0,0,0.12); }
 
 /* Ép cột Tiết và Giờ cực nhỏ để nhường chỗ cho thẻ môn học, đồng thời vẫn co nhẹ theo container */
 /* FIX: cột "Tiết" và "Giờ" chỉ cần hiển thị vài ký tự ngắn (vd "Tiết 1", "07:00"), không cần
@@ -783,6 +793,15 @@ body.light-mode .planner-wrapper::-webkit-scrollbar-thumb:hover { background: rg
     text-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 .planner-day-header .dh-date { display: block; font-size: 0.72rem; font-weight: 500; opacity: 0.7; margin-top: 3px; }
+
+/* FIX: khi màn đủ rộng để thấy topbar-title ("SGU Workspace / Kế Hoạch Ngày"), chữ "Kế Hoạch
+   Ngày" bị LẶP LẠI thêm 1 lần nữa ở heading khối bên dưới -> thừa 1 dòng tiêu đề, chiếm mất
+   chỗ của khung lưới. Ẩn bớt heading lặp này, chỉ giữ icon + mô tả hướng dẫn; đến khi màn hẹp
+   hơn ngưỡng ẩn topbar-title (xem .center-title ở @media max-width:1180px bên dưới) thì hiện
+   lại vì lúc đó nó là chữ tiêu đề DUY NHẤT còn lại của trang. */
+@media (min-width: 1181px) {
+    #tab-planner .planner-header-text h3 { display: none; }
+}
 /* FIX: dùng thẳng var(--accent) full-bright cho chữ "hôm nay" (vd Chủ Nhật) quá chói khi accent
    ngẫu nhiên ra đỏ/hồng gắt. Pha loãng với text-muted để dịu mắt hơn nhưng vẫn nổi bật đủ để phân biệt. */
 .planner-day-header.is-today { color: color-mix(in srgb, var(--accent) 62%, var(--text-muted)); }
@@ -1180,7 +1199,10 @@ body.light-mode #notes-trash-wrapper, body.light-mode #tasks-trash-wrapper { bor
         align-items: center; justify-content: center; gap: 3px;
         transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
     }
-    .mobile-nav-label { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.2px; line-height: 1; }
+    /* Đồng bộ với .icon-label bên index.css (0.7rem) — trước đây 2 file dùng 2 cỡ chữ khác
+       nhau (0.6rem ở đây) cho cùng 1 menu, gây cảm giác "chữ 1 to 1 nhỏ" khi chuyển qua lại
+       giữa Trang chủ và các trang trong Workspace. */
+    .mobile-nav-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.2px; line-height: 1; }
     .mobile-bottom-nav button.active { background: rgba(255,255,255,0.15); color: #fff; }
 
     /* .share-menu hiện là widget trang trí (link đều trỏ 404-error-face.html, chưa nối chức năng thật)
@@ -1212,6 +1234,22 @@ body.light-mode #notes-trash-wrapper, body.light-mode #tasks-trash-wrapper { bor
     .timetable-table th:last-child { width: 48px !important; }
     /* Mobile: bảng thật sự rộng hơn màn hình (8 cột x 118px+) -> cần cuộn ngang thật, khác PC */
     .timetable-wrapper { overflow-x: auto; }
+
+    /* FIX: chữ trong thẻ môn học (tên môn/mã môn/phòng/GV/giờ học) dùng đơn vị cqw co theo bề
+       rộng CONTAINER .timetable-wrapper — nhưng trên mobile, container đó bị ép hẹp bằng đúng
+       màn hình (dù bảng bên trong cuộn ngang rộng hơn), nên cqw luôn chạm SÀN nhỏ nhất của
+       clamp() -> chữ bé tí, khó đọc (đúng như ảnh chụp thực tế). Ép hẳn cỡ chữ cố định lớn hơn
+       trên mobile, không phụ thuộc cqw nữa, để nội dung thẻ môn dễ đọc bằng ngón tay/mắt thật. */
+    .subject-card-td { padding: 12px; min-width: 108px; }
+    .subject-card-td h4 { font-size: 0.92rem !important; line-height: 1.3; margin-bottom: 6px; }
+    .subject-card-td .course-code { font-size: 0.72rem !important; }
+    .subject-card-td .info-text { font-size: 0.75rem !important; margin-bottom: 4px; }
+    .subject-card-td .time-text { font-size: 0.7rem !important; padding: 3px 8px; }
+    .subject-card-td .time-text svg { width: 11px; height: 11px; }
+    .subject-card-td.large h4 { font-size: 0.82rem !important; }
+    .subject-card-td.large .info-text,
+    .subject-card-td.large .course-code { font-size: 0.68rem !important; }
+    .subject-card-td.compact h4 { font-size: 0.92rem !important; }
     .week-nav-btn { width: 44px; height: 44px; } /* tăng vùng chạm cho ngón tay, desktop vẫn giữ nhỏ gọn 34px */
 
     /* Thanh "Chọn tuần học" dễ tràn ngang trên điện thoại: ẩn label chữ (icon lịch đã đủ gợi ý),
@@ -1247,6 +1285,16 @@ body.light-mode #notes-trash-wrapper, body.light-mode #tasks-trash-wrapper { bor
     .planner-header-text { min-width: 0; }
     .planner-header-text h3 { font-size: 1.25rem !important; }
     .planner-header-text p { font-size: 0.82rem !important; }
+
+    /* FIX: phần đầu trang Kế Hoạch (icon + tiêu đề + mô tả + thanh chọn tuần) chiếm quá nhiều
+       chiều cao trên mobile, đẩy lưới giờ thật sự (nơi kéo-thả tạo việc) xuống dưới, còn lại rất
+       ít chỗ để nhìn/thao tác -> nén gọn phần đầu lại, dồn khung lưới lên cao hơn. */
+    #tab-planner { padding-top: 4px !important; }
+    #tab-planner > div:first-child { padding: 0 16px !important; margin-bottom: 10px !important; }
+    #tab-planner .planner-header-title-row { margin-bottom: 10px !important; gap: 10px !important; }
+    .planner-header-text p { display: none; } /* mô tả hướng dẫn chỉ cần thấy 1 lần, ẩn bớt trên mobile để nhường chỗ */
+    .day-selector-wrapper { padding: 6px 8px !important; }
+    .planner-scroll-area { padding: 0 16px 16px !important; }
     .custom-select-display { min-width: 0 !important; flex: 1; padding: 0 30px 0 14px !important; justify-content: flex-start !important; }
     .week-selector-wrapper { flex: 1 !important; width: 100%; }
     #current-week-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }

@@ -1,8 +1,14 @@
 html {
-    /* Font-size gốc co giãn mượt theo bề rộng màn hình (thay vì cố định 16px) —
+    /* FIX BUG "MENU CHỮ 1 TO 1 NHỎ" TRÊN IPHONE/SAFARI: Safari tự động "boost" cỡ chữ của từng
+       phần tử THEO BỀ RỘNG RIÊNG của nó (text-size-adjust mặc định là "auto") để dễ đọc trên di
+       động — hệ quả là 2 label CÙNG font-size khai báo trong CSS (vd "Lịch" vs "Trang chủ") vẫn
+       có thể render ra 2 cỡ khác nhau vì độ rộng khung chứa khác nhau. Tắt hẳn auto-boost này để
+       mọi chữ luôn đúng y cỡ đã khai báo trong CSS, không tự ý phóng to/nhỏ theo ý trình duyệt.
+       Font-size gốc co giãn mượt theo bề rộng màn hình (thay vì cố định 16px) —
        nhờ vậy MỌI kích thước khai báo bằng rem trong file này tự động scale mượt
        theo mọi kích thước màn hình, không chỉ nhảy bậc tại các @media breakpoint. */
     font-size: clamp(14px, 12px + 0.45vw, 17px);
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
 }
 
 :root {
@@ -257,7 +263,9 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
 }
 .icon-btn-group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .icon-label {
-    font-size: 0.68rem; font-weight: 600; color: var(--text-muted);
+    /* Đồng bộ với .mobile-nav-label bên calendar.css (trước đây 2 file 2 cỡ khác nhau:
+       0.68rem ở đây vs 0.6rem bên kia -> cùng 1 menu nhưng nhảy cỡ chữ khi chuyển trang). */
+    font-size: 0.7rem; font-weight: 600; color: var(--text-muted);
     letter-spacing: 0.3px; text-align: center; white-space: nowrap;
 }
 .icon-btn {
