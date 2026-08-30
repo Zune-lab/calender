@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>SGU Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="index.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#08090c">
+    <link rel="icon" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+   <div id="global-loader" class="global-loader">
+        <div class="loader" role="status" aria-label="Loading">
+            <div class="loader__dot"></div>
+            <div class="loader__dot"></div>
+            <div class="loader__dot"></div>
+            <div class="loader__shadow"></div>
+            <div class="loader__shadow"></div>
+            <div class="loader__shadow"></div>
+        </div>
+    </div>
+    <div class="ambient-bg" aria-hidden="true">
+        <div class="ambient-blob blob-a" id="ambient-blob-a"></div>
+        <div class="ambient-blob blob-b" id="ambient-blob-b"></div>
+    </div>
+    <div class="desktop-container" id="main-dashboard-ui" style="opacity: 0; pointer-events: none; transition: opacity 0.5s ease;">
+        
+        <!-- BỌC 2 khối này trong 1 "stack" flex-column: trước đây mỗi khối tự định vị "position:absolute"
+             độc lập rồi TÍNH TOÁN khoảng cách bằng tay (bottom: calc(...)) để né nhau -> trên các màn
+             hình thấp hơn dự tính (laptop phổ thông ~768px chiều cao) hoặc khi nội dung dài hơn bình
+             thường, phép tính bị hụt và 2 khối đè lên nhau. Giờ để trình duyệt tự lo: khối TKB cao bao
+             nhiêu do NỘI DUNG THẬT quyết định, khối widget luôn nằm ngay sau nó trong luồng bình
+             thường -> không bao giờ đè nhau được nữa, bất kể màn hình cao/thấp hay nội dung dài/ngắn. -->
+        <div class="hero-stack">
+
+        <div class="character-tkb-mini" onclick="navigateWithFade('tkb/calendar.html')">
+            <div class="tkb-content">
+                <div class="badge-status">
+                    <span class="dot"></span>
+                    <span id="hero-status">ĐANG KHỞI ĐỘNG...</span>
+                </div>
+                <h1 id="mini-tkb-name">ĐANG TẢI</h1>
+                <p id="mini-tkb-time">Vui lòng đợi đồng bộ dữ liệu hệ thống</p>
+                <div class="tkb-details">
+                    <span><i class="fas fa-map-marker-alt"></i> Phòng: <b id="mini-tkb-room">---</b></span>
+                    <span><i class="fas fa-user-tie"></i> <span id="mini-tkb-gv-label">Giảng viên:</span> <b id="mini-tkb-gv">---</b></span>
+                </div>
+                <div class="tkb-next-line" id="tkb-next-line" style="display:none;">
+                    <i class="fas fa-forward"></i> Tiếp theo: <b id="tkb-next-text">—</b>
+                </div>
+            </div>
+            <div class="bg-text" id="val-bg-text">SGU</div>
+        </div>
+
+        <div class="bottom-widgets-container">
+            <div class="widget-box">
+                <div class="widget-header">
+                    <div class="widget-tabs">
+                        <button class="active" onclick="switchWidget(0, this)">BÀI TẬP</button>
+                        <button onclick="switchWidget(1, this)">GHI CHÚ</button>
+                    </div>
+                </div>
+                <div class="widget-body" id="widget-dynamic-content">
+                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i> Đang tải dữ liệu...</div>
+                </div>
+            </div>
+
+            <div class="widget-box">
+                <div class="widget-header">
+                    <div class="widget-tabs">
+                        <button class="active">THỐNG KÊ DỮ LIỆU</button>
+                    </div>
+                </div>
+                <div class="widget-body stat-body">
+                    <div class="stat-item main-stat">
+                        <h2 id="stat-total-subs">0</h2>
+                        <p>MÔN HỌC</p>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-group-right">
+                        <div class="stat-item mini">
+                            <h2 id="stat-tkb-count">0</h2>
+                            <p>TIẾT HỌC</p>
+                        </div>
+                        <div class="stat-item mini">
+                            <h2 id="stat-exam-count">0</h2>
+                            <p>MÔN THI</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        </div>
+        <!-- /.hero-stack -->
+
+        <div class="top-right-profile">
+    <div class="profile-avatar"><i class="fas fa-user-graduate"></i></div>
+    <div class="profile-info">
+        <span>Đang đăng nhập:</span>
+        <b id="user-email-display">Đang tải...</b>
+    </div>
+</div>
+
+        <div class="right-icons-container">
+            <div class="icon-btn-group">
+                <div class="icon-btn" onclick="goToTab('timetable')" title="Vào Thời Khóa Biểu" role="button" tabindex="0" aria-label="Vào Thời Khóa Biểu" onkeydown="if(event.key==='Enter')goToTab('timetable')">
+                    <i class="fas fa-calendar-alt"></i>
+                </div>
+                <span class="icon-label">Lịch</span>
+            </div>
+            <div class="icon-btn-group">
+                <div class="icon-btn" onclick="goToTab('exams')" title="Vào Lịch Thi" role="button" tabindex="0" aria-label="Vào Lịch Thi" onkeydown="if(event.key==='Enter')goToTab('exams')">
+                    <i class="fas fa-file-signature"></i>
+                </div>
+                <span class="icon-label">Lịch thi</span>
+            </div>
+            <div class="icon-btn-group">
+                <div class="icon-btn" onclick="goToTab('planner')" title="Vào Kế Hoạch Ngày" role="button" tabindex="0" aria-label="Vào Kế Hoạch Ngày" onkeydown="if(event.key==='Enter')goToTab('planner')">
+                    <i class="fas fa-stopwatch"></i>
+                </div>
+                <span class="icon-label">Kế hoạch</span>
+            </div>
+            <div class="icon-btn-group">
+                <div class="icon-btn" onclick="goToTab('settings')" title="Cài Đặt Hệ Thống" role="button" tabindex="0" aria-label="Cài Đặt Hệ Thống" onkeydown="if(event.key==='Enter')goToTab('settings')">
+                    <i class="fas fa-cog"></i>
+                </div>
+                <span class="icon-label">Cài đặt</span>
+            </div>
+            <div class="icon-btn-group">
+                <div class="icon-btn logout-btn" onclick="logout()" title="Đăng xuất" role="button" tabindex="0" aria-label="Đăng xuất" onkeydown="if(event.key==='Enter')logout()">
+                    <i class="fas fa-power-off"></i>
+                </div>
+                <span class="icon-label">Thoát</span>
+            </div>
+        </div>
+
+    </div>
+    <script src="shared.js"></script>
+    <script src="index.js"></script>
+</body>
+</html>

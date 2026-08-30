@@ -2,11 +2,15 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>SGU - Hồ Sơ Của Bạn</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="profile.css">
+    <link rel="manifest" href="../manifest.json">
+    <meta name="theme-color" content="#08090c">
+    <link rel="icon" href="../icon-192.png">
+    <link rel="apple-touch-icon" href="../icon-192.png">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -20,6 +24,23 @@
                 <h1>Hồ Sơ Của Bạn</h1>
                 <p id="user-email">Đang kiểm tra bảo mật...</p>
             </div>
+        </div>
+        <div class="topbar-shortcuts">
+            <button class="shortcut-btn" onclick="navigateFromProfile('../index.html')" title="Về Dashboard" aria-label="Về Dashboard">
+                <i class="fas fa-home"></i>
+            </button>
+            <button class="shortcut-btn" onclick="navigateFromProfile('../tkb/calendar.html', 'timetable')" title="Thời Khóa Biểu" aria-label="Thời Khóa Biểu">
+                <i class="fas fa-calendar-alt"></i>
+            </button>
+            <button class="shortcut-btn" onclick="navigateFromProfile('../tkb/calendar.html', 'exams')" title="Lịch Thi" aria-label="Lịch Thi">
+                <i class="fas fa-file-signature"></i>
+            </button>
+            <button class="shortcut-btn" onclick="navigateFromProfile('../tkb/calendar.html', 'planner')" title="Kế Hoạch Ngày" aria-label="Kế Hoạch Ngày">
+                <i class="fas fa-stopwatch"></i>
+            </button>
+            <button class="shortcut-btn" onclick="navigateFromProfile('../tkb/calendar.html', 'settings')" title="Cài Đặt" aria-label="Cài Đặt">
+                <i class="fas fa-cog"></i>
+            </button>
         </div>
     </div>
 
@@ -56,11 +77,18 @@
                 </div>
             </div>
 
-            <div class="form-group" style="margin-top: auto; margin-bottom: 0;">
+            <!-- Kéo "Ngày tham gia" lên nằm đúng thứ tự tự nhiên (bỏ margin-top:auto đẩy xuống đáy cũ) -->
+            <div class="form-group">
                 <label>Ngày tham gia</label>
                 <div class="readonly-field">
                     <span id="user-joined">—</span>
                 </div>
+            </div>
+
+            <!-- Nút Lưu dời vào ngay dưới "Ngày tham gia" thay vì 1 thẻ full-width riêng ở cuối lưới -->
+            <div class="info-save-row">
+                <span class="save-status" id="save-status"></span>
+                <button class="save-btn" id="save-btn" onclick="saveProfile()">LƯU THAY ĐỔI</button>
             </div>
         </div>
 
@@ -78,13 +106,9 @@
             </div>
         </div>
 
-        <div class="profile-card bento-save">
-            <span class="save-status" id="save-status"></span>
-            <button class="save-btn" id="save-btn" onclick="saveProfile()">LƯU THAY ĐỔI</button>
-        </div>
-
     </div>
 
+    <script src="../shared.js"></script>
     <script src="profile.js"></script>
 </body>
 </html>

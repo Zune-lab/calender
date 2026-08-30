@@ -1,24 +1,33 @@
-// THAY MÃ SUPABASE CỦA BẠN VÀO ĐÂY (giữ đồng bộ với dashboard.js và tkb/app.js):
+// THAY MÃ SUPABASE CỦA BẠN VÀO ĐÂY (giữ đồng bộ với index.js và tkb/calendar.js):
 const supabaseUrl = 'https://oyumvhldhmjmahohavsp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dW12aGxkaG1qbWFob2hhdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDU0MTEsImV4cCI6MjA5Nzc4MTQxMX0.Wl_SANDz_-FQUaFQwcKXVFVz1Oo1YJNJ-0yMWF_aM1c';
 
 let base64Image = null;
-let originalMeta = {};
+
+// ==========================================
+// LỐI TẮT CHUYỂN TRANG NHANH (Dashboard / TKB / Lịch Thi / Cài Đặt)
+// ==========================================
+window.navigateFromProfile = function(url, tabName) {
+    if (tabName) localStorage.setItem('targetTab', tabName);
+    window.location.href = url;
+};
 
 // ==========================================
 // QUAY LẠI ĐÚNG NƠI ĐÃ VÀO PROFILE (TKB hoặc Dashboard)
 // ==========================================
 window.goBackFromProfile = function() {
-    const returnTo = localStorage.getItem('profileReturnTo') || '../dashboard.html';
+    const returnTo = localStorage.getItem('profileReturnTo') || '../index.html';
     localStorage.removeItem('profileReturnTo');
     window.location.href = returnTo;
 };
 
 // ==========================================
-// 0. RANDOM MÀU ACCENT (tránh trùng màu môn học đã lưu trong localStorage)
+// 0. MÀU ACCENT CỐ ĐỊNH THEO TÀI KHOẢN (hash từ user ID, tránh trùng màu môn học đã lưu)
+//    Cùng 1 tài khoản sẽ luôn ra cùng 1 màu mỗi lần vào Profile, thay vì random mỗi lần tải trang.
 //    Ở light-mode: tự giảm sáng/giảm chói vì màu gốc được thiết kế cho nền tối.
 // ==========================================
-const ACCENT_POOL = ['#FF3366', '#00C9FF', '#7c3aed', '#11998e', '#FDBB2D', '#22C1C3', '#E100FF', '#92FE9D', '#0A84FF', '#f97316'];
+// ACCENT_POOL, hashStringToIndex(), getSavedAccentColor(), resolveAccentForUser()...
+// giờ nằm ở shared.js (load trước file này trong profile.html)
 let currentAccentBase = null;
 
 function applyAccentColor(hex) {
@@ -37,26 +46,29 @@ function applyAccentColor(hex) {
 
     const finalHex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
     document.documentElement.style.setProperty('--accent', finalHex);
-    document.documentElement.style.setProperty('--accent-r', r);
-    document.documentElement.style.setProperty('--accent-g', g);
-    document.documentElement.style.setProperty('--accent-b', b);
+    document.body.style.backgroundImage = `radial-gradient(circle at 30% 0%, ${finalHex}25 0%, transparent 55%)`;
 }
 
-function pickRandomAccent() {
+function pickAccentForUser(userId) {
+    // Nếu người dùng đã tự chọn màu ở tab Cài Đặt (tkb/calendar.html) thì luôn ưu tiên
+    // dùng đúng màu đó, khỏi cần hash gì thêm.
+    const customColor = getSavedAccentColor();
+    if (customColor) {
+        applyAccentColor(customColor);
+        return;
+    }
+
     let usedColors = [];
     try {
-        const saved = JSON.parse(localStorage.getItem('subjectCustomColors') || '{}');
-        usedColors = Object.values(saved);
+        const savedSubjectColors = JSON.parse(localStorage.getItem('subjectCustomColors') || '{}');
+        usedColors = Object.values(savedSubjectColors);
     } catch(e){}
-    
+
     let available = ACCENT_POOL.filter(c => !usedColors.includes(c));
     if(!available.length) available = ACCENT_POOL;
-    
-    const randomColor = available[Math.floor(Math.random() * available.length)];
-    applyAccentColor(randomColor);
-    
-    // QUAN TRỌNG: Xóa lệnh chèn background cũ để nhường quyền cho CSS xử lý Light Mode
-    document.body.style.backgroundImage = ''; 
+
+    const chosenColor = available[hashStringToIndex(userId, available.length)];
+    applyAccentColor(chosenColor);
 }
 
 // ==========================================
@@ -67,7 +79,6 @@ function applyTheme() {
     document.body.classList.toggle('light-mode', isLight);
 }
 applyTheme();
-pickRandomAccent();
 
 // ==========================================
 // 2. HIỂN THỊ LỖI RÕ RÀNG NGAY TRÊN TRANG (thay vì đứng im khó hiểu)
@@ -112,9 +123,11 @@ async function bootProfile() {
     clearTimeout(loadWatchdog);
 
     if (!session) {
-        window.location.href = '../tkb/index.html';
+        window.location.href = '../tkb/calendar.html';
         return;
     }
+
+    pickAccentForUser(session.user.id);
 
     try {
         document.getElementById('user-email').innerText = session.user.email;
@@ -128,7 +141,6 @@ async function bootProfile() {
         }
 
         const meta = session.user.user_metadata || {};
-        originalMeta = meta;
 
         if (meta.avatar) {
             base64Image = meta.avatar;
@@ -219,3 +231,9 @@ window.saveProfile = async function() {
 };
 
 bootProfile();
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../sw.js').catch(() => {});
+    });
+}

@@ -1,0 +1,368 @@
+html {
+    /* Font-size gốc co giãn mượt theo bề rộng màn hình (thay vì cố định 16px) —
+       nhờ vậy MỌI kích thước khai báo bằng rem trong file này tự động scale mượt
+       theo mọi kích thước màn hình, không chỉ nhảy bậc tại các @media breakpoint. */
+    font-size: clamp(14px, 12px + 0.45vw, 17px);
+}
+
+:root {
+    --bg-color: #08090c;
+    --text-main: #ffffff;
+    --text-muted: #8b949e;
+    --accent: #ff4655; /* JS tự động đổi màu theo môn */
+    --accent-2: #00C9FF; /* Màu phụ cho lớp blob thứ 2, tạo chiều sâu */
+    --panel-bg: rgba(20, 20, 25, 0.45);
+    --panel-border: rgba(255, 255, 255, 0.1);
+
+    /* Motion token dùng chung toàn hệ thống (đồng bộ index.css / calendar.css / profile.css) */
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --duration-fast: 0.2s;
+    --duration-normal: 0.35s;
+
+    /* Biến của Bouncing Loader (đồng bộ với tkb/style.css) */
+    --dot-size: 20px;
+    --dot-base: #ffffff;
+    --dot-highlight: #ffffff;
+    --shadow-color: rgba(255, 255, 255, 0.35);
+    --shadow-blur: 1px;
+    --cycle: 0.5s;
+    --ease: ease;
+}
+
+/* =========================================
+   GLOBAL LOADER (BOUNCING DOTS) - copy từ tkb/style.css
+========================================= */
+.global-loader {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: 99999; display: flex; align-items: center; justify-content: center;
+    background: rgba(8, 9, 12, 0.75);
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+.global-loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.loader { width: 200px; height: 60px; position: relative; z-index: 1; }
+.loader__dot {
+    width: var(--dot-size); height: var(--dot-size); position: absolute; border-radius: 50%;
+    background: linear-gradient(135deg, var(--dot-highlight), var(--dot-base));
+    left: 15%; transform-origin: 50%;
+    animation: bounce-dot var(--cycle) alternate infinite var(--ease);
+    box-shadow: 0 1px 10px rgba(255, 255, 255, 0.35);
+}
+@keyframes bounce-dot {
+    0% { top: 60px; height: 5px; border-radius: 50px 50px 25px 25px; transform: scaleX(1.7); }
+    40% { height: 20px; border-radius: 50%; transform: scaleX(1); }
+    100% { top: 0%; }
+}
+.loader__dot:nth-child(2) { left: 45%; animation-delay: 0.2s; }
+.loader__dot:nth-child(3) { left: auto; right: 15%; animation-delay: 0.3s; }
+
+.loader__shadow {
+    width: var(--dot-size); height: 4px; border-radius: 50%; background: var(--shadow-color);
+    position: absolute; top: 62px; transform-origin: 50%; z-index: -1; left: 15%;
+    filter: blur(var(--shadow-blur));
+    animation: bounce-shadow var(--cycle) alternate infinite var(--ease);
+}
+@keyframes bounce-shadow {
+    0% { transform: scaleX(1.5); }
+    40% { transform: scaleX(1); opacity: .7; }
+    100% { transform: scaleX(.2); opacity: .4; }
+}
+.loader__shadow:nth-child(4) { left: 45%; animation-delay: 0.2s; }
+.loader__shadow:nth-child(5) { left: auto; right: 15%; animation-delay: 0.3s; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-main); font-family: 'Inter', sans-serif;
+    overflow: hidden; height: 100vh; width: 100vw;
+}
+
+/* =========================================
+   AMBIENT BACKGROUND (blob trôi nổi) — đồng bộ kỹ thuật với auth-ambient-bg của tkb/style.css
+   Thay cho nền tĩnh 1 màu trước đây; JS (index.js) sẽ tự tô lại màu 2 blob theo accent môn học.
+========================================= */
+.ambient-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.ambient-blob {
+    position: absolute; border-radius: 50%; opacity: 0.55;
+    animation: floatBlobDash 20s infinite alternate ease-in-out;
+    will-change: transform; transition: background var(--duration-normal) var(--ease-standard);
+}
+.ambient-blob.blob-a { width: 850px; height: 850px; background: radial-gradient(circle, rgba(255,70,85,0.28) 0%, transparent 60%); top: -25%; left: -12%; }
+.ambient-blob.blob-b { width: 750px; height: 750px; background: radial-gradient(circle, rgba(0,201,255,0.22) 0%, transparent 60%); bottom: -25%; right: -10%; animation-delay: -9s; }
+@keyframes floatBlobDash { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(70px, 55px) scale(1.12); } }
+
+.desktop-container { position: relative; z-index: 1; width: 100%; height: 100%; }
+
+/* --- STACK CHỨA THẺ TKB + WIDGET ĐÁY ---
+   FIX BUG "MENU/NỘI DUNG BỊ CHE" TẬN GỐC: trước đây .character-tkb-mini và .bottom-widgets-container
+   là 2 khối position:absolute HOÀN TOÀN ĐỘC LẬP, phải TỰ TÍNH bằng calc() khoảng cách giữa chúng
+   (bottom: 6% + chiều cao widget + khoảng hở). Cách này luôn là phỏng đoán: trên màn hình có chiều
+   cao thấp hơn dự tính (laptop phổ thông ~768px) hoặc khi nội dung thẻ TKB dài hơn bình thường
+   (vd trạng thái "Kỳ học chưa bắt đầu"), phép tính bị hụt và 2 khối đè/che chữ lên nhau.
+   Sửa tận gốc: gộp 2 khối vào 1 flex-column "stack" duy nhất, để trình duyệt tự xếp theo LUỒNG BÌNH
+   THƯỜNG — thẻ TKB cao bao nhiêu do đúng nội dung thật quyết định, widget luôn nằm NGAY SAU nó,
+   không bao giờ đè lên nhau được nữa dù màn hình cao/thấp hay nội dung dài/ngắn thế nào.
+   overflow-y:auto chỉ là lưới an toàn cuối cùng cho trường hợp cực hiếm (màn quá thấp) — khi đó
+   toàn khối sẽ tự cuộn thay vì vỡ layout. */
+.hero-stack {
+    position: absolute; left: 6%; right: 3%; top: 12%; bottom: 6%;
+    display: flex; flex-direction: column; align-items: flex-start;
+    z-index: 10; overflow-y: auto; overflow-x: hidden;
+}
+.hero-stack::-webkit-scrollbar { width: 4px; }
+.hero-stack::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
+
+/* --- 1. TKB MINI --- */
+.character-tkb-mini {
+    /* Không còn position:absolute ĐỂ TỰ ĐỊNH VỊ TRÊN MÀN HÌNH — giờ là 1 item bình thường trong
+       .hero-stack, cao đúng bằng nội dung thật của nó, không thể bị khối widget đè lên nữa.
+       Vẫn giữ position:relative (khác absolute) để làm điểm neo cho .bg-text (watermark chữ lớn
+       phía sau, dùng position:absolute) — nếu không, .bg-text sẽ neo nhầm vào .hero-stack bên
+       ngoài thay vì đúng thẻ này. */
+    position: relative;
+    width: clamp(460px, 46vw, 660px); max-width: 100%;
+    flex-shrink: 0;
+    display: flex; flex-direction: column; justify-content: center;
+    cursor: pointer;
+    padding: 4px 0 20px;
+    overflow: hidden; /* phòng khi 1 chuỗi cực dài bất thường vẫn vượt khung ngang, cắt gọn thay vì vỡ layout */
+}
+.character-tkb-mini:hover .bg-text { transform: translateX(30px); opacity: 0.15; }
+.character-tkb-mini:hover .tkb-content { transform: translateX(15px); }
+
+.bg-text {
+    position: absolute; left: -5%; top: 50%; transform: translateY(-50%);
+    font-size: clamp(130px, 18vw, 250px); font-weight: 800; color: var(--accent); opacity: 0.1;
+    z-index: 1; pointer-events: none; transition: 0.4s ease; text-transform: uppercase; line-height: 0.85; white-space: nowrap;
+}
+
+.tkb-content { position: relative; z-index: 2; transition: 0.4s ease; text-shadow: 0 4px 20px rgba(0,0,0,0.6); }
+
+.badge-status {
+    display: inline-flex; align-items: center; gap: 10px; padding: 8px 18px;
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 30px; font-size: 0.9rem; font-weight: 600; letter-spacing: 1px;
+    margin-bottom: 25px; backdrop-filter: blur(10px);
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.35); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0% { opacity:1; } 50% { opacity:0.3; } 100% { opacity:1; } }
+
+.tkb-content h1 {
+    /* FIX BUG "CHỮ BỊ CẮT" (vd "KỲ HỌC CHƯA BẮT ĐẦU" mất chữ U ở cuối): nguyên nhân là
+       white-space:nowrap ép cứng 1 dòng + overflow:hidden của khung cha -> chữ dài hơn khung bị
+       cắt cụt giữa từ. Khung chứa giờ đã được mở rộng (xem .character-tkb-mini) nên KHÔNG cần
+       giảm cỡ chữ nữa — trả lại đúng cỡ chữ gốc, chỉ bỏ ép nowrap để phòng hờ vẫn xuống dòng an
+       toàn nếu gặp chuỗi dài bất thường, thay vì bị cắt chữ như trước. */
+    font-size: clamp(1.7rem, 1.2rem + 3vw, 4.6rem);
+    font-weight: 800; 
+    line-height: 1.25; 
+    padding-top: 10px; 
+    margin-bottom: 10px; 
+    letter-spacing: normal;
+    text-transform: uppercase; 
+    text-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+.tkb-content p { font-size: clamp(1rem, 0.85rem + 0.5vw, 1.4rem); color: rgba(255,255,255,0.85); font-weight: 500; margin-bottom: 35px; }
+
+.tkb-details { display: flex; flex-direction: column; gap: 14px; }
+.tkb-details span { font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.15rem); color: var(--text-main); display: flex; align-items: center; gap: 15px; font-weight: 500; }
+.tkb-details i { color: var(--accent); width: 25px; text-align: center; font-size: 1.3rem; }
+
+.tkb-next-line {
+    margin-top: 22px; align-items: center; gap: 10px; width: fit-content;
+    padding: 8px 16px; border-radius: 30px; font-size: 0.85rem; font-weight: 600;
+    color: var(--text-muted); background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border);
+    backdrop-filter: blur(10px);
+}
+.tkb-next-line i { color: var(--accent); }
+.tkb-next-line b { color: var(--text-main); font-weight: 700; }
+body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
+
+/* --- 2. THẺ WIDGET ĐÁY ---
+   Không còn position:absolute riêng — giờ là item thứ 2 trong .hero-stack, luôn nằm NGAY SAU
+   thẻ TKB (không bao giờ đè lên nó). margin-top:auto đẩy nó dán sát đáy khối stack khi còn dư
+   chỗ (giữ đúng cảm giác bố cục cũ), nhưng khi thẻ TKB cao hơn bình thường, nó tự nhường chỗ
+   xuống dưới thay vì bị đè. */
+.bottom-widgets-container {
+    margin-top: auto; flex-shrink: 0;
+    display: flex; gap: clamp(16px, 2vw, 30px); width: clamp(560px, 58vw, 800px); max-width: 100%;
+    height: clamp(200px, 22vw, 240px); z-index: 10;
+}
+.widget-box {
+    flex: 1; min-width: 0; background: var(--panel-bg); backdrop-filter: blur(20px);
+    border: 1px solid var(--panel-border); border-radius: 24px; padding: clamp(16px, 1.8vw, 25px);
+    display: flex; flex-direction: column; box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    transition: transform var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard);
+}
+.widget-box:hover { border-color: rgba(255,255,255,0.18); transform: translateY(-3px); box-shadow: 0 16px 36px rgba(0,0,0,0.4); }
+
+.widget-header { margin-bottom: 18px; }
+.widget-tabs { display: flex; gap: 5px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 10px; width: fit-content;}
+.widget-tabs button {
+    background: transparent; border: none; color: var(--text-muted); font-weight: 600; font-size: 0.85rem;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: 0.3s; letter-spacing: 0.5px;
+}
+.widget-tabs button.active { background: rgba(255,255,255,0.15); color: var(--text-main); }
+
+.widget-body { flex: 1; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding-right: 5px; }
+.widget-body::-webkit-scrollbar { width: 4px; }
+.widget-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+.empty-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.5; font-size: 1rem; gap: 12px; }
+
+.list-item {
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; cursor: pointer;
+    transition: transform var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+.list-item:hover { background: rgba(255,255,255,0.1); transform: translateX(5px); border-color: rgba(255,255,255,0.15);}
+.list-icon { width: 42px; height: 42px; border-radius: 12px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: var(--text-main); }
+.list-text { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.list-text h4 { margin: 0 0 4px 0; font-size: 1rem; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.list-text p { margin: 0; font-size: 0.8rem; color: var(--text-muted); }
+
+/* Bố cục Thống kê chia 3 */
+.stat-body { flex-direction: row !important; align-items: center; justify-content: space-between; padding: 0 10px; }
+.stat-item { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.stat-item h2 { font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 5px; text-shadow: 0 0 30px rgba(0,0,0,0.5);}
+.stat-item p { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); letter-spacing: 1px; }
+
+.main-stat h2 { font-size: clamp(2.6rem, 2rem + 2.4vw, 5rem); }
+.stat-divider { width: 1px; height: 70%; background: var(--panel-border); margin: 0 clamp(10px, 1.5vw, 20px); }
+.stat-group-right { display: flex; flex-direction: column; gap: 15px; flex: 1;}
+.stat-item.mini h2 { font-size: clamp(1.6rem, 1.2rem + 1.2vw, 2.5rem); color: var(--text-main); text-shadow: none; }
+.stat-item.mini { flex-direction: row; justify-content: space-between; align-items: center;}
+
+/* --- 3. GÓC PHẢI (PROFILE + ICONS) --- */
+.top-right-profile {
+    position: absolute; right: 3%; top: 4%;
+    display: flex; align-items: center; gap: 15px; background: var(--panel-bg);
+    padding: 12px 20px; border-radius: 20px; border: 1px solid var(--panel-border);
+    backdrop-filter: blur(20px); box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    transition: padding var(--duration-normal) var(--ease-standard), border-radius var(--duration-normal) var(--ease-standard);
+}
+.top-right-profile.avatar-only { padding: 4px; border-radius: 50%; gap: 0; }
+.profile-avatar { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.2rem; }
+.profile-info { display: flex; flex-direction: column; gap: 3px;}
+.profile-info span { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;}
+.profile-info b { font-size: 0.95rem; font-weight: 600; color: var(--text-main); }
+
+.right-icons-container {
+    position: absolute; right: 3%; top: 55%; transform: translateY(-50%); 
+    display: flex; flex-direction: column; gap: 18px; z-index: 10;
+}
+.icon-btn-group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.icon-label {
+    font-size: 0.68rem; font-weight: 600; color: var(--text-muted);
+    letter-spacing: 0.3px; text-align: center; white-space: nowrap;
+}
+.icon-btn {
+    width: clamp(52px, 4.2vw, 65px); height: clamp(52px, 4.2vw, 65px); border-radius: 20px; background: var(--panel-bg);
+    border: 1px solid var(--panel-border); backdrop-filter: blur(20px);
+    display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: var(--text-muted);
+    cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+.icon-btn:hover {
+    color: var(--text-main); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.22);
+    transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+}
+.logout-btn { margin-top: 30px; border-color: rgba(255, 70, 85, 0.3); color: rgba(255, 70, 85, 0.7); }
+.logout-btn:hover { background: rgba(255, 70, 85, 0.15); color: #ff4655; border-color: rgba(255, 70, 85, 0.5); box-shadow: 0 14px 28px rgba(255, 70, 85, 0.15);}
+/* =========================================
+   LIGHT MODE OVERRIDES
+========================================= */
+body.light-mode {
+    --bg-color: #e2e8f0;
+    --text-main: #1f2328;
+    --text-muted: #656d76;
+    --panel-bg: rgba(255, 255, 255, 0.7);
+    --panel-border: rgba(0, 0, 0, 0.1);
+}
+body.light-mode .tkb-content { text-shadow: none; }
+body.light-mode .tkb-content h1 { text-shadow: none; color: #1f2328; }
+body.light-mode .bg-text { color: var(--accent); opacity: 0.25; }
+body.light-mode .widget-box { box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+body.light-mode .badge-status { background: rgba(255,255,255,0.8); border-color: rgba(0,0,0,0.1); color: #1f2328; box-shadow: 0 4px 10px rgba(0,0,0,0.05);}
+body.light-mode .list-item { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.05); }
+body.light-mode .list-item:hover { background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+body.light-mode .list-icon { background: rgba(0,0,0,0.05); }
+body.light-mode .icon-btn { background: rgba(255,255,255,0.8); box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+body.light-mode .icon-btn:hover { background: #fff; border-color: rgba(0,0,0,0.1); }
+body.light-mode .top-right-profile { background: rgba(255,255,255,0.8); box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+body.light-mode .profile-avatar { background: rgba(0,0,0,0.05); }
+body.light-mode .widget-tabs { background: rgba(0,0,0,0.05); }
+body.light-mode .widget-tabs button.active { background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+body.light-mode .stat-item h2 { text-shadow: none; }
+
+/* =========================================
+   RESPONSIVE — trước đây file này chưa có @media nào,
+   toàn bộ layout absolute nên dưới ~1300px sẽ đè/cắt lẫn nhau.
+========================================= */
+@media (max-width: 1300px) {
+    /* Font-size/kích thước watermark & tiêu đề giờ đã co giãn liên tục qua clamp() ở trên,
+       breakpoint này chỉ còn lo phần BỐ CỤC (tỉ lệ chiều rộng khung).
+       Tăng nhẹ 52%->58% và 88%->92%: đúng dải bề rộng (~850-1300px) này trước đây khung bị bó
+       hẹp nhất trong khi tiêu đề vẫn to theo vw toàn màn hình -> dễ tràn/cắt chữ nhất. */
+    .character-tkb-mini { width: 58%; }
+    .bottom-widgets-container { width: 92%; }
+}
+
+@media (max-width: 850px) {
+    body { overflow-y: auto; overflow-x: hidden; height: auto; min-height: 100vh; }
+    .desktop-container {
+        display: flex; flex-direction: column; gap: 22px;
+        padding: 20px 5% 110px; min-height: 100vh; height: auto;
+        max-width: 100%; box-sizing: border-box;
+    }
+
+    /* .hero-stack chỉ cần thiết cho bố cục desktop (absolute + flex-column tự xếp).
+       Trên mobile, .desktop-container đã tự lo xếp thứ tự bằng flex + order riêng cho từng khối
+       -> cho .hero-stack "biến mất" khỏi cây bố cục (display:contents) để 2 khối con
+       (.character-tkb-mini, .bottom-widgets-container) quay lại làm item TRỰC TIẾP của
+       .desktop-container, giữ đúng order/position như thiết kế mobile bên dưới. */
+    .hero-stack { display: contents; }
+
+    .top-right-profile, .bottom-widgets-container, .right-icons-container {
+        position: static; transform: none; width: 100%; left: auto; right: auto; top: auto; bottom: auto;
+        max-width: 100%; box-sizing: border-box;
+    }
+    /* .character-tkb-mini vẫn cần position:relative (không phải static) để .bg-text — vốn định vị
+       "position:absolute" bên trong nó — có điểm neo đúng và bị cắt gọn bởi overflow:hidden của
+       chính khung này, thay vì "thoát" ra ngoài neo nhầm vào .desktop-container gây tràn ngang. */
+    .character-tkb-mini {
+        position: relative; transform: none; width: 100%; left: auto; right: auto; top: auto; bottom: auto;
+        max-width: 100%; box-sizing: border-box;
+    }
+
+    .top-right-profile { order: 1; align-self: flex-start; width: fit-content; }
+    .character-tkb-mini { order: 2; height: auto; padding: 10px 0; }
+    .bottom-widgets-container { order: 3; margin-top: 0; flex-direction: column; height: auto; gap: 16px; align-items: stretch; }
+    .widget-box { width: 100%; max-width: 100%; box-sizing: border-box; }
+    .right-icons-container { order: 4; flex-direction: row; justify-content: center; gap: 14px; margin-top: 4px; flex-wrap: wrap; }
+
+    /* Trước đây ẩn hẳn .bg-text trên mobile ("watermark khổng lồ gây tràn ngang trên màn nhỏ").
+       Giờ .character-tkb-mini đã có position:relative + overflow:hidden ở mobile (xem trên) nên
+       watermark bị cắt gọn an toàn trong khung -> hiện lại nhưng thu nhỏ nhiều cho vừa mắt, và
+       chuyển sang đặt bên PHẢI card thay vì bên trái để không đè lên chữ tiêu đề bắt đầu từ mép trái. */
+    .bg-text {
+        display: block;
+        font-size: clamp(70px, 24vw, 130px);
+        left: auto; right: -2%; opacity: 0.14;
+    }
+    .tkb-content h1 { white-space: normal; letter-spacing: normal; }
+    .tkb-content p { margin-bottom: 20px; }
+
+    .widget-box { min-height: 220px; }
+
+    .logout-btn { margin-top: 0; }
+    .widget-tabs button { padding: 10px 16px; } /* tăng vùng chạm cho ngón tay */
+}
+
+@media (max-width: 380px) {
+    .stat-divider { margin: 0 12px; }
+}
