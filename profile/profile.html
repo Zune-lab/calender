@@ -62,6 +62,7 @@
         </div>
 
         <div class="profile-card bento-info">
+            <div class="info-fields">
             <div class="card-label"><i class="fas fa-id-card"></i> THÔNG TIN CƠ BẢN</div>
 
             <div class="form-group">
@@ -84,8 +85,11 @@
                     <span id="user-joined">—</span>
                 </div>
             </div>
+            </div>
 
-            <!-- Nút Lưu dời vào ngay dưới "Ngày tham gia" thay vì 1 thẻ full-width riêng ở cuối lưới -->
+            <!-- Nút Lưu dời vào ngay dưới "Ngày tham gia" thay vì 1 thẻ full-width riêng ở cuối lưới.
+                 Bọc riêng .info-fields ở trên để trên mobile có thể tách .bento-info ra (display:contents)
+                 và xếp lại thứ tự: info-fields -> bento-privacy -> info-save-row (xem media query). -->
             <div class="info-save-row">
                 <span class="save-status" id="save-status"></span>
                 <button class="save-btn" id="save-btn" onclick="saveProfile()">LƯU THAY ĐỔI</button>
@@ -109,6 +113,7 @@
     </div>
 
     <script src="../shared.js"></script>
+    <script src="../bg-sync.js"></script>
     <script src="profile.js"></script>
 </body>
 </html>

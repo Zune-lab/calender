@@ -2,7 +2,11 @@
 const dashUrl = 'https://oyumvhldhmjmahohavsp.supabase.co';
 const dashKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dW12aGxkaG1qbWFob2hhdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDU0MTEsImV4cCI6MjA5Nzc4MTQxMX0.Wl_SANDz_-FQUaFQwcKXVFVz1Oo1YJNJ-0yMWF_aM1c';
 
-const dashClient = window.supabase.createClient(dashUrl, dashKey);
+// Không tạo client ngay ở đây nữa — nếu CDN Supabase load lỗi/chậm (mạng yếu, bị chặn), gọi thẳng
+// window.supabase.createClient() ở top-level sẽ ném lỗi ngay lúc parse file và làm crash toàn bộ
+// index.js, khiến loader treo mãi mãi mà không có thông báo gì (bug y hệt đã từng xảy ra và được
+// sửa ở profile.js). Giờ khởi tạo có kiểm tra bên trong initDashboard(), đồng bộ cách xử lý.
+let dashClient = null;
 let dashSubjects = [];
 let semesterStartDate = new Date('2026-05-18');
 let currentUserId = null;
@@ -55,43 +59,57 @@ function findNearestFutureSession(afterWeek, afterDay) {
     return candidates[0];
 }
 
-// ==========================================
-// HELPER: QUYẾT ĐỊNH TÊN HIỂN THỊ (đồng bộ với /tkb/calendar.js)
-// ==========================================
-function resolveDisplayName(user, meta) {
-    if (meta && meta.full_name && String(meta.full_name).trim()) {
-        return String(meta.full_name).trim();
-    }
-    if (meta && meta.hide_email) {
-        return "Người dùng SGU";
-    }
-    return user.email;
-}
+// resolveDisplayName() giờ nằm ở shared.js (dùng chung với calendar.js, tránh mỗi nơi
+// tự viết lại logic full_name/hide_email/email riêng)
 
 // ==========================================
-// ÁP DỤNG THEME ĐÃ LƯU (chỉnh theme chỉ còn 1 nơi duy nhất: trang Profile,
-// Dashboard chỉ đọc lại localStorage('theme') để hiển thị đúng, không có nút bấm riêng)
+// ÁP DỤNG THEME ĐÃ LƯU (đọc/áp dụng dùng chung qua applyTheme() ở shared.js; chỉnh theme
+// chỉ còn 1 nơi duy nhất — tab Cài Đặt ở TKB — Dashboard chỉ đọc lại để hiển thị đúng)
 // ==========================================
-if (localStorage.getItem('theme') === 'light') {
-    document.body.classList.add('light-mode');
-}
+applyTheme();
 
 // ==========================================
-// RENDER Ô PROFILE GÓC TRÊN PHẢI
+// ẢNH NỀN TUỲ CHỈNH — giờ dùng chung qua bg-sync.js (đồng bộ với TKB + Hồ Sơ, sửa 1 chỗ ở
+// đó là cả 3 trang đổi theo, không còn 3 bản copy-paste khác nhau nữa).
 // ==========================================
-// ==========================================
-// RENDER Ô PROFILE GÓC TRÊN PHẢI
-// ==========================================
+if (window.syncCustomBackground) syncCustomBackground();
+
+// Ẩn/hiện lại blob ambient NGAY khi ảnh nền tuỳ chỉnh được đổi (từ Cài Đặt TKB, Hồ Sơ, hoặc
+// từ 1 tab khác) — không cần đợi tới lần render hero kế tiếp mới cập nhật theo.
+window.addEventListener('customBackgroundChange', (e) => {
+    const ambient = document.querySelector('.ambient-bg');
+    if (ambient) ambient.style.display = e.detail.active ? 'none' : '';
+    const scrim = document.getElementById('bg-scrim');
+    if (scrim) scrim.classList.toggle('active', !!e.detail.active);
+    // FIX "CHỮ KHÓ ĐỌC TRÊN ẢNH NỀN TUỲ CHỈNH": trước đây chữ trên thẻ TKB chỉ đổi theo
+    // light/dark mode, không quan tâm ẢNH NỀN thực tế sáng hay tối -> chữ trắng chìm vào ảnh
+    // trắng, hoặc chữ đen chìm vào ảnh tối. Giờ bg-sync.js tự ĐO độ sáng trung bình của ảnh
+    // (event.detail.isLightBg) và ở đây chỉ cần bật đúng class màu chữ tương ứng — không phụ
+    // thuộc đang bật light hay dark mode nữa. Xem rule ở index.css (body.has-custom-bg /
+    // body.has-custom-bg.bg-photo-light).
+    document.body.classList.toggle('has-custom-bg', !!e.detail.active);
+    document.body.classList.toggle('bg-photo-light', !!e.detail.active && !!e.detail.isLightBg);
+});
+
 // ==========================================
 // TÔ MÀU AMBIENT BLOB THEO ACCENT (thay cho set background-image phẳng 1 màu cũ)
 // ==========================================
 function applyAmbientTint(hexColor) {
-    if (localStorage.getItem('customBg')) {
-        // Người dùng đã đặt ảnh nền tuỳ chỉnh (ở Cài Đặt TKB) -> ẩn blob, không đè lên
+    if (window.hasCustomBackground ? window.hasCustomBackground() : localStorage.getItem('customBg')) {
+        // Người dùng đã đặt ảnh nền tuỳ chỉnh (ở Cài Đặt TKB/Hồ Sơ) -> ẩn blob, không đè lên,
+        // đồng thời bật lớp kính mờ (.bg-scrim) để phủ dịu ảnh nền, giúp chữ luôn đọc rõ.
         const ambient = document.querySelector('.ambient-bg');
         if (ambient) ambient.style.display = 'none';
+        const scrim = document.getElementById('bg-scrim');
+        if (scrim) scrim.classList.add('active');
+        document.body.classList.add('has-custom-bg'); // xem ghi chú ở listener 'customBackgroundChange' phía trên
+        // Hero có thể được render lại (đổi accent) TRƯỚC KHI bg-sync.js đo xong độ sáng ảnh lần
+        // đầu — dùng cache đã đo được gần nhất (mặc định false = coi ảnh tối) thay vì bỏ trống.
+        document.body.classList.toggle('bg-photo-light', !!(window.isCustomBackgroundLight && window.isCustomBackgroundLight()));
         return;
     }
+    document.body.classList.remove('has-custom-bg');
+    document.body.classList.remove('bg-photo-light');
     const blobA = document.getElementById('ambient-blob-a');
     const blobB = document.getElementById('ambient-blob-b');
     if (blobA) blobA.style.background = `radial-gradient(circle, ${hexColor}48 0%, transparent 60%)`;
@@ -165,10 +183,13 @@ function renderProfilePill(user, meta) {
     let infoDiv = profileWrap.querySelector('.profile-info');
 
     if (meta.avatar) {
-        // CÓ AVT: hiển thị ảnh, ẩn phần text thông tin đi
+        // CÓ AVT: hiển thị ảnh, ẩn phần text thông tin đi. Vẫn gắn title = tên đã resolve
+        // (tôn trọng hide_email) để hover vào avatar là biết đang đăng nhập bằng ai, tránh
+        // toggle "Ẩn Email công khai" trở nên vô nghĩa với tài khoản đã có avatar.
         profileWrap.classList.add('avatar-only');
+        const nameToShow = resolveDisplayName(user, meta);
         if (avatarDiv) {
-            avatarDiv.innerHTML = `<img src="${meta.avatar}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+            avatarDiv.innerHTML = `<img src="${meta.avatar}" title="${escapeHtml(nameToShow)}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
         }
         if (infoDiv) infoDiv.style.display = 'none';
     } else {
@@ -193,90 +214,114 @@ function renderProfilePill(user, meta) {
     };
 }
 
-// ==========================================
-// CHUYỂN TRANG CÓ LOADER (dùng lại đúng hiệu ứng loading của tkb, tránh cảm giác nhảy trang đột ngột)
-// ==========================================
-window.navigateWithFade = function(url) {
-    const loader = document.getElementById('global-loader');
-    if (loader) {
-        loader.classList.remove('hidden');
-        setTimeout(() => { window.location.href = url; }, 450);
-    } else {
-        window.location.href = url;
-    }
-};
+// navigateWithFade() giờ nằm ở bg-sync.js (dùng chung với calendar.js, tránh lặp code)
 
 async function initDashboard() {
     // 1. Ép bật màn hình Loading ngay khi hàm bắt đầu chạy
     const loader = document.getElementById('global-loader');
     if (loader) loader.classList.remove('hidden');
 
-    const { data: { session } } = await dashClient.auth.getSession();
-    if (!session) return window.location.href = 'tkb/calendar.html';
+    // Kiểm tra thư viện Supabase (CDN) đã load thành công chưa TRƯỚC khi tạo client — tránh
+    // crash im lặng nếu mạng lỗi/CDN bị chặn (đồng bộ với cách profile.js đang xử lý).
+    if (typeof window.supabase === 'undefined' || !window.supabase.createClient) {
+        if (loader) loader.classList.add('hidden');
+        document.getElementById('mini-tkb-name').innerText = "LỖI TẢI THƯ VIỆN";
+        document.getElementById('mini-tkb-time').innerText = "Không tải được Supabase (CDN). Kiểm tra kết nối mạng rồi tải lại trang.";
+        return;
+    }
+    dashClient = window.supabase.createClient(dashUrl, dashKey);
 
-    const userId = session.user.id;
-    currentUserId = userId;
-    const meta = session.user.user_metadata || {};
-
-    renderProfilePill(session.user, meta);
+    // FIX "LOADER TREO VÔ THỜI HẠN NẾU MẤT MẠNG/API LỖI GIỮA CHỪNG": trước đây chỉ có bước kiểm
+    // tra CDN Supabase ở trên là được bọc chống lỗi — getSession() và Promise.all() bên dưới hoàn
+    // toàn không có try/catch, nên nếu 1 trong các lời gọi mạng đó bị reject (mất mạng giữa chừng,
+    // Supabase timeout, RLS chặn...) thì lỗi rơi vào unhandled rejection: loader đứng hình mãi mãi,
+    // không có bất kỳ thông báo nào cho người dùng biết chuyện gì đang xảy ra. Thêm watchdog (10s)
+    // + bọc try/catch quanh toàn bộ phần còn lại, đồng bộ đúng tinh thần đã áp dụng ở profile.js.
+    const dashWatchdog = setTimeout(() => {
+        if (loader) loader.classList.add('hidden');
+        document.getElementById('mini-tkb-name').innerText = "TẢI QUÁ LÂU";
+        document.getElementById('mini-tkb-time').innerText = "Kiểm tra kết nối mạng hoặc mở Console (F12) để xem lỗi chi tiết, rồi tải lại trang.";
+    }, 10000);
 
     try {
-        const { data: settingsData } = await dashClient
-            .from('user_settings')
-            .select('semester_start_date')
-            .eq('user_id', userId)
-            .single();
-        if (settingsData && settingsData.semester_start_date) {
-            semesterStartDate = new Date(settingsData.semester_start_date + 'T00:00:00');
+        const { data: { session } } = await dashClient.auth.getSession();
+        if (!session) { clearTimeout(dashWatchdog); return window.location.href = 'tkb/calendar.html'; }
+
+        const userId = session.user.id;
+        currentUserId = userId;
+        const meta = session.user.user_metadata || {};
+
+        renderProfilePill(session.user, meta);
+
+        try {
+            const { data: settingsData } = await dashClient
+                .from('user_settings')
+                .select('semester_start_date')
+                .eq('user_id', userId)
+                .single();
+            if (settingsData && settingsData.semester_start_date) {
+                semesterStartDate = new Date(settingsData.semester_start_date + 'T00:00:00');
+            }
+        } catch (e) {}
+
+        const [subjectsRes, examsRes, detailsRes] = await Promise.all([
+            dashClient.from('subjects').select('*').eq('user_id', userId),
+            dashClient.from('exams').select('*').eq('user_id', userId),
+            dashClient.from('subject_details').select('*').eq('user_id', userId).eq('status', 'upcoming')
+        ]);
+
+        dashSubjects = subjectsRes.data || [];
+        const allDetails = detailsRes.data || [];
+        window.allTasks = allDetails.filter(d => d.type === 'task');
+        window.allNotes = allDetails.filter(d => d.type === 'note' || d.type === 'notification');
+
+        const now = new Date();
+        const diffDays = Math.floor((now - semesterStartDate) / (1000 * 60 * 60 * 24));
+        // weekIndex là 0-indexed (dùng để tra cứu ký tự trong chuỗi "weeks" bitmap), nên trừ 1
+        // so với calcCurrentWeekNumber() (1-indexed, ở shared.js) — cùng 1 công thức làm tròn,
+        // chỉ khác quy ước đánh số, để Dashboard và trang TKB không bao giờ lệch tuần nhau.
+        const weekIndex = diffDays >= 0 ? calcCurrentWeekNumber(now, semesterStartDate) - 1 : -1;
+
+        let activeClassesThisWeek = 0;
+        if (weekIndex >= 0) {
+            activeClassesThisWeek = dashSubjects.filter(sub => {
+                if (!sub.weeks || sub.weeks.length <= weekIndex) return false;
+                const char = sub.weeks.charAt(weekIndex);
+                return char !== '-' && char !== ' ';
+            }).length;
         }
-    } catch (e) {}
 
-    const [subjectsRes, examsRes, detailsRes] = await Promise.all([
-        dashClient.from('subjects').select('*').eq('user_id', userId),
-        dashClient.from('exams').select('*').eq('user_id', userId),
-        dashClient.from('subject_details').select('*').eq('user_id', userId).eq('status', 'upcoming')
-    ]);
+        const uniqueSubs = new Set(dashSubjects.map(s => String(s.name || '').split('-')[0].split('(')[0].trim().toLowerCase()));
+        document.getElementById('stat-total-subs').innerText = uniqueSubs.size;
+        document.getElementById('stat-tkb-count').innerText = activeClassesThisWeek;
+        document.getElementById('stat-exam-count').innerText = (examsRes.data || []).length;
 
-    dashSubjects = subjectsRes.data || [];
-    const allDetails = detailsRes.data || [];
-    window.allTasks = allDetails.filter(d => d.type === 'task');
-    window.allNotes = allDetails.filter(d => d.type === 'note' || d.type === 'notification');
+        renderHero(now, weekIndex, examsRes.data || []);
+        switchWidget(0, document.querySelector('.widget-tabs button.active'));
 
-    const now = new Date();
-    const diffDays = Math.floor((now - semesterStartDate) / (1000 * 60 * 60 * 24));
-    // weekIndex là 0-indexed (dùng để tra cứu ký tự trong chuỗi "weeks" bitmap), nên trừ 1
-    // so với calcCurrentWeekNumber() (1-indexed, ở shared.js) — cùng 1 công thức làm tròn,
-    // chỉ khác quy ước đánh số, để Dashboard và trang TKB không bao giờ lệch tuần nhau.
-    const weekIndex = diffDays >= 0 ? calcCurrentWeekNumber(now, semesterStartDate) - 1 : -1;
+        const mainUI = document.getElementById('main-dashboard-ui');
+        if (mainUI) {
+            mainUI.style.opacity = '1';
+            mainUI.style.pointerEvents = 'auto';
+        }
 
-    let activeClassesThisWeek = 0;
-    if (weekIndex >= 0) {
-        activeClassesThisWeek = dashSubjects.filter(sub => {
-            if (!sub.weeks || sub.weeks.length <= weekIndex) return false;
-            const char = sub.weeks.charAt(weekIndex);
-            return char !== '-' && char !== ' ';
-        }).length;
-    }
+        clearTimeout(dashWatchdog);
 
-    const uniqueSubs = new Set(dashSubjects.map(s => String(s.name || '').split('-')[0].split('(')[0].trim().toLowerCase()));
-    document.getElementById('stat-total-subs').innerText = uniqueSubs.size;
-    document.getElementById('stat-tkb-count').innerText = activeClassesThisWeek;
-    document.getElementById('stat-exam-count').innerText = (examsRes.data || []).length;
-
-    renderHero(now, weekIndex, examsRes.data || []);
-    switchWidget(0, document.querySelector('.widget-tabs button.active'));
-
-    const mainUI = document.getElementById('main-dashboard-ui');
-    if (mainUI) {
-        mainUI.style.opacity = '1';
-        mainUI.style.pointerEvents = 'auto';
-    }
-
-    // Gỡ bỏ màn hình Loading (Delay thêm một chút để hiệu ứng fade in của UI chạy mượt)
-    setTimeout(() => {
-        const loader = document.getElementById('global-loader');
+        // FIX BUG "1-2 KHUNG HÌNH BỊ MỜ/LOANG MÀU LÚC VỪA VÀO" (giống hệt bug ở calendar.js):
+        // #main-dashboard-ui fade-in mất 500ms (transition:opacity 0.5s ease khai báo ở index.html)
+        // nhưng loader trước đây chỉ đợi 250ms rồi ẩn -> khi mạng nhanh, loader biến mất TRƯỚC khi UI
+        // hiện đủ 100% opacity, lộ ra khung hình mờ/loang trong khoảnh khắc ngắn. Tăng lên 550ms.
+        setTimeout(() => {
+            const loader2 = document.getElementById('global-loader');
+            if (loader2) loader2.classList.add('hidden');
+        }, 550);
+    } catch (err) {
+        clearTimeout(dashWatchdog);
         if (loader) loader.classList.add('hidden');
-    }, 250);
+        document.getElementById('mini-tkb-name').innerText = "LỖI KẾT NỐI";
+        document.getElementById('mini-tkb-time').innerText = "Không tải được dữ liệu: " + (err && err.message ? err.message : "Vui lòng kiểm tra kết nối mạng rồi tải lại trang.");
+        console.error('[Dashboard] initDashboard lỗi:', err);
+    }
 }
 
 // ==========================================
@@ -285,20 +330,16 @@ async function initDashboard() {
 function findTodayExam(examsData, now) {
     if (!examsData || !examsData.length) return null;
 
-    // Parse ngày dạng DD/MM/YY hoặc DD-MM-YYYY (đồng bộ đúng cách tkb/calendar.js đang lưu)
-    function parseExamDate(str) {
-        if (!str) return null;
-        const p = String(str).split(/[-/]/);
-        if (p.length !== 3) return null;
-        let d = p[0], m = p[1], y = p[2];
-        if (y.length === 4) return new Date(y, m - 1, d);
-        if (d.length === 4) return new Date(d, m - 1, y);
-        return null;
-    }
-
+    // FIX BUG "LỊCH THI HÔM NAY KHÔNG BAO GIỜ HIỆN VỚI NGÀY DẠNG DD/MM/YY (năm 2 số)":
+    // trước đây ở đây có 1 bản parseExamDate() TỰ VIẾT RIÊNG, khác bản dùng chung
+    // parseVNExamDate() ở shared.js — bản riêng này chỉ nhận diện được năm khi p[0] HOẶC p[2]
+    // dài đúng 4 ký tự, nên với "05/09/26" (DD/MM/YY, năm 2 số) cả 2 điều kiện đều sai ->
+    // luôn trả về null -> exam hôm nay không bao giờ được phát hiện, dù đúng ngày, không có lỗi
+    // hay cảnh báo gì để nhận ra. Dùng lại đúng parseVNExamDate() dùng chung (đã xử lý đúng cả
+    // DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, DD/MM/YY) để không còn 2 bản logic lệch nhau nữa.
     const todayStr = now.toDateString();
     return examsData.find(exam => {
-        const d = parseExamDate(exam.exam_date);
+        const d = parseVNExamDate(exam.exam_date);
         return d && d.toDateString() === todayStr;
     }) || null;
 }
@@ -473,7 +514,11 @@ function renderHero(now, weekIndex, examsData) {
         if (!colorMap[bn]) colorMap[bn] = colors[i++ % colors.length];
     });
 
-    const savedColors = JSON.parse(localStorage.getItem('subjectCustomColors') || '{}');
+    const savedColors = getSavedSubjectColors();
+    // GIỮ NGUYÊN THEO YÊU CẦU: màu ở đây LUÔN theo đúng môn học đang hiển thị (không bị màu
+    // 'customAccent' ở Cài Đặt ghi đè), để nhìn màu là biết ngay sắp học môn gì. "Đổi màu Accent
+    // hệ thống" ở Cài Đặt chỉ có tác dụng ở các màn hình KHÔNG có môn học cụ thể để tô theo
+    // (chưa nhập TKB, kỳ học chưa bắt đầu/đã kết thúc) — xem nhánh "if (!upcoming)" phía trên.
     const finalColor = savedColors[rawName.toLowerCase()] || colorMap[rawName.toLowerCase()] || '#ff4655';
 
     document.documentElement.style.setProperty('--accent', finalColor);
@@ -513,7 +558,7 @@ window.goToTab = function(tabName) {
 };
 
 window.logout = async () => {
-    await dashClient.auth.signOut();
+    if (dashClient) await dashClient.auth.signOut();
     navigateWithFade('tkb/calendar.html');
 };
 

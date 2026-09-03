@@ -1,0 +1,605 @@
+/* ===== calendar-2-notes-glass-lightmode.css =====
+   Phần 2/3 của calendar.css. Nạp SAU calendar-1-base.css.
+   Nội dung: ghi chú & thùng rác, nút kính 3D, tick box kiểu macOS, Light Mode, mac color
+   picker & neon buttons, các nút xoá/khôi phục tất cả (mục 7-15).
+*/
+
+/* =========================================
+   7. GHI CHÚ & THÙNG RÁC
+========================================= */
+.scrollable { 
+    flex: 1; min-height: 0; overflow-y: auto; padding-right: 12px; margin-bottom: 20px; 
+    mask-image: linear-gradient(to bottom, black 85%, transparent 100%); 
+    -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%); 
+}
+.scrollable::-webkit-scrollbar { width: 5px; }
+.scrollable::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
+.scrollable::-webkit-scrollbar-track { background: transparent; }
+
+.glass-list { list-style: none; margin: 0; }
+.glass-list li { 
+    background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06); 
+    padding: 12px 16px; border-radius: 14px; margin-bottom: 10px; 
+    font-size: 0.95rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: flex-start; 
+    animation: fadeInSlide 0.3s ease-out forwards;
+}
+
+@keyframes fadeInSlide {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.item-content { display: flex; flex-direction: column; flex: 1; overflow: hidden; padding-top: 2px;}
+.item-content .text { word-wrap: break-word; line-height: 1.4; }
+.origin-tag { font-size: 0.68rem; color: var(--text-muted); margin-top: 6px; font-style: italic; display: flex; align-items: center; gap: 4px;}
+
+.item-actions { display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s ease; align-items: center; margin-left: 10px; }
+.glass-list li:hover .item-actions { opacity: 1; }
+.action-btn { background: transparent; border: none; cursor: pointer; color: var(--text-muted); padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+.action-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-main); }
+.action-btn.delete:hover { color: #ff5858; background: rgba(255,88,88,0.15); }
+.action-btn.restore:hover { color: #00e676; background: rgba(0,230,118,0.15); }
+.done-list li { opacity: 0.4; text-decoration: line-through; border-color: transparent; }
+
+.trash-toggle { font-size: 0.75rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 8px; width: fit-content; transition: 0.2s; margin-bottom: 5px;}
+.trash-toggle:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
+.hidden-trash { display: none !important; }
+#notes-trash, #tasks-trash { border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px; margin-bottom: 20px;}
+#notes-trash li, #tasks-trash li { opacity: 0.5; border-color: rgba(255,88,88,0.2); background: rgba(255,88,88,0.02);}
+
+.send-btn { width: 28px; height: 28px; border-radius: 50%; border: none; background: #0A84FF; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); flex-shrink: 0; padding-right: 2px; box-shadow: 0 2px 8px rgba(10, 132, 255, 0.4); }
+.send-btn:hover { background: #0070DF; transform: scale(1.1); box-shadow: 0 4px 12px rgba(10, 132, 255, 0.6); }
+.send-btn:active { transform: scale(0.9); }
+
+/* =========================================
+   8. SIÊU NÚT BẤM 3D GLASS BUTTON
+========================================= */
+.glass-btn {
+    appearance: none; -webkit-appearance: none; border: none; outline: none; margin: 0; background: transparent;
+    cursor: pointer; position: relative; z-index: 3; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border-radius: 100px; padding: 12px 24px; box-sizing: border-box; color: #fff; font-family: "Inter", sans-serif; font-weight: 500; font-size: 0.92rem; text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    white-space: nowrap; flex-shrink: 0; /* FIX: không cho chữ trong nút (vd "Áp dụng") tự vỡ xuống dòng khi bị gò trong hàng chật */
+    background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.06); border-top: 1px solid rgba(255, 255, 255, 0.22); 
+    /* FIX: giữ đúng 3 lớp shadow ở cả trạng thái thường lẫn hover (trước đây thường=2 lớp,
+       hover=3 lớp) -> khác số lớp thì trình duyệt không nội suy mượt được, gây cảm giác
+       "snap" sáng đột ngột thay vì mờ dần êm ái. */
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.05), inset 0 -1px 1px rgba(0,0,0,0), 0 4px 12px rgba(0,0,0,0.3);
+    transition: transform var(--duration-normal) var(--ease-standard), background-color var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard); overflow: hidden; 
+}
+.glass-btn::after {
+    content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0) 100%);
+    transform: translateX(-150%) skewX(-25deg); transition: transform 0.55s cubic-bezier(0.25, 1, 0.5, 1); will-change: transform; pointer-events: none;
+}
+/* FIX: giảm độ nảy (translateY -2px -> -1px) và độ chênh sáng (0.35 -> 0.18) cho dịu mắt,
+   không còn cảm giác "chớp sáng" gắt khi rê chuột qua nút. */
+.glass-btn:hover { transform: translateY(-1px); box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.18), inset 0 -1px 1px rgba(0, 0, 0, 0.3), 0 6px 16px rgba(0, 0, 0, 0.38); }
+.glass-btn:hover::after { transform: translateX(150%) skewX(-25deg); }
+.glass-btn:active { transform: translateY(1px); box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.2); }
+/* FIX v2: color: var(--text-muted) (chỉ 45% opacity) bị quá mờ, gần như biến mất trên nền kính mờ.
+   Đổi sang trắng xám 78% opacity -- đủ tương phản để đọc rõ như các nút khác, nhưng vẫn trung tính
+   (không đỏ) ở trạng thái thường; chỉ ngả đỏ nhẹ khi hover để báo hiệu đây là hành động "nguy hiểm". */
+.btn-danger-soft { color: rgba(255, 255, 255, 0.78); text-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+.btn-danger-soft:hover { color: rgba(255, 138, 138, 0.95); }
+body.light-mode .btn-danger-soft { color: rgba(30, 41, 59, 0.75); text-shadow: none; }
+body.light-mode .btn-danger-soft:hover { color: #e04b4b; }
+
+.glass-btn.circle { padding: 0; width: 36px; height: 36px; border-radius: 50%; }
+.glass-btn.circle.small { width: 32px; height: 32px; }
+.glass-btn.close-btn { position: absolute !important; top: 24px; right: 24px; z-index: 10; }
+.glass-btn.small { padding: 8px 16px; font-size: 0.85rem; }
+
+/* =========================================
+   ANIMATION XOAY CHO NÚT ĐÓNG (DÙNG CHUNG) — gắn trên chính class ".close-btn" (không phải 1 id
+   riêng lẻ) nên MỌI nút đóng nào tái dùng class này (hiện tại: nút X đóng popup chi tiết môn
+   học #close-modal-btn; sau này thêm nút đóng khác chỉ cần gắn class "close-btn" là tự động có
+   animation) đều được áp dụng, không cần khai báo riêng từng nơi.
+   Chỉ xoay đúng khối <svg> icon bên trong nút (không xoay cả nút, để không ảnh hưởng animation
+   hover/active nảy lên/lún xuống mà .glass-btn đã có sẵn) — 2 animation chạy song song, độc lập.
+========================================= */
+.close-btn svg {
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); /* easing hơi "nảy" nhẹ ở cuối, xoay có cảm giác dứt khoát chứ không lừ đừ */
+}
+.close-btn:hover svg { transform: rotate(90deg); }
+.close-btn:active svg { transform: rotate(180deg) scale(0.85); }
+
+/* =========================================
+   9. UI TICK BOX (MAC OS STYLE CHO TASK)
+========================================= */
+.mac-checkbox {
+    appearance: none; -webkit-appearance: none;
+    width: 20px; height: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-radius: 6px;
+    cursor: pointer; position: relative;
+    transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+    background: rgba(0, 0, 0, 0.2);
+    margin-left: 8px; flex-shrink: 0;
+}
+.mac-checkbox:checked { background-color: #0A84FF; border-color: #0A84FF; }
+.mac-checkbox:checked::after {
+    content: ''; position: absolute; top: 2px; left: 6px; width: 4px; height: 9px;
+    border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); animation: popIn 0.3s forwards;
+}
+@keyframes popIn { 0% { transform: scale(0) rotate(45deg); } 100% { transform: scale(1) rotate(45deg); } }
+
+/* =========================================
+   10. LIGHT MODE (PASTEL FROSTED GLASS)
+========================================= */
+body.light-mode {
+    background-color: #e2e8f0; /* Xám xanh nhạt giúp dịu mắt và làm điểm tựa cho các khối kính trắng */
+    /* FIX BUG "MẤT ẢNH NỀN TUỲ CHỈNH KHI CHUYỂN LIGHT MODE": trước đây có !important ở đây,
+       nên luôn đè lên background-image mà JS gán qua inline style (document.body.style.
+       backgroundImage) khi người dùng chọn ảnh nền riêng -> chuyển Light Mode là mất ảnh ngay
+       lập tức, không dùng lại được nữa. Bỏ !important: inline style (ưu tiên cao nhất theo CSS,
+       bất kể độ cụ thể selector) sẽ tự động thắng khi có ảnh tuỳ chỉnh, còn khi KHÔNG có ảnh tuỳ
+       chỉnh thì gradient pastel này vẫn thắng gradient tối mặc định của body (vì "body.light-mode"
+       vốn đã cụ thể hơn "body" ngay cả khi không có !important) -> cả 2 trường hợp đều đúng. */
+    background-image: 
+        radial-gradient(circle at 10% 10%, rgba(94, 23, 235, 0.03), transparent 40%),
+        radial-gradient(circle at 90% 30%, rgba(20, 169, 232, 0.04), transparent 45%),
+        radial-gradient(circle at 50% 90%, rgba(252, 60, 100, 0.02), transparent 45%); 
+    color: #1e293b; 
+    --text-main: #1e293b;
+    /* FIX v2: đổi sang slate-600 (#475569) vẫn còn nhạt — theo phản hồi thực tế vẫn khó thấy.
+       Đổi hẳn sang slate-700 (#334155), đậm gần bằng --text-main luôn, ưu tiên ĐỌC ĐƯỢC RÕ hơn
+       là giữ đúng tôn ti "chữ phụ phải nhạt hơn chữ chính" — vì trên nền kính mờ trong suốt của
+       app, kể cả slate-600 vẫn không đủ tương phản với gradient tím/hồng phía sau. */
+    --text-muted: #334155;
+}
+
+/* Các khối Panel kính mờ - Giảm độ trắng gắt, thêm viền sắc nét */
+body.light-mode .glass-panel-3d, 
+body.light-mode .auth-tabs {
+    background: rgba(255, 255, 255, 0.55); 
+    border: 1px solid rgba(255, 255, 255, 0.9); 
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.03), inset 0 0 0 1px rgba(255, 255, 255, 0.5); 
+}
+
+body.light-mode .timetable-wrapper {
+    background: rgba(255, 255, 255, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.7) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.02), inset 0 0 20px rgba(255, 255, 255, 0.6) !important;
+}
+
+/* FIX 1: KHÔI PHỤC LƯỚI TKB - Viền đứt nét màu chì mờ */
+body.light-mode .empty-td {
+    border: 1px dashed rgba(0, 0, 0, 0.12);
+    background: rgba(0, 0, 0, 0.015);
+}
+
+/* MỤC 5: BỎ GLOW CHỮ Ở LIGHT MODE — bản trước có thêm 1 lớp "glow" (halo sáng trắng toả ra,
+   0 0 14px) cho chữ đồng hồ + tiêu đề để tránh chữ bị chìm khi nền là ảnh tuỳ chỉnh có vùng tối.
+   Theo yêu cầu, bỏ hẳn glow này đi — quay về text-shadow:none như các chữ khác ở light mode. */
+body.light-mode .clock-widget h1,
+body.light-mode .center-title h2 {
+    text-shadow: none;
+}
+/* FIX: 2 nhãn nhỏ "Tuesday 09/01" và "SGU WORKSPACE" nằm trực tiếp trên thanh gradient tím/hồng
+   nhiều sắc độ (không phải trên khối kính trắng như phần lớn chữ khác) — dù đã đổi --text-muted
+   đậm hơn (slate-700) vẫn có lúc rơi vào đúng mảng tím đậm của gradient nên vẫn khó đọc. Thêm lại
+   1 lớp bóng mờ rất nhẹ (không phải glow toả sáng như bản cũ) để chữ luôn nổi rõ bất kể đang đè
+   lên vùng sáng hay vùng tối của gradient, mà vẫn không bị chói/giả tạo như trước. */
+body.light-mode .clock-widget p,
+body.light-mode .center-title span {
+    text-shadow: 0 1px 3px rgba(255, 255, 255, 0.5);
+}
+body.light-mode .timetable-table th { color: #334155; text-shadow: none; font-weight: 400; }
+body.light-mode .timetable-table td.grid-time { color: #64748b; text-shadow: none; font-weight: 600; }
+body.light-mode .timetable-table td.time-col { background: rgba(0, 0, 0, 0.03); color: #475569; border-color: rgba(0, 0, 0, 0.05); text-shadow: none; }
+
+/* Thanh Header Kính mờ lúc cuộn */
+body.light-mode .sticky-glass-bar.scrolled {
+    /* Rule này nằm SAU rule cùng tên ở trên trong cascade nên thắng -> phải dùng lại đúng
+       var(--auto-tint) ở đây, nếu không sẽ đè mất màu JS vừa tính ra bằng 1 lớp trắng cứng. */
+    background: var(--auto-tint, rgba(255, 255, 255, 0.85));
+    transition: background 0.45s ease-out, background-color 0.45s ease-out;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.03);
+}
+
+body.light-mode .subject-card-td {
+    /* Tăng opacity của màu trắng lên 0.95 và 0.85 để nền đục hơn, tách bạch khỏi background */
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85));
+    border: 1px solid rgba(0, 0, 0, 0.08); 
+    border-top: 1px solid rgba(255, 255, 255, 1);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
+}
+
+body.light-mode .subject-card-td:hover {
+    /* Áp dụng triết lý bóng đổ sâu tương tự Dark Mode */
+    box-shadow: 
+        0 15px 30px rgba(0, 0, 0, 0.08), 
+        0 4px 12px rgba(0, 0, 0, 0.04),
+        inset 0 0 0 1.5px var(--c1);
+    border-color: transparent; 
+}
+
+/* Đậm chữ hơn cho dễ đọc */
+body.light-mode .subject-card-td h4 { color: #0f172a; text-shadow: none; font-weight: 800; }
+body.light-mode .subject-card-td .course-code { text-shadow: none; }
+body.light-mode .subject-card-td .info-text { color: #334155; text-shadow: none; font-weight: 600; }
+body.light-mode .subject-card-td .time-text { 
+    background: rgba(0, 0, 0, 0.06); 
+    color: #334155; /* trước dùng var(--c1) đổi theo màu môn -> nhìn lệch tông so với các chữ khác
+                        trong thẻ (h4/info-text đều màu cố định). Giờ đổi về màu cố định giống
+                        tinh thần Dark Mode (chip nền tối + chữ đồng nhất, không ăn theo màu môn). */
+    border: none;
+    font-weight: 700;
+}
+/* Modal & Badges (Màn hình chi tiết) */
+body.light-mode .meta-badge { background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 0, 0, 0.05); color: #475569; }
+body.light-mode .meta-badge strong, body.light-mode .meta-badge svg { color: #0f172a; }
+
+/* Các nút bấm, Menu và Input */
+body.light-mode .nav-links li:hover { background: rgba(0, 0, 0, 0.04); color: #0f172a; }
+body.light-mode .nav-links li.active { background: rgba(255, 255, 255, 0.9); color: #0f172a; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+body.light-mode .input-mac-style { background: rgba(255, 255, 255, 0.6); border: 1px solid rgba(0,0,0,0.08); }
+body.light-mode .input-mac-style input { color: #1e293b; }
+body.light-mode .input-mac-style input::placeholder { color: rgba(30, 41, 59, 0.58); }
+body.light-mode .settings-wrapper .setting-group { background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(0,0,0,0.06); box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+body.light-mode #subject-color-select { color: #1e293b !important; }
+body.light-mode #subject-color-select option { color: #1e293b; }
+body.light-mode .glass-btn { color: #1e293b; background: rgba(255, 255, 255, 0.8); border: 1px solid rgba(255,255,255,1); box-shadow: 0 4px 10px rgba(0,0,0,0.03); text-shadow: none;}
+body.light-mode .glass-list li { background: rgba(255, 255, 255, 0.65); border: 1px solid rgba(255, 255, 255, 1); color: #1e293b; }
+body.light-mode .mac-checkbox { border-color: rgba(30, 41, 59, 0.3); background: rgba(255,255,255,0.8); }
+body.light-mode .mac-checkbox:checked { background-color: #0A84FF; border-color: #0A84FF; }
+body.light-mode .action-btn { color: #64748b; }
+body.light-mode .action-btn:hover { background: rgba(0,0,0,0.05); color: #0f172a; }
+/* =========================================
+   11. MAC COLOR PICKER & NEON BUTTONS
+========================================= */
+/* =========================================
+   KẾ HOẠCH NGÀY (DAY PLANNER) — lưới giờ kéo thả
+========================================= */
+.day-selector-wrapper {
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px; border-radius: 100px;
+    background: rgba(0, 0, 0, 0.25);
+}
+.day-nav-btn {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    background: transparent; border: none; color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: background 0.2s, color 0.2s, transform 0.2s;
+}
+.day-nav-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; transform: scale(1.05); }
+.day-nav-btn:active { transform: scale(0.95); }
+.day-selector-display {
+    position: relative; display: flex; align-items: center; gap: 8px;
+    padding: 0 14px; font-size: 0.9rem; font-weight: 600; color: var(--text-main);
+    cursor: pointer; white-space: nowrap; text-transform: capitalize;
+}
+.day-selector-display svg { color: var(--accent); flex-shrink: 0; }
+
+/* Bản thu gọn để bộ chọn tuần ngồi CHUNG hàng với icon+tiêu đề mà không nặng nề hơn hàng đó
+   (xem chỗ dùng class "compact" trong tab Kế Hoạch Ngày ở calendar.html) */
+.day-selector-wrapper.compact { padding: 4px; gap: 2px; }
+.day-selector-wrapper.compact .day-nav-btn { width: 28px; height: 28px; }
+.day-selector-wrapper.compact .day-selector-display { font-size: 0.8rem; padding: 0 10px; gap: 6px; }
+.day-selector-wrapper.compact .glass-btn.small { padding: 6px 12px; font-size: 0.78rem; }
+#planner-date-input {
+    position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%;
+    border: none; cursor: pointer; padding: 0; margin: 0;
+}
+
+.planner-wrapper {
+    flex: 1; min-height: 0;
+    overflow: auto !important;
+    border-radius: 28px;
+    padding: 0 20px 20px 20px !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    backdrop-filter: blur(25px) saturate(130%) !important;
+    -webkit-backdrop-filter: blur(25px) saturate(130%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    box-shadow: inset 0 0 25px rgba(255, 255, 255, 0.1) !important;
+}
+.planner-wrapper::-webkit-scrollbar:horizontal { display: none !important; height: 0 !important; }
+.planner-wrapper::-webkit-scrollbar-corner { display: none !important; background: transparent !important; }
+.planner-wrapper::-webkit-scrollbar { width: 8px; }
+.planner-wrapper::-webkit-scrollbar-track { background: transparent; margin-top: 24px; margin-bottom: 24px; }
+.planner-wrapper::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
+.planner-wrapper::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.35); }
+body.light-mode .planner-wrapper { background: rgba(255, 255, 255, 0.5) !important; border-color: rgba(255,255,255,0.9) !important; box-shadow: inset 0 0 20px rgba(255,255,255,0.3) !important; }
+body.light-mode .planner-wrapper::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); }
+body.light-mode .planner-wrapper::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.3); }
+
+.planner-week-header {
+    display: flex; min-width: fit-content; position: sticky; top: 0; z-index: 50;
+    background: transparent;
+}
+.planner-header-spacer { width: 58px; flex-shrink: 0; }
+.planner-day-header {
+    flex: 1 1 0; min-width: 120px; text-align: center; padding: 16px 6px 12px;
+    font-size: 0.8rem; font-weight: 700; color: var(--text-muted);
+    text-transform: capitalize; border-bottom: 1px solid var(--panel-border, rgba(255,255,255,0.08));
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.planner-day-header .dh-date { display: block; font-size: 0.72rem; font-weight: 500; opacity: 0.7; margin-top: 3px; }
+
+/* Trước đây hiện lại ".planner-mobile-title" làm tiêu đề dự phòng khi center-title bị ẩn trên
+   mobile. Giờ center-title đã canh giữa NGAY TRONG header ở mọi kích thước màn hình (xem
+   @media max-width:1180px phía dưới) -> không còn cần dòng tiêu đề lặp lại này nữa, để mặc định
+   ẩn (display:none đã set sẵn inline trong calendar.html). */
+/* FIX: dùng thẳng var(--accent) full-bright cho chữ "hôm nay" (vd Chủ Nhật) quá chói khi accent
+   ngẫu nhiên ra đỏ/hồng gắt. Pha loãng với text-muted để dịu mắt hơn nhưng vẫn nổi bật đủ để phân biệt. */
+.planner-day-header.is-today { color: color-mix(in srgb, var(--accent) 62%, var(--text-muted)); }
+.planner-day-header.is-today .dh-date { opacity: 1; }
+body.light-mode .planner-day-header { text-shadow: none; }
+
+.planner-grid-body { display: flex; align-items: flex-start; min-width: fit-content; padding-top: 14px; }
+
+.planner-hours-col { width: 58px; flex-shrink: 0; padding-left: 4px; }
+.planner-hour-label {
+    display: flex; align-items: flex-start; justify-content: flex-end;
+    padding-right: 12px; font-size: 0.72rem; font-weight: 700;
+    color: var(--text-muted); transform: translateY(-7px);
+}
+.planner-hour-label:first-child { opacity: 0; }
+
+.planner-week-tracks { display: flex; flex: 1; min-width: 0; border-radius: 16px; overflow: hidden; }
+.planner-day-col {
+    position: relative; flex: 1 1 0; min-width: 120px;
+    background-color: rgba(0, 0, 0, 0.12);
+    background-image:
+        repeating-linear-gradient(to bottom, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 1px, transparent 1px, transparent 64px),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 32px);
+    border-left: 1px solid rgba(255,255,255,0.06);
+    touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none;
+}
+.planner-day-col:first-child { border-left: none; }
+.planner-day-col.is-today-col { background-color: rgba(255, 70, 85, 0.05); }
+
+.planner-empty-hint {
+    position: sticky; top: 35%; z-index: 2; margin: 0 auto; width: fit-content; max-width: 300px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; color: var(--text-muted); opacity: 0.55; pointer-events: none; text-align: center; padding: 20px 30px;
+}
+.planner-empty-hint.is-hidden { display: none; }
+.planner-empty-hint i { font-size: 1.6rem; }
+.planner-empty-hint p { font-size: 0.85rem; margin: 0; }
+
+.planner-now-line {
+    position: absolute; left: 0; right: 0; height: 0; z-index: 3; pointer-events: none;
+    border-top: 2px solid var(--accent); display: flex; align-items: center;
+}
+.planner-now-line span {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent); margin-left: -4.5px;
+    box-shadow: 0 0 8px var(--accent);
+}
+
+/* ---- Khung việc (chip) ---- */
+.planner-block {
+    position: absolute; left: 5px; right: 5px; z-index: 4; min-height: 22px;
+    border-radius: 10px; overflow: hidden; cursor: grab;
+    background: linear-gradient(155deg,
+        color-mix(in srgb, var(--block-color) 34%, rgba(24, 24, 32, 0.6)) 0%,
+        color-mix(in srgb, var(--block-color) 14%, rgba(14, 14, 20, 0.72)) 100%);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border-left: 3px solid var(--block-color);
+    border-top: 1px solid rgba(255,255,255,0.16); border-right: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--block-color) 40%, transparent), 0 2px 8px rgba(0,0,0,0.3);
+    touch-action: none; transition: box-shadow 0.15s ease, transform 0.15s ease, filter 0.15s ease;
+}
+.planner-block:hover { box-shadow: 0 8px 22px -3px color-mix(in srgb, var(--block-color) 55%, transparent), 0 4px 10px rgba(0,0,0,0.35); filter: brightness(1.08); z-index: 6; }
+.planner-block.is-dragging {
+    z-index: 30; cursor: grabbing; transform: scale(1.03);
+    box-shadow: 0 18px 34px -6px color-mix(in srgb, var(--block-color) 60%, transparent), 0 10px 24px rgba(0,0,0,0.5);
+}
+.planner-block.planner-block-drafting { cursor: default; opacity: 0.9; box-shadow: 0 0 0 2px #fff, 0 6px 16px rgba(0,0,0,0.4); }
+
+.planner-block-body {
+    position: absolute; inset: 0; padding: 5px 9px; display: flex; flex-direction: column;
+    justify-content: center; gap: 1px; overflow: hidden; cursor: grab;
+}
+.planner-block-body:active { cursor: grabbing; }
+.planner-block-time { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.2px; color: color-mix(in srgb, var(--block-color) 55%, #fff); white-space: nowrap; opacity: 0.95; }
+.planner-block-title { font-size: 0.8rem; font-weight: 700; line-height: 1.25; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Khối ngắn (<= 40 phút): dồn giờ + tên trên 1 dòng cho gọn, không bị chật chữ */
+.planner-block.is-compact .planner-block-body { flex-direction: row; align-items: center; gap: 6px; padding: 0 9px; }
+.planner-block.is-compact .planner-block-time { flex-shrink: 0; }
+.planner-block.is-compact .planner-block-title { font-size: 0.76rem; }
+
+/* Tay cầm co giãn — ẩn mặc định, chỉ gợi ý khi hover để đỡ rối mắt */
+.planner-block-handle {
+    position: absolute; left: 0; right: 0; height: 12px; z-index: 5; cursor: ns-resize;
+    display: flex; align-items: center; justify-content: center;
+}
+.planner-block-handle.top { top: -4px; }
+.planner-block-handle.bottom { bottom: -4px; }
+.planner-block-handle::after {
+    content: ''; width: 24px; height: 3px; border-radius: 3px;
+    background: rgba(255,255,255,0.55); box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    opacity: 0; transform: scaleX(0.6); transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.planner-block:hover .planner-block-handle::after { opacity: 1; transform: scaleX(1); }
+
+/* Nút tròn tick "đã xong" — góc trên-phải khối. Mặc định chỉ là viền tròn mờ (đỡ rối mắt khi
+   nhìn cả tuần), rõ hẳn lên khi hover khối hoặc khi đã tick. */
+.planner-block-check {
+    position: absolute; top: 4px; right: 4px; z-index: 7;
+    width: 16px; height: 16px; padding: 0; border-radius: 50%; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.25); border: 1.5px solid rgba(255, 255, 255, 0.55);
+    color: transparent; transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+    opacity: 0.55;
+}
+.planner-block-check svg { width: 10px; height: 10px; }
+.planner-block:hover .planner-block-check { opacity: 1; }
+.planner-block-check:hover { transform: scale(1.15); border-color: #fff; }
+.planner-block-check.checked {
+    background: #2ecc71; border-color: #2ecc71; color: #fff; opacity: 1;
+}
+/* Khối ngắn (is-compact): chừa chỗ bên phải cho nút tick khỏi đè lên chữ tên việc */
+.planner-block.is-compact .planner-block-body { padding-right: 26px; }
+
+/* Khối đã tick xong: làm dịu màu + gạch ngang tên việc, để phân biệt rõ với việc còn dang dở
+   mà không cần xoá khối khỏi lưới (vẫn giữ nguyên lịch sử trong ngày). */
+.planner-block.is-done { opacity: 0.55; filter: saturate(0.7); }
+.planner-block.is-done:hover { opacity: 0.8; }
+.planner-block.is-done .planner-block-title { text-decoration: line-through; text-decoration-thickness: 1.5px; }
+
+.planner-editor { position: fixed; z-index: 500; }
+.planner-editor.hidden { display: none; }
+.planner-editor-inner {
+    position: fixed; width: 250px; padding: 16px; border-radius: 18px;
+    display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    animation: plannerPopIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes plannerPopIn { from { opacity: 0; transform: scale(0.94) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.planner-editor-daylabel { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.5px; color: var(--text-muted); text-transform: capitalize; }
+.planner-editor-time-row { display: flex; align-items: center; gap: 8px; }
+.planner-editor-time-input {
+    flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; box-sizing: border-box;
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-main); font-size: 0.85rem; font-weight: 600; outline: none;
+    transition: border-color 0.2s; font-variant-numeric: tabular-nums; color-scheme: dark;
+}
+.planner-editor-time-input:focus { border-color: var(--accent); }
+.planner-editor-time-sep { color: var(--text-muted); font-weight: 700; flex-shrink: 0; }
+.planner-editor-input {
+    width: 100%; padding: 10px 14px; border-radius: 10px; box-sizing: border-box;
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-main); font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+}
+.planner-editor-input:focus { border-color: var(--accent); }
+.planner-editor-colors { display: flex; gap: 8px; flex-wrap: wrap; }
+.planner-color-swatch {
+    width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; padding: 0;
+    background: var(--sw-color); cursor: pointer; transition: transform 0.2s, border-color 0.2s;
+}
+.planner-color-swatch:hover { transform: scale(1.15); }
+.planner-color-swatch.active { border-color: #fff; box-shadow: 0 0 0 2px var(--sw-color); transform: scale(1.1); }
+.planner-editor-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.planner-editor-delete {
+    width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255,88,88,0.4); flex-shrink: 0;
+    background: rgba(255,88,88,0.12); color: #ff9d9d; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.planner-editor-delete:hover { background: rgba(255,88,88,0.25); color: #fff; border-color: #ff5858; }
+
+body.light-mode .day-selector-wrapper { background: rgba(0,0,0,0.05); }
+body.light-mode .day-nav-btn { color: #64748b; }
+body.light-mode .day-nav-btn:hover { background: rgba(0,0,0,0.08); color: #0f172a; }
+body.light-mode .day-selector-display { color: #0f172a; }
+body.light-mode .planner-day-col { background-color: rgba(0,0,0,0.03); }
+body.light-mode .planner-day-col { background-image:
+        repeating-linear-gradient(to bottom, rgba(0,0,0,0.09) 0px, rgba(0,0,0,0.09) 1px, transparent 1px, transparent 64px),
+        repeating-linear-gradient(to bottom, rgba(0,0,0,0.035) 0px, rgba(0,0,0,0.035) 1px, transparent 1px, transparent 32px); }
+body.light-mode .planner-day-col.is-today-col { background-color: rgba(255, 70, 85, 0.06); }
+body.light-mode .planner-editor-input { background: rgba(255,255,255,0.7); border-color: rgba(0,0,0,0.08); color: #1e293b; }
+body.light-mode .planner-editor-time-input { background: rgba(255,255,255,0.7); border-color: rgba(0,0,0,0.08); color: #1e293b; color-scheme: light; }
+body.light-mode .planner-empty-hint { color: #64748b; }
+
+@media (max-width: 850px) {
+    .planner-hours-col, .planner-header-spacer { width: 44px; }
+    .planner-hour-label { font-size: 0.62rem; padding-right: 8px; }
+    .planner-day-header { min-width: 100px; font-size: 0.72rem; }
+    .planner-day-col { min-width: 100px; }
+    /* Bottom-sheet: neo cố định đáy màn hình thay vì thả nổi theo điểm chạm ->
+       tránh đè lên thanh nav dưới hoặc lệch vị trí kỳ cục trên điện thoại */
+    .planner-editor-inner {
+        left: 12px !important; right: 12px !important; width: auto !important; max-width: none !important;
+        top: auto !important;
+        bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+        animation: plannerSheetUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes plannerSheetUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+}
+
+.mac-color-picker { width: 32px; height: 32px; padding: 0; border: none; border-radius: 50%; cursor: pointer; background: transparent; outline: none; }
+.mac-color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+.mac-color-picker::-webkit-color-swatch { border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 50%; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+.mac-color-picker::-moz-color-swatch { border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 50%; }
+
+.neon-color-btn { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.35s cubic-bezier(0.68, -0.55, 0.265, 1.55), border-color 0.2s, box-shadow 0.3s ease; padding: 0; position: relative; }
+.neon-color-btn:hover { transform: scale(1.25); box-shadow: 0 0 10px var(--btn-color), 0 0 25px var(--btn-soft); }
+.neon-color-btn.active { transform: scale(1.35); border-color: rgba(255, 255, 255, 0.9); box-shadow: 0 0 12px var(--btn-color), 0 0 35px var(--btn-soft), 0 0 50px rgba(255,255,255,0.1); }
+
+/* =========================================
+   13. FANCY DELETE ALL BUTTON (DỌN SẠCH RÁC)
+========================================= */
+.fancy-delete-btn {
+  --background:       #2b3044;
+  --background-hover: #1e2235;
+  --text:             #fff;
+  --shadow:           rgba(0, 0, 0, 0.2);
+  --paper:            #5c86ff;
+  --paper-lines:      #fff;
+  --trash:            #e1e6f9;
+  --trash-lines:      #bbc1e1;
+  --check:            #fff;
+  --check-background: #5c86ff;
+  --scale:            0.85;
+  position: relative; display: flex; align-items: center; min-width: 142px; padding: 10px 24px;
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; outline: none; cursor: pointer;
+  color: var(--text); background: var(--btn, var(--background));
+  box-shadow: 0 var(--shadow-y, 4px) var(--shadow-blur, 8px) var(--shadow);
+  transform: scale(var(--scale)); transition: transform 0.3s, box-shadow 0.3s, background 0.3s;
+}
+.fancy-delete-btn:hover, .fancy-delete-btn.delete { --btn: var(--background-hover); --shadow-y: 5px; --shadow-blur: 9px; }
+.fancy-delete-btn:active { --shadow-y: 2px; --shadow-blur: 5px; --scale: 0.8; }
+.fancy-delete-btn__label { display: block; font-size: 14px; font-weight: 600; line-height: 25px; opacity: var(--span-opacity, 1); transform: translateX(var(--span-x, 0)) translateZ(0); transition: transform 0.4s ease var(--span-delay, 0.2s), opacity 0.3s ease var(--span-delay, 0.2s); }
+.trash { display: block; position: relative; left: -8px; transform: translate(var(--trash-x, 0), var(--trash-y, 1px)) translateZ(0) scale(var(--trash-scale, 0.64)); transition: transform 0.5s; }
+.trash::before, .trash::after { content: ''; position: absolute; bottom: 100%; width: 2px; height: 8px; border-radius: 1px; background: var(--icon, var(--trash)); transform-origin: 50% 6px; transform: translate(var(--x, 3px), 2px) scaleY(var(--sy, 0.7)) rotate(var(--r, 0deg)); transition: transform 0.4s, background 0.3s; }
+.trash::before { left: 1px; }
+.trash::after  { right: 1px; --x: -3px; }
+.trash__lid { position: absolute; bottom: 100%; left: -4px; right: -4px; height: 40px; overflow: hidden; z-index: 1; transform: translateY(2px); }
+.trash__lid::before { content: ''; position: absolute; bottom: var(--b, 5px); left: var(--l, 8px); width: var(--w, 12px); height: var(--h, 2px); border-radius: 1px; background: var(--icon, var(--trash)); transition: background 0.3s, transform 0.4s; }
+.trash__lid::after { content: ''; position: absolute; bottom: 0; left: 0; width: 28px; height: 2px; border-radius: 1px; background: var(--icon, var(--trash)); transform: scaleX(var(--trash-line-scale, 1)); transition: background 0.3s, transform 0.4s; }
+.trash__paper { position: absolute; bottom: 0; left: 7px; width: 14px; height: 18px; border-radius: 1px; background: var(--paper); opacity: 0; transform: translateY(-16px); }
+.trash__paper::before, .trash__paper::after { content: ''; position: absolute; left: 2px; top: var(--t, 2px); width: var(--w, 10px); height: 2px; border-radius: 1px; background: var(--paper-lines); transform: scaleY(0.7); box-shadow: 0 9px 0 var(--paper-lines); }
+.trash__paper::after { --t: 5px; --w: 7px; }
+.trash__bin { position: relative; width: 20px; height: 25px; border: 2px solid var(--icon, var(--trash)); border-radius: 1px 1px 4px 4px; overflow: hidden; z-index: 2; transition: border-color 0.3s; }
+.trash__bin::before { content: ''; position: absolute; top: 0; left: 50%; width: 4px; height: 20px; border-radius: 2px; margin-left: -2px; background: var(--trash-lines); transform: translateX(-3px) scale(0.6); box-shadow: 10px 0 0 var(--trash-lines); opacity: var(--trash-lines-opacity, 1); transition: transform 0.4s, opacity 0.4s; }
+.trash__bin::after { content: ''; position: absolute; top: 0; left: 1px; width: 4px; height: 16px; background: var(--paper); transform: translate(-0.5px, -16px) scaleX(0.5); box-shadow: 7px 0 0 var(--paper), 14px 0 0 var(--paper), 21px 0 0 var(--paper); }
+.trash__check { position: absolute; top: 24px; left: 2px; padding: 4px 3px; border-radius: 50%; background: var(--check-background); opacity: var(--check-opacity, 0); transform: translateY(var(--check-y, 0)) scale(var(--check-scale, 0.2)); transition: transform var(--check-duration, 0.2s) ease var(--check-delay, 0s), opacity var(--check-duration-opacity, 0.2s) ease var(--check-delay, 0s); }
+.trash__check svg { display: block; width: 8px; height: 6px; fill: none; stroke: var(--check); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 9px; stroke-dashoffset: var(--check-offset, 9px); transition: stroke-dashoffset 0.4s ease var(--checkmark-delay, 0.4s); }
+.fancy-delete-btn.delete { --span-opacity: 0; --span-x: 16px; --span-delay: 0s; --trash-x: 46px; --trash-y: 2px; --trash-scale: 1; --trash-lines-opacity: 0; --trash-line-scale: 0; --icon: #fff; --check-offset: 0; --check-opacity: 1; --check-scale: 1; --check-y: 16px; --check-delay: 1.7s; --checkmark-delay: 2.1s; --check-duration: 0.55s; --check-duration-opacity: 0.3s; }
+.fancy-delete-btn.delete .trash::before { --sy: 1; --x: 0; --r:  40deg; }
+.fancy-delete-btn.delete .trash::after  { --sy: 1; --x: 0; --r: -40deg; }
+.fancy-delete-btn.delete .trash__paper  { animation: paper 1.5s linear forwards 0.5s; }
+.fancy-delete-btn.delete .trash__bin::after { animation: cut 1.5s linear forwards 0.5s; }
+
+@keyframes paper { 10%, 100% { opacity: 1; } 20% { transform: translateY(-16px); } 40% { transform: translateY(0); } 70%, 100% { transform: translateY(24px); } }
+@keyframes cut { 0%, 40% { transform: translate(-0.5px, -16px) scaleX(0.5); } 100% { transform: translate(-0.5px, 24px) scaleX(0.5); } }
+
+#notes-trash-wrapper, #tasks-trash-wrapper { border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 5px; margin-bottom: 20px;}
+#notes-trash, #tasks-trash { border-top: none !important; padding-top: 0 !important; margin-bottom: 0 !important;}
+body.light-mode #notes-trash-wrapper, body.light-mode #tasks-trash-wrapper { border-color: rgba(0,0,0,0.1); }
+.header-trash-btn { --scale: 0.75; min-width: 120px; padding: 6px 14px; height: 36px; margin: 0; }
+.header-trash-btn .fancy-delete-btn__label { font-size: 14px; }
+
+/* =========================================
+   14. BUTTON XÓA TẤT CẢ (NẮP MỞ - GIẤY RƠI)
+========================================= */
+.clear-all-btn {
+    background: rgba(255, 88, 88, 0.08); color: #ff5858; border: 1px solid rgba(255, 88, 88, 0.2); border-radius: 8px;
+    padding: 0 12px; height: 30px; font-size: 0.8rem; white-space: nowrap; flex-shrink: 0; 
+    display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s ease; margin: 0;
+}
+.clear-all-btn:hover { background: rgba(255, 88, 88, 0.15); border-color: rgba(255, 88, 88, 0.4); }
+.clear-all-btn svg { width: 14px; height: 14px; overflow: visible; position: relative; }
+.clear-all-btn .trash-lid { transform-origin: center bottom; transition: transform 0.3s ease; }
+.clear-all-btn .trash-paper { opacity: 0; transform: translateY(-10px); }
+.clear-all-btn.animating .trash-lid { animation: liftLid 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+.clear-all-btn.animating .trash-paper { animation: dropPaper 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+
+@keyframes liftLid { 0%, 100% { transform: translateY(0) rotate(0deg); } 20%, 75% { transform: translateY(-5px) rotate(8deg); } }
+@keyframes dropPaper { 0% { opacity: 0; transform: translateY(-15px) scale(0.5); } 25% { opacity: 1; transform: translateY(-10px) scale(1); } 65% { opacity: 1; transform: translateY(5px) scale(1); } 80%, 100% { opacity: 0; transform: translateY(5px) scale(1); } }
+
+/* =========================================
+   15. BUTTON KHÔI PHỤC TẤT CẢ
+========================================= */
+.restore-all-btn {
+    background: rgba(0, 230, 118, 0.08); color: #00e676; border: 1px solid rgba(0, 230, 118, 0.2); border-radius: 8px; 
+    width: 36px; height: 36px; padding: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; margin: 0;
+}
+.restore-all-btn svg { width: 16px; height: 16px; }
+.restore-all-btn:hover { background: rgba(0, 230, 118, 0.15); border-color: rgba(0, 230, 118, 0.4); }
+
+@keyframes rewindSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(-360deg); } }
+.restore-all-btn.animating svg { animation: rewindSpin 0.6s cubic-bezier(0.25, 1, 0.5, 1) infinite; }

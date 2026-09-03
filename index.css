@@ -16,7 +16,6 @@ html {
     --text-main: #ffffff;
     --text-muted: #8b949e;
     --accent: #ff4655; /* JS tự động đổi màu theo môn */
-    --accent-2: #00C9FF; /* Màu phụ cho lớp blob thứ 2, tạo chiều sâu */
     --panel-bg: rgba(20, 20, 25, 0.45);
     --panel-border: rgba(255, 255, 255, 0.1);
 
@@ -97,6 +96,20 @@ body {
 }
 .ambient-blob.blob-a { width: 850px; height: 850px; background: radial-gradient(circle, rgba(255,70,85,0.28) 0%, transparent 60%); top: -25%; left: -12%; }
 .ambient-blob.blob-b { width: 750px; height: 750px; background: radial-gradient(circle, rgba(0,201,255,0.22) 0%, transparent 60%); bottom: -25%; right: -10%; animation-delay: -9s; }
+
+/* ---------- LỚP KÍNH MỜ (SCRIM) PHỦ ẢNH NỀN TUỲ CHỈNH ----------
+   Chỉ hiện khi người dùng đã đặt ảnh nền riêng (window.hasCustomBackground() === true), do
+   index.js bật/tắt class .active — xem chỗ toggle .ambient-bg trong customBackgroundChange
+   và applyAmbientTint(). Đặt z-index: 0, cùng lớp với .ambient-bg (ambient đã ẩn khi có ảnh
+   nền nên 2 lớp không bao giờ cùng hiển thị 1 lúc), nằm dưới .desktop-container (z-index: 1). */
+.bg-scrim {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: rgba(8, 9, 12, 0.4);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity var(--duration-normal, 0.35s) var(--ease-standard, ease);
+}
+.bg-scrim.active { opacity: 1; }
+body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
 @keyframes floatBlobDash { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(70px, 55px) scale(1.12); } }
 
 .desktop-container { position: relative; z-index: 1; width: 100%; height: 100%; }
@@ -135,22 +148,43 @@ body {
     padding: 4px 0 20px;
     overflow: hidden; /* phòng khi 1 chuỗi cực dài bất thường vẫn vượt khung ngang, cắt gọn thay vì vỡ layout */
 }
-.character-tkb-mini:hover .bg-text { transform: translateX(30px); opacity: 0.15; }
+.character-tkb-mini:hover .bg-text {
+    /* FIX BUG "CHỮ SOON BỊ CẮT DƯỚI KHI HOVER": transform ở đây trước ghi đè HOÀN TOÀN transform
+       gốc (translateY(-50%) dùng để canh giữa theo chiều dọc) — vì CSS transform không "cộng dồn"
+       giữa 2 rule, rule nào khai báo sau/thắng cascade sẽ thay thế toàn bộ giá trị transform cũ.
+       Mất translateY(-50%) khi hover -> chữ tụt xuống nửa chiều cao của chính nó -> bị
+       overflow:hidden của khung cha cắt mất phần dưới. Viết gộp cả 2 phép biến đổi
+       (dịch ngang + vẫn canh giữa dọc) trong CÙNG 1 khai báo transform để không bị mất phần nào. */
+    transform: translate(30px, -50%);
+    opacity: 0.15;
+}
 .character-tkb-mini:hover .tkb-content { transform: translateX(15px); }
 
 .bg-text {
-    position: absolute; left: -5%; top: 50%; transform: translateY(-50%);
-    font-size: clamp(130px, 18vw, 250px); font-weight: 800; color: var(--accent); opacity: 0.1;
+    /* FIX BUG "CHỮ SOON BỊ CẮT MẤT NÉT CHỮ S": trước đây left:-5% cố tình đẩy chữ lệch sang trái
+       ra khỏi khung chứa 1 chút để tạo hiệu ứng "chữ nền tràn viền" — nhưng khung cha
+       (.character-tkb-mini) có overflow:hidden nên phần đó bị cắt cụt ngay giữa nét chữ "S" đầu
+       tiên, trông như lỗi chứ không giống hiệu ứng có chủ đích. Đưa về left:0 để chữ luôn bắt đầu
+       đúng mép khung, hiện đủ nét, KHÔNG bị cắt (chữ vẫn đủ lớn để tràn ra ngoài bên phải như thiết
+       kế gốc, chỉ không còn bị cắt ở đầu chữ bên trái nữa). */
+    position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    /* Thu nhỏ theo tỉ lệ với tiêu đề h1 đã hạ trần ở trên, giữ đúng cảm giác watermark phía sau
+       chữ chứ không lấn át hẳn tiêu đề khi tiêu đề đã nhỏ lại. */
+    font-size: clamp(110px, 15vw, 200px); font-weight: 800; color: var(--accent); opacity: 0.1;
     z-index: 1; pointer-events: none; transition: 0.4s ease; text-transform: uppercase; line-height: 0.85; white-space: nowrap;
 }
 
 .tkb-content { position: relative; z-index: 2; transition: 0.4s ease; text-shadow: 0 4px 20px rgba(0,0,0,0.6); }
 
 .badge-status {
-    display: inline-flex; align-items: center; gap: 10px; padding: 8px 18px;
+    display: inline-flex; align-items: center; gap: 10px; padding: 7px 16px;
     background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 30px; font-size: 0.9rem; font-weight: 600; letter-spacing: 1px;
-    margin-bottom: 25px; backdrop-filter: blur(10px);
+    border-radius: 30px; font-size: 0.85rem; font-weight: 600; letter-spacing: 1px;
+    /* FIX "NỘI DUNG QUÁ TO PHẢI CUỘN": margin-bottom giảm (25px->16px) — đây là 1 trong nhiều
+       khoảng cách/kích thước dồn lại khiến tổng chiều cao khối .hero-stack vượt quá vùng hiển thị,
+       buộc phải cuộn mới thấy hết. Xem thêm ghi chú ở h1/p/tkb-details/bottom-widgets-container
+       bên dưới — cùng chung 1 đợt thu gọn để vừa khít màn hình mà không cần cuộn. */
+    margin-bottom: 16px; backdrop-filter: blur(10px);
 }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.35); animation: pulse 1.5s infinite; }
 @keyframes pulse { 0% { opacity:1; } 50% { opacity:0.3; } 100% { opacity:1; } }
@@ -161,11 +195,14 @@ body {
        cắt cụt giữa từ. Khung chứa giờ đã được mở rộng (xem .character-tkb-mini) nên KHÔNG cần
        giảm cỡ chữ nữa — trả lại đúng cỡ chữ gốc, chỉ bỏ ép nowrap để phòng hờ vẫn xuống dòng an
        toàn nếu gặp chuỗi dài bất thường, thay vì bị cắt chữ như trước. */
-    font-size: clamp(1.7rem, 1.2rem + 3vw, 4.6rem);
+    /* Hạ trần kích thước (4.6rem->3.6rem) và tốc độ co giãn theo vw (3vw->2.2vw): đây là phần
+       chiếm nhiều chiều cao nhất trong thẻ TKB, nhất là khi tiêu đề dài phải xuống 2 dòng (vd
+       "KỲ HỌC CHƯA BẮT ĐẦU") — hạ trần giúp cả khối .hero-stack vừa màn hình, không cần cuộn nữa. */
+    font-size: clamp(1.5rem, 1.1rem + 2.2vw, 3.6rem);
     font-weight: 800; 
-    line-height: 1.25; 
-    padding-top: 10px; 
-    margin-bottom: 10px; 
+    line-height: 1.2; 
+    padding-top: 6px; 
+    margin-bottom: 6px; 
     letter-spacing: normal;
     text-transform: uppercase; 
     text-shadow: 0 10px 30px rgba(0,0,0,0.6);
@@ -173,9 +210,9 @@ body {
     overflow-wrap: break-word;
     word-break: break-word;
 }
-.tkb-content p { font-size: clamp(1rem, 0.85rem + 0.5vw, 1.4rem); color: rgba(255,255,255,0.85); font-weight: 500; margin-bottom: 35px; }
+.tkb-content p { font-size: clamp(0.9rem, 0.8rem + 0.35vw, 1.15rem); color: rgba(255,255,255,0.85); font-weight: 500; margin-bottom: 20px; }
 
-.tkb-details { display: flex; flex-direction: column; gap: 14px; }
+.tkb-details { display: flex; flex-direction: column; gap: 10px; }
 .tkb-details span { font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.15rem); color: var(--text-main); display: flex; align-items: center; gap: 15px; font-weight: 500; }
 .tkb-details i { color: var(--accent); width: 25px; text-align: center; font-size: 1.3rem; }
 
@@ -196,8 +233,10 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
    xuống dưới thay vì bị đè. */
 .bottom-widgets-container {
     margin-top: auto; flex-shrink: 0;
-    display: flex; gap: clamp(16px, 2vw, 30px); width: clamp(560px, 58vw, 800px); max-width: 100%;
-    height: clamp(200px, 22vw, 240px); z-index: 10;
+    display: flex; gap: clamp(14px, 1.6vw, 24px); width: clamp(560px, 58vw, 800px); max-width: 100%;
+    /* Hạ trần chiều cao (240px->200px) cùng đợt thu gọn thẻ TKB phía trên, để tổng chiều cao
+       .hero-stack (thẻ TKB + widget này) vừa vặn trong màn hình, không cần cuộn nữa. */
+    height: clamp(180px, 18vw, 200px); z-index: 10;
 }
 .widget-box {
     flex: 1; min-width: 0; background: var(--panel-bg); backdrop-filter: blur(20px);
@@ -232,7 +271,11 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
 .list-text p { margin: 0; font-size: 0.8rem; color: var(--text-muted); }
 
 /* Bố cục Thống kê chia 3 */
-.stat-body { flex-direction: row !important; align-items: center; justify-content: space-between; padding: 0 10px; }
+/* FIX "VẪN SCROLL ĐƯỢC" Ở KHUNG THỐNG KÊ: .widget-body dùng chung cho cả khung "Bài tập/Ghi chú"
+   (danh sách có thể dài, cần cuộn) LẪN khung "Thống kê dữ liệu" (chỉ 3 con số cố định, không bao
+   giờ dài hơn khung) — nhưng overflow-y:auto lại áp dụng chung cho cả 2, nên khung thống kê vẫn
+   hiện thanh cuộn dù chẳng có gì để cuộn. Tắt hẳn overflow cho riêng .stat-body. */
+.stat-body { flex-direction: row !important; align-items: center; justify-content: space-between; padding: 0 10px; overflow: visible; }
 .stat-item { display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .stat-item h2 { font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 5px; text-shadow: 0 0 30px rgba(0,0,0,0.5);}
 .stat-item p { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); letter-spacing: 1px; }
@@ -258,20 +301,46 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
 .profile-info b { font-size: 0.95rem; font-weight: 600; color: var(--text-main); }
 
 .right-icons-container {
-    position: absolute; right: 3%; top: 55%; transform: translateY(-50%); 
-    display: flex; flex-direction: column; gap: 18px; z-index: 10;
+    /* FIX BUG "MENU PHẢI CUỘN MỚI THẤY HẾT": trước đây khối này định vị bằng top:55% +
+       translateY(-50%) — tức là TỰ ƯỚC LƯỢNG tâm màn hình rồi để 5 icon (+ nút Thoát có thêm
+       margin-top riêng) tự xòe ra 2 phía. Trên các màn hình thấp hơn dự tính (cửa sổ trình duyệt
+       không full màn hình, laptop 13-14" thu nhỏ, hoặc khi zoom > 100%) tổng chiều cao 5 icon
+       vượt quá phần còn trống phía trên/dưới điểm 55% đó -> icon đầu/cuối (thường là "Thoát")
+       bị đẩy ra ngoài rìa trên/dưới màn hình, ẩn sau mép viewport và người dùng phải cuộn
+       trang mới thấy hết menu.
+       Sửa tận gốc theo đúng tinh thần đã áp dụng cho .hero-stack: bỏ hẳn cách "đoán tâm" bằng
+       top/translateY, thay bằng neo 2 đầu top/bottom vào đúng vùng an toàn (dưới khối profile ở
+       trên, cách đáy màn hình 1 khoảng ở dưới) rồi để flexbox tự canh giữa bằng
+       justify-content:center. Icon cao bao nhiêu do NỘI DUNG THẬT quyết định, không còn phụ
+       thuộc phép tính 55%/-50% nữa nên không thể bị tràn ra ngoài theo hướng đó được nữa.
+       overflow-y:auto chỉ là lưới an toàn cuối cùng (gần như không bao giờ kích hoạt nữa, xem
+       thêm ghi chú ở .icon-btn bên dưới về việc icon giờ tự CO NHỎ LẠI trước khi cần đến cuộn). */
+    position: absolute; right: 3%; top: 14%; bottom: 3%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: clamp(8px, 2.4vh, 18px); z-index: 10;
+    overflow-y: auto; overflow-x: hidden; scrollbar-width: thin;
 }
+.right-icons-container::-webkit-scrollbar { width: 4px; }
+.right-icons-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
 .icon-btn-group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .icon-label {
     /* Đồng bộ với .mobile-nav-label bên calendar.css (trước đây 2 file 2 cỡ khác nhau:
-       0.68rem ở đây vs 0.6rem bên kia -> cùng 1 menu nhưng nhảy cỡ chữ khi chuyển trang). */
-    font-size: 0.7rem; font-weight: 600; color: var(--text-muted);
+       0.68rem ở đây vs 0.6rem bên kia -> cùng 1 menu nhưng nhảy cỡ chữ khi chuyển trang).
+       Thêm vh vào công thức (giống .icon-btn bên dưới) để chữ co nhỏ cùng lúc với icon trên
+       màn hình thấp, không bị lệch tỉ lệ so với icon phía trên nó. */
+    font-size: clamp(0.55rem, 1.3vh, 0.7rem); font-weight: 600; color: var(--text-muted);
     letter-spacing: 0.3px; text-align: center; white-space: nowrap;
 }
 .icon-btn {
-    width: clamp(52px, 4.2vw, 65px); height: clamp(52px, 4.2vw, 65px); border-radius: 20px; background: var(--panel-bg);
+    /* TRẢ LẠI ĐỘ TO BAN ĐẦU: bản trước đó đã hạ mức tối thiểu (min) từ 52px xuống 34px để icon
+       "co nhỏ" sớm hơn, tránh phải cuộn trên màn hình rất thấp — nhưng hệ quả là trên điện thoại
+       bình thường (viewport hẹp theo chiều ngang) icon co lại quá nhỏ so với thiết kế gốc, nhìn
+       chật chội (đúng như ảnh chụp thực tế). Trả sàn tối thiểu về lại 52px như ban đầu; phần an
+       toàn chống-tràn (min(...vh)) vẫn được giữ nguyên nên trên màn RẤT thấp icon vẫn tự co nhỏ
+       dần trước khi cần cuộn, chỉ khác là không co xuống dưới 34px "còm cõi" như trước nữa. */
+    width: clamp(52px, min(4.2vw, 6.4vh), 65px); height: clamp(52px, min(4.2vw, 6.4vh), 65px); border-radius: 20px; background: var(--panel-bg);
     border: 1px solid var(--panel-border); backdrop-filter: blur(20px);
-    display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center; font-size: clamp(1.15rem, 2.6vh, 1.6rem); color: var(--text-muted);
     cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.2);
     transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
@@ -279,7 +348,7 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
     color: var(--text-main); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.22);
     transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.25);
 }
-.logout-btn { margin-top: 30px; border-color: rgba(255, 70, 85, 0.3); color: rgba(255, 70, 85, 0.7); }
+.logout-btn { margin-top: clamp(6px, 2.4vh, 30px); border-color: rgba(255, 70, 85, 0.3); color: rgba(255, 70, 85, 0.7); }
 .logout-btn:hover { background: rgba(255, 70, 85, 0.15); color: #ff4655; border-color: rgba(255, 70, 85, 0.5); box-shadow: 0 14px 28px rgba(255, 70, 85, 0.15);}
 /* =========================================
    LIGHT MODE OVERRIDES
@@ -293,6 +362,11 @@ body.light-mode {
 }
 body.light-mode .tkb-content { text-shadow: none; }
 body.light-mode .tkb-content h1 { text-shadow: none; color: #1f2328; }
+/* BUG CÓ SẴN: .tkb-content p (dòng phụ đề, vd "Còn 5 ngày nữa tới khai giảng") hardcode màu
+   trắng (rgba(255,255,255,0.85)) và trước đây KHÔNG có override nào cho light-mode — nên khi
+   bật light-mode mà KHÔNG có ảnh nền tuỳ chỉnh (nền chỉ là --bg-color xám nhạt #e2e8f0 phẳng),
+   dòng phụ đề này gần như vô hình vì chữ trắng trên nền sáng. Thêm override như h1 để nhất quán. */
+body.light-mode .tkb-content p { color: rgba(31,35,40,0.75); }
 body.light-mode .bg-text { color: var(--accent); opacity: 0.25; }
 body.light-mode .widget-box { box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
 body.light-mode .badge-status { background: rgba(255,255,255,0.8); border-color: rgba(0,0,0,0.1); color: #1f2328; box-shadow: 0 4px 10px rgba(0,0,0,0.05);}
@@ -306,6 +380,38 @@ body.light-mode .profile-avatar { background: rgba(0,0,0,0.05); }
 body.light-mode .widget-tabs { background: rgba(0,0,0,0.05); }
 body.light-mode .widget-tabs button.active { background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 body.light-mode .stat-item h2 { text-shadow: none; }
+
+/* =========================================
+   ẢNH NỀN TUỲ CHỈNH — MÀU CHỮ TỰ ĐỘNG THEO ĐỘ SÁNG ẢNH THẬT (không phụ thuộc đang bật
+   light hay dark mode). bg-sync.js tự đo độ sáng trung bình của ảnh và gắn class:
+     .has-custom-bg      -> đang có ảnh nền tuỳ chỉnh
+     .bg-photo-light     -> (kèm has-custom-bg) ảnh được đo là SÁNG màu
+   Mặc định (không có .bg-photo-light) coi ảnh là TỐI màu -> dùng chữ sáng (giống dark mode).
+   Các rule dưới đây được đặt SAU khối "LIGHT MODE OVERRIDES" ở trên nên khi có .has-custom-bg,
+   chúng thắng các override tối màu của light-mode cho đúng phần tử — xem chi tiết từng dòng.
+========================================= */
+
+/* --- Trường hợp mặc định khi có ảnh nền: coi ảnh TỐI -> ép chữ sáng (đè cả 2 chế độ) --- */
+body.has-custom-bg .tkb-content h1 { color: #ffffff; text-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+body.has-custom-bg .tkb-content { text-shadow: 0 4px 20px rgba(0,0,0,0.6); }
+body.has-custom-bg .tkb-content p { color: rgba(255,255,255,0.85); }
+body.has-custom-bg .tkb-details span { color: #ffffff; }
+body.has-custom-bg .tkb-next-line { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); }
+body.has-custom-bg .tkb-next-line b { color: #ffffff; }
+/* Pill "SẮP KHAI GIẢNG" và huy hiệu trạng thái luôn tự mang nền riêng (đen mờ) nên chữ
+   luôn phải sáng đi kèm — không phụ thuộc light-mode nữa khi đang có ảnh nền. */
+body.has-custom-bg .badge-status { background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.15); color: #ffffff; box-shadow: none; }
+
+/* --- Ảnh được đo là SÁNG màu -> đảo lại toàn bộ sang chữ tối, có quầng sáng thay vì bóng tối
+   để vẫn nổi bật trên nền ảnh (dù ảnh sáng nhưng có thể loang lổ chi tiết tối). Specificity
+   cao hơn (3 class) nên luôn thắng 2 rule "mặc định tối" ở trên, không cần quan tâm thứ tự. --- */
+body.has-custom-bg.bg-photo-light .tkb-content h1 { color: #1f2328; text-shadow: 0 2px 10px rgba(255,255,255,0.7); }
+body.has-custom-bg.bg-photo-light .tkb-content { text-shadow: 0 2px 10px rgba(255,255,255,0.6); }
+body.has-custom-bg.bg-photo-light .tkb-content p { color: rgba(31,35,40,0.75); }
+body.has-custom-bg.bg-photo-light .tkb-details span { color: #1f2328; }
+body.has-custom-bg.bg-photo-light .tkb-next-line { background: rgba(255,255,255,0.6); border-color: rgba(0,0,0,0.1); }
+body.has-custom-bg.bg-photo-light .tkb-next-line b { color: #1f2328; }
+body.has-custom-bg.bg-photo-light .badge-status { background: rgba(255,255,255,0.85); border-color: rgba(0,0,0,0.1); color: #1f2328; }
 
 /* =========================================
    RESPONSIVE — trước đây file này chưa có @media nào,
@@ -360,7 +466,9 @@ body.light-mode .stat-item h2 { text-shadow: none; }
     .bg-text {
         display: block;
         font-size: clamp(70px, 24vw, 130px);
-        left: auto; right: -2%; opacity: 0.14;
+        /* Kéo vào trong thêm 1 chút (right: -2% -> 6%) để chữ "SOON" không áp sát/tràn ra
+           quá mép phải của card trên màn hình nhỏ như ảnh chụp thực tế, nhìn cân đối hơn. */
+        left: auto; right: 6%; opacity: 0.14;
     }
     .tkb-content h1 { white-space: normal; letter-spacing: normal; }
     .tkb-content p { margin-bottom: 20px; }

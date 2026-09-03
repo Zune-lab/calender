@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>SGU Workspace Pro</title>
-    <link rel="stylesheet" href="calendar.css">
+    <!-- calendar.css đã được chia thành 3 file nhỏ hơn (mỗi file < 1000 dòng) để tiện bảo hành.
+         Thứ tự nạp phải giữ nguyên vì calendar-1-base.css chứa :root (biến CSS dùng chung). -->
+    <link rel="stylesheet" href="calendar-1-base.css">
+    <link rel="stylesheet" href="calendar-2-notes-glass-lightmode.css">
+    <link rel="stylesheet" href="calendar-3-desktop-settings-dialog.css">
     <link rel="manifest" href="../manifest.json">
     <meta name="theme-color" content="#08090c">
     <link rel="icon" href="../icon-192.png">
@@ -12,8 +16,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
-    <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
 </head>
 <body>
 
@@ -31,7 +33,7 @@
     <div id="auth-screen" class="auth-overlay hidden">
         <div class="auth-ambient-bg"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
         <div class="auth-panel glass-panel-3d">
-            <div class="auth-avatar-wrapper" id="auth-avatar-wrapper">
+            <div class="auth-avatar-wrapper">
                 <svg id="auth-icon-login" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                 <svg id="auth-icon-register" style="display: none;" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
             </div>
@@ -123,7 +125,12 @@
                 </div>
                 <div class="center-title">
                     <span>SGU Workspace</span>
-                    <h2 id="topbar-title">Thời Khóa Biểu</h2>
+                    <div class="topbar-title-row">
+                        <span id="topbar-title-icon" class="topbar-title-icon" style="display: none;" title="Kéo trên lưới để tạo việc — kéo dời hoặc co giãn để chỉnh giờ">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg>
+                        </span>
+                        <h2 id="topbar-title">Thời Khóa Biểu</h2>
+                    </div>
                 </div>
                 <div class="top-actions">
                     <!-- Gộp 2 cổng nạp dữ liệu lên đầu -->
@@ -200,7 +207,20 @@
                     </div>
                 </div>
                 
-                <div id="timetable-wrapper" class="timetable-wrapper glass-panel-3d"></div>
+                <div id="timetable-wrapper" class="timetable-wrapper glass-panel-3d">
+                    <!-- FIX BUG "1-2 KHUNG HÌNH BLUR KHÔNG KỊP KHI ĐỔI TUẦN": trước đây thanh kính
+                         mờ này được XÂY LẠI TỪ ĐẦU (như 1 chuỗi HTML) mỗi lần renderTimetable()
+                         chạy (mỗi lần đổi tuần), tức là bị XOÁ ĐI rồi TẠO MỚI HOÀN TOÀN -> trình
+                         duyệt phải tính lại "backdrop-filter" (blur) từ con số 0 cho phần tử vừa
+                         tạo, và phép tính này tốn 1-2 khung hình để hoàn tất -> lộ ra khoảnh khắc
+                         "chưa kịp mờ", nhìn xuyên thấu được nội dung thẻ môn phía sau. Giờ đặt
+                         SẴN, CỐ ĐỊNH ở đây (không còn bị renderTimetable() động vào nữa) — cùng 1
+                         phần tử DOM tồn tại xuyên suốt, trình duyệt chỉ cần tính blur ĐÚNG 1 LẦN
+                         duy nhất lúc tải trang, những lần đổi tuần sau chỉ đổi bề rộng (rẻ hơn
+                         nhiều so với tính lại blur từ đầu), không còn khung hình "hở" nữa. -->
+                    <div class="sticky-glass-bar" id="sticky-header-bg"></div>
+                    <div id="timetable-table-container"></div>
+                </div>
             </section>
 
             <!-- =========================================
@@ -239,30 +259,42 @@
             <!-- =========================================
                  TAB: KẾ HOẠCH NGÀY (DAY PLANNER - kéo thả)
             ========================================= -->
-            <section id="tab-planner" class="tab-pane" style="padding-top: 10px;">
+            <section id="tab-planner" class="tab-pane" style="padding-top: 4px;">
 
-                <div style="padding: 0 25px; margin-bottom: 20px; flex-shrink: 0;">
-                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 18px; flex-wrap: wrap; justify-content: space-between;">
-                        <div class="planner-header-title-row" style="display: flex; align-items: center; gap: 15px;">
-                            <div class="planner-header-icon" style="width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 10px rgba(0,0,0,0.1); flex-shrink: 0;">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg>
-                            </div>
-                            <div class="planner-header-text">
-                                <h3 style="margin: 0; font-size: 1.6rem; font-weight: 600; color: var(--text-main); letter-spacing: -0.5px;">Kế Hoạch Ngày</h3>
-                                <p style="margin: 4px 0 0 0; font-size: 0.95rem; color: var(--text-muted);">Kéo trên lưới để tạo việc — kéo dời (kể cả sang ngày khác) hoặc co giãn để chỉnh giờ</p>
+                <!-- Tiêu đề chỉ hiện trên màn hẹp (<=1180px), nơi chữ "Kế Hoạch Ngày" ở topbar chung
+                     đã tự ẩn (xem .center-title) — mặc định ẩn trên desktop để khỏi lặp lại tiêu đề. -->
+                <h3 class="planner-mobile-title" style="display: none; margin: 0 25px 10px; font-size: 1.3rem; font-weight: 600; color: var(--text-main); letter-spacing: -0.5px;">Kế Hoạch Ngày</h3>
+
+                <div style="padding: 0 25px; margin-bottom: 14px; flex-shrink: 0;">
+                    <!-- FIX: theo ý muốn là đưa icon + dòng "Kéo trên lưới..." xuống NGAY DƯỚI CHÂN
+                         chữ tiêu đề "Kế Hoạch Ngày" ở thanh header chung phía trên (thay vì đứng thành
+                         1 khối tiêu đề riêng, to, lặp lại chữ "Kế Hoạch Ngày" lần nữa) — và thu nhỏ hẳn
+                         lại thành 1 dòng chú thích nhỏ, gọn. Bỏ hẳn khối icon vuông to + h3 lặp lại,
+                         chỉ còn icon nhỏ + chữ mô tả nhỏ, nằm sát ngay dưới header, cùng hàng với bộ
+                         chọn tuần (đã thu gọn từ trước) để không chiếm thêm chiều cao. -->
+                    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px;">
+                        <div class="planner-header-title-row" style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 240px;">
+                            <!-- Icon đồng hồ này CHỈ hiện ở desktop/PC/laptop (>1180px, xem .planner-header-icon
+                                 trong calendar.css) — ở màn hình hẹp hơn, icon tương tự đã có sẵn kế bên chữ
+                                 "Kế Hoạch Ngày" trên topbar (#topbar-title-icon), tránh lặp icon 2 chỗ cùng lúc. -->
+                            <span class="planner-header-icon" title="Kéo trên lưới để tạo việc — kéo dời hoặc co giãn để chỉnh giờ">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg>
+                            </span>
+                            <div class="planner-header-text" style="min-width: 0;">
+                                <p style="margin: 0; font-size: 0.82rem; line-height: 1.3; color: var(--text-muted);">Kéo trên lưới để tạo việc — kéo dời (kể cả sang ngày khác) hoặc co giãn để chỉnh giờ</p>
                             </div>
                         </div>
 
-                        <div class="day-selector-wrapper glass-panel-3d">
+                        <div class="day-selector-wrapper glass-panel-3d compact" style="flex-shrink: 0;">
                             <button id="prev-week-planner-btn" class="day-nav-btn" onclick="changePlannerWeek(-1)" title="Tuần trước" type="button">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                             </button>
                             <div class="day-selector-display" style="cursor: default;">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                                 <span id="planner-week-text">Tuần này</span>
                             </div>
                             <button id="next-week-planner-btn" class="day-nav-btn" onclick="changePlannerWeek(1)" title="Tuần sau" type="button">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </button>
                             <button class="glass-btn small" style="margin-left: 4px;" onclick="goToPlannerThisWeek()" type="button">Tuần này</button>
                         </div>
@@ -300,6 +332,14 @@
                         </div>
                         <input type="text" id="planner-editor-title" class="planner-editor-input" placeholder="Việc cần làm..." maxlength="60" autocomplete="off">
                         <div class="planner-editor-colors" id="planner-editor-colors"></div>
+                        <!-- MỨC ĐỘ QUAN TRỌNG: quyết định thời gian báo trước theo NGÀY (dựa trên
+                             ngày của việc này) — Quan trọng: báo trước 1 tuần, Bình thường: 5 ngày,
+                             Không quan trọng lắm: 3 ngày. Xem PRIORITY_LEVELS trong calendar.js. -->
+                        <div class="priority-selector" id="planner-editor-priority">
+                            <button type="button" class="priority-btn" data-priority="high" style="--p-color:#ff4d4f">Quan trọng</button>
+                            <button type="button" class="priority-btn active" data-priority="normal" style="--p-color:#ffb020">Bình thường</button>
+                            <button type="button" class="priority-btn" data-priority="low" style="--p-color:#8b96a5">Không quan trọng lắm</button>
+                        </div>
                         <div class="planner-editor-actions">
                             <button type="button" class="planner-editor-delete" id="planner-editor-delete" title="Xóa việc này">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path></svg>
@@ -316,15 +356,24 @@
 
                     <div class="setting-group">
                         <h4>Môi trường làm việc (Sáng/Tối)</h4>
-                        <div style="margin-top: 15px;">
+                        <div style="margin-top: 15px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
                             <input type="checkbox" id="theme-toggle" class="switch">
+                            <!-- Bật lựa chọn này -> app tự đọc theme của máy (HĐH/trình duyệt) thay vì
+                                 dùng đúng công tắc Sáng/Tối thủ công ở trên; tự đổi theo ngay nếu bạn
+                                 đổi theme hệ thống lúc đang mở app, không cần tải lại trang. -->
+                            <label class="theme-system-option" for="theme-system-toggle">
+                                <input type="checkbox" id="theme-system-toggle">
+                                <span>Theo giao diện hệ thống</span>
+                            </label>
                         </div>
                     </div>
 
                     <div class="setting-group" style="margin-top: 30px;">
-                        <h4>Thông báo trình duyệt cho Kế Hoạch</h4>
+                        <h4>Thông báo trình duyệt</h4>
                         <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px; max-width: 480px;">
-                            Bật để trình duyệt tự bắn thông báo khi sắp tới giờ 1 việc bạn đã đặt trong tab Kế Hoạch Ngày (trước giờ bắt đầu 5 phút).
+                            Bật 1 lần, dùng chung cho <b>2 nơi</b>: báo trước khi sắp tới giờ 1 việc trong tab
+                            <b>Kế Hoạch Ngày</b> (theo thời gian bạn chọn ở mục dưới), và báo trước <b>Hạn</b>
+                            của Ghi chú/Công việc trong từng môn học (theo mức Quan trọng đã đặt: 1 tuần / 5 ngày / 3 ngày).
                         </p>
                         <div style="margin-top: 15px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
                             <input type="checkbox" id="planner-notif-toggle" class="rocker-toggle">
@@ -350,6 +399,11 @@
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                                 Tải ảnh lên
                             </label>
+
+                            <!-- Khôi phục về không có ảnh nền tuỳ chỉnh (xoá customBg, quay lại
+                                 gradient/màu nền mặc định của theme) — dùng chung clearCustomBackground()
+                                 từ bg-sync.js nên Dashboard/Hồ Sơ cũng tự cập nhật theo ngay. -->
+                            <button onclick="resetCustomBG()" class="glass-btn small btn-danger-soft">Khôi phục mặc định</button>
                         </div>
                     </div>
 
@@ -379,6 +433,34 @@
                             <button onclick="applyCustomAccentColor()" class="glass-btn small">Áp màu tự pha</button>
                             <button onclick="randomizeAccentColor()" class="glass-btn small"><i class="fas fa-dice"></i> Random</button>
                             <button onclick="resetAccentColor()" class="glass-btn small btn-danger-soft">Dùng màu mặc định theo tài khoản</button>
+                        </div>
+                    </div>
+
+                    <!-- MỤC 2: TÙY CHỈNH THỜI GIAN BÁO TRƯỚC CHO KẾ HOẠCH NGÀY
+                         Trước đây thời gian báo trước khi tới giờ 1 việc trong Kế Hoạch bị CỐ ĐỊNH
+                         CỨNG ở 5 phút (PLANNER_NOTIF_LEAD_MIN trong calendar.js). Giờ cho người
+                         dùng tự chọn, lưu vào localStorage, calendar.js đọc lại giá trị này thay vì
+                         dùng số cứng. -->
+                    <div class="setting-group" style="margin-top: 30px;">
+                        <h4>Thời gian báo trước — Kế Hoạch Ngày</h4>
+                        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px; max-width: 480px;">
+                            Báo thông báo trước bao lâu so với giờ bắt đầu 1 việc trong Kế Hoạch Ngày.
+                        </p>
+                        <div class="custom-select-container notif-lead-select-container" id="notif-lead-dropdown-container" onclick="toggleNotifLeadDropdown(event)" style="margin-top: 12px; max-width: 260px;">
+                            <div class="custom-select-display notif-lead-display">
+                                <span id="notif-lead-current-text">1 giờ trước</span>
+                            </div>
+                            <div class="select-arrow">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            <ul class="custom-dropdown-list hidden-dropdown notif-lead-dropdown-list" id="notif-lead-options-list"></ul>
+                            <select id="planner-notif-lead-select" style="display: none;" onchange="savePlannerNotifLead(this.value)">
+                                <option value="5">5 phút trước</option>
+                                <option value="10">10 phút trước</option>
+                                <option value="15">15 phút trước</option>
+                                <option value="30">30 phút trước</option>
+                                <option value="60">1 giờ trước</option>
+                            </select>
                         </div>
                     </div>
 
@@ -451,6 +533,17 @@
                         </div>
                     </div>
 
+                    <!-- MỨC ĐỘ QUAN TRỌNG + HẠN (không bắt buộc): áp dụng cho ghi chú SẮP được thêm
+                         vào ô nhập bên dưới. Nếu để trống Hạn thì ghi chú không có thông báo theo
+                         ngày (vẫn thêm bình thường, chỉ là không đếm ngược hạn). -->
+                    <div class="detail-meta-row">
+                        <div class="priority-selector mini" id="note-priority-selector">
+                            <button type="button" class="priority-btn" data-priority="high" style="--p-color:#ff4d4f" title="Quan trọng — báo trước 1 tuần"></button>
+                            <button type="button" class="priority-btn active" data-priority="normal" style="--p-color:#ffb020" title="Bình thường — báo trước 5 ngày"></button>
+                            <button type="button" class="priority-btn" data-priority="low" style="--p-color:#8b96a5" title="Không quan trọng lắm — báo trước 3 ngày"></button>
+                        </div>
+                        <input type="date" id="note-due-date" class="due-date-input" title="Hạn (không bắt buộc)">
+                    </div>
                     <div class="input-mac-style" onmouseenter="this.querySelector('input').focus()">
                         <input type="text" id="new-note" placeholder="Nhập ghi chú mới..." onkeypress="handleEnter(event, 'note')">
                         <button onclick="addDetail('note')" class="send-btn" title="Gửi (Enter)" type="button">
@@ -498,6 +591,15 @@
                         </div>
                     </div>
 
+                    <!-- MỨC ĐỘ QUAN TRỌNG + HẠN (không bắt buộc) — xem giải thích ở phần Ghi chú ở trên -->
+                    <div class="detail-meta-row">
+                        <div class="priority-selector mini" id="task-priority-selector">
+                            <button type="button" class="priority-btn" data-priority="high" style="--p-color:#ff4d4f" title="Quan trọng — báo trước 1 tuần"></button>
+                            <button type="button" class="priority-btn active" data-priority="normal" style="--p-color:#ffb020" title="Bình thường — báo trước 5 ngày"></button>
+                            <button type="button" class="priority-btn" data-priority="low" style="--p-color:#8b96a5" title="Không quan trọng lắm — báo trước 3 ngày"></button>
+                        </div>
+                        <input type="date" id="task-due-date" class="due-date-input" title="Hạn (không bắt buộc)">
+                    </div>
                     <div class="input-mac-style" onmouseenter="this.querySelector('input').focus()">
                         <input type="text" id="new-task" placeholder="Thêm công việc mới..." onkeypress="handleEnter(event, 'task')">
                         <button onclick="addDetail('task')" class="send-btn" title="Gửi (Enter)" type="button">
@@ -529,7 +631,7 @@
     </div>
     <div class="share-menu" id="share-menu-widget">
         <div class="toggle" id="share-toggle-btn">
-            <ion-icon name="share-social"></ion-icon>
+            <i class="fas fa-share-nodes"></i>
         </div>
         <li style="--i: 0; --clr: #1877f2"><a href="404-error-face.html"><i class="fab fa-facebook-f"></i></a></li>
         <li style="--i: 1; --clr: #25d366"><a href="404-error-face.html"><i class="fab fa-whatsapp"></i></a></li>
@@ -542,6 +644,15 @@
     </div>
 
     <script src="../shared.js"></script>
-    <script type="module" src="calendar.js"></script>
+    <script src="../bg-sync.js"></script>
+    <!-- calendar.js đã được chia thành 5 file nhỏ hơn (mỗi file < 1000 dòng) để tiện bảo hành.
+         Đây là script thường (không phải module) nên các file dùng chung 1 global scope,
+         nhưng thứ tự nạp bên dưới PHẢI giữ nguyên vì các file sau tham chiếu biến/hàm khai
+         báo ở file trước (ví dụ calendar-5 dùng PLANNER_HOUR_PX khai báo trong calendar-4). -->
+    <script src="calendar-1-core.js"></script>
+    <script src="calendar-2-timetable-modal.js"></script>
+    <script src="calendar-3-personalization.js"></script>
+    <script src="calendar-4-planner-notify.js"></script>
+    <script src="calendar-5-planner-ui.js"></script>
 </body>
 </html>

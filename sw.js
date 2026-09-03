@@ -10,11 +10,17 @@
 // FIX: Dùng path TƯƠNG ĐỐI (không có dấu / ở đầu) và tự tính theo self.registration.scope,
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
-const CACHE_NAME = 'sgu-workspace-v4'; // BUMP lần này để xoá sạch cache CŨ đang bị kẹt (bug cache-first ở dưới) — từ v4 trở đi không bắt buộc phải bump tay nữa vì đã chuyển sang stale-while-revalidate
+const CACHE_NAME = 'sgu-workspace-v6'; // BUMP: tkb/calendar.css và tkb/calendar.js đã được chia nhỏ thành
+// nhiều file (mỗi file < 1000 dòng, dễ bảo hành hơn) — danh sách app shell bên dưới phải liệt kê
+// ĐỦ TỪNG FILE MỚI thay cho 2 file gộp cũ, nếu không app sẽ lỗi/trắng trang khi mở offline lần đầu
+// (browser cố tải calendar.css/calendar.js không còn tồn tại nữa).
 const APP_SHELL_RELATIVE = [
-    'index.html', 'index.css', 'index.js', 'shared.js',
+    'index.html', 'index.css', 'index.js', 'shared.js', 'bg-sync.js',
     'profile/profile.html', 'profile/profile.css', 'profile/profile.js',
-    'tkb/calendar.html', 'tkb/calendar.css', 'tkb/calendar.js',
+    'tkb/calendar.html',
+    'tkb/calendar-1-base.css', 'tkb/calendar-2-notes-glass-lightmode.css', 'tkb/calendar-3-desktop-settings-dialog.css',
+    'tkb/calendar-1-core.js', 'tkb/calendar-2-timetable-modal.js', 'tkb/calendar-3-personalization.js',
+    'tkb/calendar-4-planner-notify.js', 'tkb/calendar-5-planner-ui.js',
     'manifest.json', 'icon-192.png', 'icon-512.png',
 ];
 
@@ -115,4 +121,4 @@ self.addEventListener('notificationclick', (event) => {
             if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
         })
     );
-}); 
+});

@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 /* FIX SCALE TOÀN TRANG: giống calendar.css — trang Hồ Sơ trước đây cũng không có rule set
    font-size gốc, toàn bộ "rem" bị neo cứng 16px. Thêm vào để đồng bộ 3 trang. */
 html {
@@ -21,6 +19,11 @@ html {
     --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
     --duration-fast: 0.2s;
     --duration-normal: 0.35s;
+
+    /* Scrim riêng cho topbar — nhạt hơn 1 chút so với --bg-color đặc trước đây, đỡ thành 1
+       thanh đen quá gắt phía trên. Khi có ảnh nền tuỳ chỉnh, profile.js sẽ override biến này
+       (màu đã pha theo tông nền sáng/tối của theme) để topbar luôn đủ tương phản. */
+    --topbar-scrim: rgba(8, 9, 12, 0.8);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -34,14 +37,22 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    transition: background-image var(--duration-normal) var(--ease-standard);
+    /* ẢNH NỀN TUỲ CHỈNH — gán TRỰC TIẾP lên background-image của chính body này (đồng bộ đúng
+       cách tkb/calendar.js đang làm), không còn lớp phủ/blur riêng nữa. */
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    transition: background-image var(--duration-normal) var(--ease-standard), background-color var(--duration-normal) var(--ease-standard);
 }
 
 /* ---------- TOPBAR ---------- */
 .profile-topbar {
     width: 100%; display: flex; align-items: center; justify-content: space-between;
     padding: 24px 6%; position: sticky; top: 0; z-index: 20;
-    background: linear-gradient(to bottom, var(--bg-color) 60%, transparent);
+    /* Đã bỏ backdrop-filter + mask-image (kết hợp 2 thứ này bị lỗi render ở nhiều trình duyệt,
+       ra 1 khối chữ nhật trắng có viền cứng như ảnh bạn gửi). Quay về đúng 1 lớp gradient màu
+       scrim như ban đầu — màu/độ đậm của lớp này đã được profile.js tính theo ảnh nền rồi. */
+    background: linear-gradient(to bottom, var(--topbar-scrim) 65%, transparent);
 }
 .topbar-left { display: flex; align-items: center; gap: 16px; }
 .topbar-shortcuts { display: flex; align-items: center; gap: 10px; }
@@ -63,13 +74,19 @@ body {
 }
 .back-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateX(-3px); }
 
-.topbar-titles h1 { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px; }
-.topbar-titles p { font-size: 0.85rem; color: var(--text-muted); }
+.topbar-titles h1 {
+    font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px;
+    /* Ưu tiên --topbar-text (JS tính theo đúng độ sáng của màu ảnh nền), fallback về
+       --text-main gốc của theme khi không có ảnh nền tuỳ chỉnh. */
+    color: var(--topbar-text, var(--text-main));
+}
+/* Dòng email dưới tiêu đề: cùng logic — ưu tiên --topbar-muted, fallback --text-muted. */
+.topbar-titles p { font-size: 0.85rem; color: var(--topbar-muted, var(--text-muted)); }
 
 /* ---------- LAYOUT (Bento 2 cột) ---------- */
 /* Bỏ hàng "bento-save" riêng ở cuối lưới — nút Lưu giờ nằm ngay trong card Thông Tin Cơ Bản,
    ngay dưới "Ngày tham gia" -> lưới bento gọn lại còn 2 hàng, đẹp và cân đối hơn. */
-.profile-shell { width: 100%; max-width: 1080px; margin: 0 auto; padding: 10px 6% 80px; }
+.profile-shell { width: 100%; max-width: 1080px; margin: 0 auto; padding: 10px 6% 80px; position: relative; z-index: 1; }
 .bento-grid { display: grid; grid-template-columns: 1fr 1.6fr; grid-template-rows: auto auto; gap: 24px; }
 
 .bento-avatar { grid-column: 1 / 2; grid-row: 1 / 2; align-items: center; text-align: center; }
@@ -191,6 +208,7 @@ body.light-mode {
     --text-muted: #656d76;
     --panel-bg: rgba(255, 255, 255, 0.7);
     --panel-border: rgba(0, 0, 0, 0.1);
+    --topbar-scrim: rgba(226, 232, 240, 0.8);
 }
 body.light-mode .profile-card { box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
 body.light-mode .avatar-preview { background: rgba(0,0,0,0.04); }
@@ -204,12 +222,33 @@ body.light-mode .toggle-inner-box { background: rgba(0,0,0,0.03); }
 body.light-mode .badge-small { background: rgba(0,0,0,0.05); color: #64748b; }
 body.light-mode .toggle-copy h4 { color: #1e293b; }
 body.light-mode .slider { background: rgba(0,0,0,0.12); }
-body.light-mode .topbar-titles h1 { color: #1e293b; }
 
 @media (max-width: 850px) {
     .bento-grid { grid-template-columns: 1fr; }
-    .bento-avatar, .bento-info, .bento-privacy { grid-column: 1 / -1; grid-row: auto; }
-    .info-save-row { flex-direction: column; gap: 15px; text-align: center; align-items: stretch; }
+    .bento-avatar, .bento-privacy { grid-column: 1 / -1; grid-row: auto; }
+
+    /* Đổi chỗ "LƯU THAY ĐỔI" và "Ẩn Email công khai" trên mobile: tách .bento-info ra khỏi
+       hộp card của chính nó (display:contents) để 2 phần con — .info-fields (tên/email/ngày
+       tham gia) và .info-save-row (nút Lưu) — trở thành item độc lập ngay trong .bento-grid,
+       tự xếp lại thứ tự bằng "order" mà KHÔNG đụng gì tới bố cục desktop (chỉ trong media query
+       này). Thứ tự mới: Avatar -> Thông tin -> Quyền riêng tư (Ẩn Email) -> Nút Lưu. */
+    .bento-info { display: contents; }
+    .bento-avatar { order: 1; }
+    .info-fields {
+        order: 2;
+        background: var(--panel-bg); backdrop-filter: blur(20px);
+        border: 1px solid var(--panel-border); border-radius: 24px;
+        padding: 30px; box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    }
+    .bento-privacy { order: 3; }
+    .info-save-row {
+        order: 4;
+        margin-top: 0; border-top: none;
+        background: var(--panel-bg); backdrop-filter: blur(20px);
+        border: 1px solid var(--panel-border); border-radius: 24px;
+        padding: 24px 30px; box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+        flex-direction: column; gap: 15px; text-align: center; align-items: stretch;
+    }
     .info-save-row .save-btn { width: 100%; }
 }
 

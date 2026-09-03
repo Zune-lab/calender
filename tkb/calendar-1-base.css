@@ -1,0 +1,784 @@
+/* ===== calendar-1-base.css =====
+   Phần 1/3 của calendar.css (tách file để dễ bảo trì, mỗi file < 1000 dòng).
+   Nội dung: :root (biến CSS dùng chung), layout nền, bảng TKB, popup môn học, dropdown tuần,
+   custom date picker, dropdown thời gian báo trước (mục 1-6).
+   LƯU Ý: file này PHẢI nạp TRƯỚC calendar-2 và calendar-3 trong calendar.html vì chứa :root
+   (biến CSS mà các file sau dùng lại, ví dụ var(--text-main), var(--accent-color)...).
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* FIX SCALE TOÀN TRANG: trước đây file này KHÔNG có rule nào set font-size gốc cho <html>,
+   nên toàn bộ đơn vị "rem" dùng khắp file (nút bấm, popup, tab Cài đặt, Kế hoạch ngày...)
+   bị neo cứng vào mặc định 16px của trình duyệt -> không hề co giãn theo màn hình, khác hẳn
+   index.html vốn đã có clamp() này. Thêm vào đây để ĐỒNG BỘ 3 trang (Dashboard/TKB/Hồ sơ),
+   toàn bộ chữ "rem" trong trang tự động scale mượt theo bề rộng màn hình. */
+html {
+    font-size: clamp(14px, 12px + 0.45vw, 17px);
+    /* FIX BUG "MENU CHỮ 1 TO 1 NHỎ" TRÊN IPHONE/SAFARI: tắt auto-boost cỡ chữ theo bề rộng
+       riêng từng phần tử (xem giải thích chi tiết ở index.css) -> đồng bộ với trang Dashboard,
+       để label menu dưới (Trang chủ/Lịch/Lịch thi/...) luôn hiện đúng 1 cỡ như nhau. */
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+
+:root {
+    --text-main: #f5f5f7;
+    --text-muted: rgba(255, 255, 255, 0.45);
+    --accent: #ff4655; 
+
+    /* Motion token dùng chung toàn hệ thống (đồng bộ index.css / profile.css) */
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --duration-fast: 0.2s;
+    --duration-normal: 0.35s;
+    
+    /* Biến của Bouncing Loader */
+    --dot-size: 20px;
+    --dot-base: #ffffff;
+    --dot-highlight: #ffffff;
+    --shadow-color: rgba(255, 255, 255, 0.35);
+    --shadow-blur: 1px;
+    --cycle: 0.5s;
+    --ease: ease;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* =========================================
+   0. GLOBAL LOADER (BOUNCING DOTS)
+========================================= */
+.global-loader {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: 99999; display: flex; align-items: center; justify-content: center;
+    background: rgba(8, 9, 12, 0.75); 
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+.global-loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.loader { width: 200px; height: 60px; position: relative; z-index: 1; }
+.loader__dot {
+    width: var(--dot-size); height: var(--dot-size); position: absolute; border-radius: 50%;
+    background: linear-gradient(135deg, var(--dot-highlight), var(--dot-base));
+    left: 15%; transform-origin: 50%;
+    animation: bounce-dot var(--cycle) alternate infinite var(--ease);
+    box-shadow: 0 1px 10px rgba(255, 255, 255, 0.35);
+}
+@keyframes bounce-dot {
+    0% { top: 60px; height: 5px; border-radius: 50px 50px 25px 25px; transform: scaleX(1.7); }
+    40% { height: 20px; border-radius: 50%; transform: scaleX(1); }
+    100% { top: 0%; }
+}
+.loader__dot:nth-child(2) { left: 45%; animation-delay: 0.2s; }
+.loader__dot:nth-child(3) { left: auto; right: 15%; animation-delay: 0.3s; }
+
+.loader__shadow {
+    width: var(--dot-size); height: 4px; border-radius: 50%; background: var(--shadow-color);
+    position: absolute; top: 62px; transform-origin: 50%; z-index: -1; left: 15%;
+    filter: blur(var(--shadow-blur));
+    animation: bounce-shadow var(--cycle) alternate infinite var(--ease);
+}
+@keyframes bounce-shadow {
+    0% { transform: scaleX(1.5); }
+    40% { transform: scaleX(1); opacity: .7; }
+    100% { transform: scaleX(.2); opacity: .4; }
+}
+.loader__shadow:nth-child(4) { left: 45%; animation-delay: 0.2s; }
+.loader__shadow:nth-child(5) { left: auto; right: 15%; animation-delay: 0.3s; }
+
+.tab-pane { 
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0; visibility: hidden; pointer-events: none;
+}
+.tab-pane.active { 
+    position: relative; opacity: 1; visibility: visible; 
+    pointer-events: auto; display: flex; flex-direction: column;
+    /* Thêm 2 dòng này để ép Tab ôm sát khung và ngăn tràn */
+    height: 100%; 
+    overflow: hidden; 
+}
+
+/* =========================================
+   0. THANH SCROLL TOÀN TRANG (html/body) - ĐỒNG BỘ GIAO DIỆN TỐI
+   Trước đây chỉ .scrollable / .timetable-wrapper / .planner-wrapper có scrollbar riêng,
+   còn cuộn ở cấp trang (html/body, đặc biệt khi overflow:auto trên mobile) vẫn dùng thanh
+   scroll trắng thô mặc định của trình duyệt -> lệch tông hẳn với giao diện tối.
+========================================= */
+html { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { width: 9px; height: 9px; }
+html::-webkit-scrollbar-track, body::-webkit-scrollbar-track { background: transparent; }
+html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box;
+}
+html::-webkit-scrollbar-thumb:hover, body::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.32); background-clip: padding-box; }
+body.light-mode { scrollbar-color: rgba(0, 0, 0, 0.2) transparent; }
+body.light-mode::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); background-clip: padding-box; }
+body.light-mode::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.32); background-clip: padding-box; }
+
+/* =========================================
+   1. BACKGROUND (TỐI ƯU GPU - HỖ TRỢ CUSTOM)
+========================================= */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #08090c;
+    background-image: 
+        radial-gradient(circle at 15% 15%, rgba(94, 23, 235, 0.15), transparent 40%),
+        radial-gradient(circle at 85% 35%, rgba(20, 169, 232, 0.1), transparent 45%),
+        radial-gradient(circle at 50% 85%, rgba(252, 60, 100, 0.08), transparent 45%);
+    background-attachment: fixed; 
+    color: var(--text-main);
+    width: 100%; overflow: hidden;
+    background-position: center;
+    background-size: cover;
+    transition: background-image 0.5s ease-in-out, background-color 0.5s ease;
+}
+
+.auth-ambient-bg { position: absolute; width: 100%; height: 100%; z-index: -1; pointer-events: none; overflow: hidden; }
+.blob { position: absolute; border-radius: 50%; opacity: 0.6; animation: floatBlob 16s infinite alternate ease-in-out; will-change: transform; }
+.blob-1 { width: 800px; height: 800px; background: radial-gradient(circle, rgba(255,51,102,0.3) 0%, transparent 60%); top: -20%; left: -10%; }
+.blob-2 { width: 900px; height: 900px; background: radial-gradient(circle, rgba(0,201,255,0.3) 0%, transparent 60%); bottom: -30%; right: -10%; animation-delay: -8s; }
+@keyframes floatBlob { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(60px, 50px) scale(1.1); } }
+
+/* =========================================
+   2. KHUNG KÍNH LỚN
+========================================= */
+.glass-panel-3d {
+    position: relative; z-index: 1;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.005) 100%);
+    backdrop-filter: blur(25px) saturate(150%); -webkit-backdrop-filter: blur(25px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.05); 
+    border-top: 1px solid rgba(255, 255, 255, 0.2); 
+    border-left: 1px solid rgba(255, 255, 255, 0.1); 
+    border-radius: 28px; 
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transition: all 0.3s ease;
+}
+
+/* =========================================
+   3. MÀN HÌNH ĐĂNG NHẬP
+========================================= */
+.auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(6, 7, 9, 0.85); z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 0.4s ease; }
+.auth-overlay.hidden { opacity: 0; pointer-events: none; }
+.auth-panel { width: 420px; padding: 45px 40px; display: flex; flex-direction: column; gap: 15px; animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes slideUpFade { 0% { opacity: 0; transform: translateY(30px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+.auth-avatar-wrapper { width: 76px; height: 76px; margin: -15px auto 10px auto; border-radius: 50%; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 10px 25px rgba(0,0,0,0.3); animation: floatAvatar 4s ease-in-out infinite; will-change: transform; }
+@keyframes floatAvatar { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.auth-tabs { position: relative; display: flex; background: rgba(0,0,0,0.4); padding: 4px; border-radius: 100px; margin-bottom: 15px; }
+.tab-slider { position: absolute; top: 4px; left: 4px; width: calc(50% - 4px); height: calc(100% - 8px); background: rgba(255,255,255,0.12); border-radius: 100px; transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: none; }
+.auth-tabs button { flex: 1; background: transparent; border: none; color: rgba(255,255,255,0.4); padding: 12px; border-radius: 100px; cursor: pointer; transition: 0.3s; font-size: 0.9rem; font-weight: 500; position: relative; z-index: 1; }
+.auth-tabs button.active { color: #fff; }
+.auth-form-content { transition: opacity 0.2s ease; }
+.auth-form-content.fade-out { opacity: 0; }
+.auth-error-msg { color: #ff5858; font-size: 0.85rem; text-align: center; margin-top: 10px; min-height: 20px; }
+
+/* =========================================
+   4. APP BỐ CỤC CHÍNH (SIDEBAR & HEADER)
+========================================= */
+.nav-links { list-style: none; flex: 1; } 
+.nav-links li { padding: 12px 16px; border-radius: 10px; cursor: pointer; font-size: 0.95rem; font-weight: 400; color: var(--text-muted); transition: all 0.2s ease; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.nav-links li:hover { background: rgba(255, 255, 255, 0.03); color: var(--text-main); }
+.nav-links li.active { background: rgba(255, 255, 255, 0.08); color: var(--text-main); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
+#user-email-display { font-size: 0.8rem; color: var(--text-main); font-weight: 500; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 150px; }
+h2 { font-weight: 300; font-size: 2.2rem; letter-spacing: -0.5px; }
+
+/* =========================================
+   5. LƯỚI TKB KIỂU TABLE (ANIME CLEAR GLASS)
+========================================= */
+.timetable-wrapper {
+    /* FIX GỐC: trước đây chữ trong thẻ môn học dùng clamp(...vw...) tức là co theo bề rộng
+       TOÀN MÀN HÌNH — nhưng .timetable-wrapper thực tế bị .main-glass-dashboard giới hạn
+       max-width: 1550px, nên ở hầu hết màn hình desktop bình thường (>=1220px) giá trị vw
+       đã CHẠM TRẦN ngay từ đầu -> chữ coi như không co tí nào, y hệt cỡ cũ.
+       Đổi sang Container Query: biến .timetable-wrapper thành 1 "container" kích thước riêng,
+       để các thẻ môn học bên trong co giãn chữ theo đúng bề rộng THẬT của chính khung bảng
+       (cqw), không phải bề rộng cả trang -> đúng bản chất vấn đề (cột hẹp hay rộng). */
+    container-type: inline-size;
+    container-name: tkb-table;
+
+    flex: 1; min-height: 0;
+    
+    /* FIX: Trên PC bảng TKB đã đủ rộng chứa hết 8 cột (Thứ 2 -> Chủ Nhật + Giờ), không có gì
+       bị cắt, nên overflow-x không cần thiết -> trước đây để "auto" vẫn lòi ra 1 thanh cuộn
+       ngang "ma" (gần như không có gì để cuộn) trông rất thừa. Chỉ overflow-y để cuộn dọc khi
+       nhiều tiết học. Mobile cần cuộn ngang thật (bảng phải rộng hơn màn hình) -> bật lại
+       overflow-x: auto riêng trong media query bên dưới. */
+    overflow-y: auto;
+    overflow-x: clip; /* FIX: 'hidden' vẫn để lọt thanh cuộn ngang "ma" ở một số trình duyệt/theme
+       scrollbar hệ thống -> 'clip' chặn hẳn khả năng cuộn ngang từ gốc, không chỉ ẩn hiển thị. */
+    
+    border-radius: 28px; 
+    padding: 0 20px 20px 20px !important; 
+    background: rgba(255, 255, 255, 0.02) !important; 
+    backdrop-filter: blur(25px) saturate(130%) !important; 
+    -webkit-backdrop-filter: blur(25px) saturate(130%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    box-shadow: inset 0 0 25px rgba(255, 255, 255, 0.1) !important;
+
+    /* FIX BUG "MẢNG SÁNG LÒI RA NGOÀI GÓC BO TRÒN": container này vừa overflow-y:auto/scroll
+       vừa border-radius vừa backdrop-filter, lại chứa cột "Tiết" position:sticky CŨNG có
+       backdrop-filter riêng -> đây là lỗi clip kinh điển của trình duyệt (Safari/WebKit và
+       một số Chromium): backdrop-filter trên phần tử sticky tạo layer compositing RIÊNG,
+       không tôn trọng border-radius/overflow-clip của cha khi cuộn tới rìa, khiến nền cột
+       Tiết "tràn" ra ngoài góc bo, đặc biệt thấy rõ ở góc dưới-trái khi cuộn dọc hết cỡ.
+       Ép trình duyệt phải bo/clip đúng bằng thủ thuật mask-image (buộc tạo lại layer clip
+       tôn trọng border-radius, kể cả với các con có backdrop-filter/position:sticky bên trong). */
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+    mask-image: radial-gradient(white, black);
+}
+
+/* Triệt tiêu TẬN GỐC thanh cuộn ngang rác nếu trình duyệt cố tình render */
+.timetable-wrapper::-webkit-scrollbar:horizontal {
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+}
+
+/* Xóa luôn cái hình vuông "góc chết" ở nơi giao nhau giữa 2 thanh cuộn */
+.timetable-wrapper::-webkit-scrollbar-corner {
+    display: none !important;
+    background: transparent !important;
+}
+
+/* Thanh cuộn dọc */
+.timetable-wrapper::-webkit-scrollbar {
+    width: 8px; 
+}
+
+.timetable-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+    
+    /* BÍ QUYẾT CỦA APPLE: Cách trần và đáy 24px để thanh cuộn (vốn là hình chữ nhật) 
+       tuyệt đối không đâm lủng góc bo cong 28px của khung kính bên ngoài */
+    margin-top: 24px; 
+    margin-bottom: 24px; 
+}
+
+.timetable-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+}
+
+.timetable-wrapper::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+/* Cho Light Mode */
+body.light-mode .timetable-wrapper::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); }
+body.light-mode .timetable-wrapper::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.3); }
+
+.sticky-glass-bar {
+    position: sticky; 
+    top: 0; 
+    margin-left: -20px; 
+    margin-right: -28px; 
+    /* FIX BUG "THANH MỜ KHÔNG PHỦ HẾT CÁC THỨ KHI MÀN HÌNH NHỎ": trước đây width:auto !important
+       khiến thanh này chỉ rộng bằng .timetable-wrapper (khung nhìn hiện tại) chứ KHÔNG phải bằng
+       bề rộng thật của <table> bên trong. Trên mobile, bảng phải cuộn ngang (7 cột Thứ rộng hơn
+       hẳn màn hình) -> khi cuộn sang phải xem THỨ 6/7/CN, thanh mờ (cỡ cũ, cố định theo khung nhìn
+       ban đầu) không theo kịp, để lộ các cột phía sau không được che. Bỏ !important để JS
+       (renderTimetable) có thể set width bằng đúng scrollWidth thật của bảng. */
+    width: 100%; 
+    margin-top: 0px; 
+    
+    /* FIX: Tăng chiều cao lên 75px để che lấp trọn vẹn cả 2 dòng Thứ + Ngày */
+    height: 50px; 
+    margin-bottom: -75px; 
+    
+    z-index: 45; 
+    background: transparent; border-bottom: 1px solid transparent;
+    pointer-events: none;
+    border-radius: 28px 28px 0 0 !important; 
+    transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    backdrop-filter: blur(0px) saturate(100%);
+    -webkit-backdrop-filter: blur(0px) saturate(100%);
+}
+/* Kính khi cuộn */
+/* Hiệu ứng Kính mờ Nổi khối (Apple Style) khi cuộn xuống */
+.sticky-glass-bar.scrolled {
+    /* AUTO-ADAPT MÀU (v2): backdrop-filter blur thuần không đủ che chữ trắng đậm bên dưới, và
+       kết hợp position:sticky lại dễ render sai/mất hẳn ở một số trình duyệt/WebView. Đổi sang
+       cách chắc ăn hơn: JS (updateStickyTint trong calendar.js) CHỦ ĐỘNG dò xem ngay dưới thanh
+       này, ở từng cột Thứ, đang là thẻ môn học màu gì (đọc biến --c1 của thẻ đó), rồi build sẵn
+       1 gradient ngang gán vào biến --auto-tint ngay trên chính thanh này. Ở đây chỉ việc dùng
+       lại biến đó làm nền + giữ blur/saturate vừa phải để làm mềm cạnh. Không có JS (hoặc chưa
+       kịp chạy) -> fallback về tím mờ mặc định của app, không bao giờ trong suốt hẳn.
+       TINH CHỈNH: saturate(160%) trước đây làm màu ra quá gắt/chói khi cộng thêm alpha của JS ->
+       hạ về saturate(100%) cho dịu mắt hơn. Thêm transition cho background để khi cuộn qua thẻ
+       màu khác, thanh CHUYỂN MÀU TỪ TỪ (mờ dần sang màu mới) thay vì đổi màu giật cục theo từng
+       khung hình cuộn. */
+    background: var(--auto-tint, rgba(20, 20, 24, 0.55));
+    transition: background 0.45s ease-out, background-color 0.45s ease-out, border-bottom-color 0.5s ease-out;
+    
+    /* Viền sáng mỏng bên dưới tạo cảm giác cắt vát cạnh kính */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12); 
+}
+
+body.light-mode .sticky-glass-bar.scrolled {
+    /* Cùng biến --auto-tint như bản dark (đã tính theo màu thẻ thật), nếu JS chưa kịp gán thì
+       fallback về trắng mờ như trước đây thay vì tím. */
+    background: var(--auto-tint, rgba(255, 255, 255, 0.65));
+    transition: background 0.45s ease-out, background-color 0.45s ease-out;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+.timetable-table {
+    width: 100%; border-collapse: separate; 
+    /* FIX SCALE: border-spacing giờ co giãn theo bề rộng màn hình (dùng clamp thay vì số cố định),
+       để trên màn hẹp các thẻ không bị "ăn" mất khoảng trống quý giá vào khoảng cách viền. */
+    border-spacing: clamp(4px, 0.8vw, 12px); table-layout: fixed; 
+}
+
+/* Tiêu đề (Thứ, Tiết) */
+.timetable-table th {
+    position: sticky; 
+    top: 0; 
+    line-height: 1.2;
+    /* ĐỒNG BỘ KÍCH THƯỚC VỚI KÍNH MỚI */
+    height: 60px; 
+    padding-top: 0px; /* Xóa khoảng trống, thả chữ tự do để nó tự căn giữa tuyệt đối */
+    vertical-align: middle; 
+    
+    z-index: 50; 
+    /* FIX BUG "THẺ MÔN ĐÈ LÊN HÀNG THỨ KHI CUỘN" (bản cũ): trước đây để transparent +
+       backdrop-filter:none -> hàng "THỨ 2, THỨ 3..." dính sticky top:0 nhưng KHÔNG có gì che,
+       nên khi cuộn dọc, đáy thẻ môn phía trên vẫn lộ/đè lên ngay dưới chữ "THỨ X".
+       Theo yêu cầu: BỎ HẲN khung nền đặc màu (không còn background/border/box-shadow, chữ tiêu
+       đề nổi trực tiếp trên nền chung, không còn "khung đen"). Vẫn giữ backdrop-filter:blur để
+       khi cuộn, đáy thẻ môn phía dưới bị làm mờ nhòe đi thay vì hiện rõ đè lên chữ — không tạo
+       thành 1 khối màu đặc như trước nhưng chữ vẫn đọc được. */
+    background: transparent;
+    color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.75), 0 0 3px rgba(0,0,0,0.6);
+    /* FIX SCALE (container query): chữ "THỨ X" co theo bề rộng THẬT của khung bảng (cqw),
+       không phải bề rộng cả trang -> luôn co giãn đúng dù main-dashboard/sidebar/mobile
+       có ép khung bảng hẹp lại cỡ nào. */
+    font-size: clamp(0.6rem, 1.3cqw, 0.85rem); font-weight: 400; text-transform: uppercase; letter-spacing: 1px;
+}
+body.light-mode .timetable-table th { text-shadow: none; }
+
+/* Ép cột Tiết và Giờ cực nhỏ để nhường chỗ cho thẻ môn học, đồng thời vẫn co nhẹ theo container */
+/* FIX: cột "Tiết" và "Giờ" chỉ cần hiển thị vài ký tự ngắn (vd "Tiết 1", "07:00"), không cần
+   chiếm nhiều chỗ như trước -> ép nhỏ lại tối đa để nhường phần lớn bề rộng bảng cho 7 cột
+   Thứ 2 → Chủ Nhật (nơi thật sự cần chỗ hiển thị tên môn/phòng/GV). */
+.timetable-table th:first-child { width: clamp(34px, 4.2cqw, 42px) !important; } 
+.timetable-table th:last-child { width: clamp(42px, 5.2cqw, 52px) !important; } 
+
+/* FIX: 2 chữ tiêu đề "Tiết" (đầu hàng) và "Giờ" (cuối hàng) không cần dính theo khi cuộn dọc
+   nữa (chỉ hàng Thứ 2 -> Chủ Nhật cần dính để biết đang xem ngày nào). LƯU Ý: đã thử tách
+   riêng position:static cho 2 ô này trước đây -> bị lỗi vỡ hàng/nổi viền, vì trong CÙNG 1
+   hàng <tr>, vài ô dính + vài ô không dính khiến trình duyệt tách lớp vẽ không đều, lộ viền/
+   trôi lệch. Nên đổi cách: VẪN giữ toàn bộ hàng tiêu đề dính đồng bộ như nguyên bản (không
+   xé lẻ position nữa, tránh vỡ layout) — chỉ làm cho CHỮ bên trong 2 ô "Tiết"/"Giờ" tự mờ
+   dần biến mất ngay khi vừa bắt đầu cuộn (dùng lại đúng class .scrolled đã có sẵn, được JS
+   gắn vào #sticky-header-bg mỗi khi wrapper.scrollTop > 2), còn hàng Thứ vẫn hiện rõ, dính
+   bình thường, không đụng gì tới cấu trúc sticky vốn có -> không còn vỡ viền. */
+.sticky-glass-bar.scrolled ~ #timetable-table-container .timetable-table th:first-child,
+.sticky-glass-bar.scrolled ~ #timetable-table-container .timetable-table th:last-child {
+    opacity: 0;
+    transition: opacity 0.1s ease-out;
+    pointer-events: none;
+}
+.timetable-table th:first-child,
+.timetable-table th:last-child {
+    transition: opacity 0.1s ease-out;
+}
+
+/* FIX: Tô sáng cột "Thứ" của ngày hôm nay thật, để mở TKB lên là thấy ngay hôm nay là thứ mấy */
+.timetable-table th.current-day-th {
+    background: linear-gradient(135deg, var(--accent), rgba(255, 255, 255, 0.15)) !important;
+    border-radius: 14px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+.timetable-table th.current-day-th .date-sub { color: rgba(255, 255, 255, 0.9); }
+body.light-mode .timetable-table th.current-day-th .date-sub { color: rgba(255, 255, 255, 0.85); }
+
+.timetable-table td.grid-time { color: rgba(255, 255, 255, 0.9); font-weight: 700; font-size: clamp(0.54rem, 1.1cqw, 0.75rem); background: transparent; text-align: center; text-shadow: 0 1px 4px rgba(0,0,0,0.3); line-height: 1.25; padding: 0 2px; }
+.timetable-table td.time-col { font-size: clamp(0.54rem, 1.1cqw, 0.78rem); }
+.timetable-table td.time-col { background: rgba(255, 255, 255, 0.1); color: #fff; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.2); }
+/* Thanh Điều khiển Tuần học (Glassmorphism) */
+.timetable-controls {
+    /* FIX BUG DROPDOWN BỊ CHE: Nâng toàn bộ thanh này lên lớp trên cùng */
+    position: relative;
+    z-index: 100;
+
+    /* THU NHỎ KHUNG "CHỌN TUẦN HỌC": giảm padding + margin-bottom để khung mỏng gọn hơn,
+       không còn chiếm quá nhiều chỗ phía trên bảng TKB. */
+    padding: 8px 16px; margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: space-between;    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.02));
+    border-radius: 16px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+.week-controls-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.week-label-icon { flex-shrink: 0; width: 16px !important; height: 16px !important; }
+
+/* Định dạng ngày tháng mờ ảo nằm dưới các Thứ */
+.date-sub {
+    display: block;
+    font-size: clamp(0.52rem, 1.05cqw, 0.68rem);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 2px;
+    text-transform: none;
+    letter-spacing: 0.5px;
+}
+body.light-mode .timetable-controls { background: rgba(255, 255, 255, 0.65); border-color: rgba(255,255,255,1); }
+body.light-mode .date-sub { color: rgba(15, 23, 42, 0.5); }
+body.light-mode #week-selector { color: #1e293b; }
+/* Ô Trống */
+.empty-td {
+    background: transparent;
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 18px; pointer-events: none;
+}
+
+/* Thẻ Môn Học - Bồng bềnh và bóng bẩy */
+.subject-card-td {
+    /* FIX SCALE: padding co theo bề rộng THẬT của khung bảng (cqw), để thẻ không "ăn" hết chỗ
+       chữ khi cột hẹp, và không quá thưa khi cột rộng. */
+    padding: clamp(7px, 1.6cqw, 16px);
+    /* Chừa thêm chỗ bên trái cho thanh màu (::before, width 5px) khỏi đè lên chữ */
+    padding-left: calc(clamp(7px, 1.6cqw, 16px) + 6px);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.05));
+    border: 1px solid rgba(255, 255, 255, 0.3); border-top: 1px solid rgba(255, 255, 255, 0.6); 
+    border-radius: 18px; cursor: pointer; position: relative;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    vertical-align: top; height: 100%; min-height: max-content;
+    overflow: hidden; 
+
+    /* FIX LỖI GIẬT FRAME 1: Tuyệt đối không transition 'all' và 'background' */
+    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.3s, border-color 0.3s;
+    
+    /* FIX LỖI GIẬT FRAME 2: Bật Hardware Acceleration (GPU) để chữ không rung khi phóng to */
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* Đẩy Text nổi lên trên */
+.subject-card-td * { position: relative; z-index: 2; }
+
+.subject-card-td:hover {
+    transform: translateY(-4px) scale(1.02) translateZ(0); 
+    z-index: 10;
+    
+    /* Xóa box-shadow cũ chứa var(--c1) tỏa sáng */
+    /* Thay bằng bóng đổ nhiều tầng vật lý và viền sáng sắc nét bên trong */
+    box-shadow: 
+        0 20px 40px rgba(0, 0, 0, 0.35), 
+        0 8px 16px rgba(0, 0, 0, 0.2),
+        inset 0 0 0 1.5px var(--c1);
+        
+    border-color: transparent; /* Nhường chỗ cho inset box-shadow để viền không bị nhòe */
+}
+
+/* KHÔI PHỤC THANH MÀU Ở THẺ MÔN: trước đây ::before bị tắt hẳn (display:none) trong lúc gỡ bỏ
+   box-shadow glow cũ, nhưng vô tình xóa luôn thanh màu nhận diện môn học (dùng var(--c1)/--c2
+   theo từng môn) chứ không chỉ riêng phần glow. Giờ bật lại dưới dạng 1 thanh màu mảnh nằm sát
+   viền trái thẻ (không phải glow tỏa sáng như bản cũ) để vẫn giữ đúng tinh thần "gọn, không lóa"
+   nhưng người dùng vẫn nhận ra ngay môn học nào theo màu. */
+.subject-card-td::before {
+    content: '';
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 5px;
+    background: linear-gradient(180deg, var(--c1), var(--c2));
+    z-index: 1;
+}
+
+/* FIX GỐC (quan trọng nhất): trước dùng clamp(...vw...) -> co theo bề rộng CẢ TRANG, và ở đa
+   số màn desktop bình thường giá trị đó CHẠM TRẦN max ngay từ đầu (vì main-dashboard giới hạn
+   max-width 1550px) nên thực chất chữ KHÔNG co tí nào, y hệt cỡ cũ -> đây là lý do card vẫn vỡ
+   y như trước dù đã "sửa". Giờ đổi hẳn sang cqw (container query width) — co theo đúng bề rộng
+   THẬT của khung bảng .timetable-wrapper (đã bật container-type ở trên), tức là co theo đúng
+   độ hẹp/rộng của CỘT chứa thẻ, không quan tâm màn hình to hay nhỏ, có sidebar hay không. */
+.subject-card-td h4 {
+    font-size: clamp(0.6rem, 1.55cqw, 0.95rem);
+    font-weight: 800; color: #fff; margin-bottom: 6px; line-height: 1.3;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    overflow-wrap: break-word; word-break: break-word; hyphens: auto;
+}
+.subject-card-td .course-code {
+    color: rgba(255,255,255,0.92); font-weight: 800;
+    font-size: clamp(0.52rem, 1.15cqw, 0.75rem);
+    letter-spacing: 0.5px; text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+.subject-card-td .info-text {
+    font-size: clamp(0.52rem, 1.15cqw, 0.75rem);
+    color: #fff; font-weight: 500; margin-bottom: 4px; text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    overflow-wrap: break-word; word-break: break-word;
+}
+.subject-card-td .time-text {
+    background: rgba(0,0,0,0.25);
+    padding: clamp(2px, 0.55cqw, 5px) clamp(5px, 1.1cqw, 10px);
+    border-radius: 10px; color: #fff; margin-top: clamp(5px, 1.1cqw, 10px);
+    display: inline-flex; align-items: center; gap: 6px;
+    font-weight: 600; font-size: clamp(0.52rem, 1.1cqw, 0.72rem);
+    border: 1px solid rgba(255,255,255,0.15); box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+    /* FIX "1 THẺ ĐẸP 1 THẺ VỠ": .time-text kế thừa overflow-wrap/word-break: break-word từ
+       .info-text (dùng chung class) -> khi cột quá hẹp, nó bẻ gãy LUÔN cả số giờ (vd "09:50"
+       vỡ thành "09:5" + "0") thay vì chỉ xuống dòng ở dấu cách/mũi tên "→" như thẻ rộng hơn.
+       Ép lại overflow-wrap/word-break: normal để cụm giờ chỉ được xuống dòng ở khoảng trắng,
+       không bao giờ cắt ngang một con số. */
+    overflow-wrap: normal; word-break: normal; white-space: normal;
+}
+.subject-card-td .time-text svg { width: clamp(8px, 1.1cqw, 12px); height: clamp(8px, 1.1cqw, 12px); flex-shrink: 0; }
+
+/* FIX "CHỮ TO CHỮ NHỎ" GIỮA CÁC THẺ: bản trước cho .large dùng hẳn 1 mức clamp font-size NHỎ
+   HƠN hẳn .compact (0.82rem vs 0.95rem đỉnh, 1.3cqw vs 1.6cqw). Ngưỡng phân loại (contentLength
+   > 45 ký tự) lại quá sát nhau giữa nhiều môn thực tế (vd 46 ký tự vs 31 ký tự) nên 2 thẻ cạnh
+   nhau, độ dài tên gần bằng nhau, lại hiện chữ tiêu đề LỆCH CỠ rõ rệt — trông như lỗi hiển thị.
+   Giờ để .large và .compact DÙNG CHUNG 1 mức font-size (giống hệt mặc định của h4), chỉ khác nhau
+   ở line-height/margin siết gọn hơn cho môn có nội dung dài — vừa giữ đồng nhất cỡ chữ giữa mọi
+   thẻ trong cùng 1 bảng, vừa vẫn dồn được nhiều dòng hơn cho tên dài (khung thẻ đã tự cao theo
+   nội dung nhờ height:100%/min-height:max-content nên không lo bị tràn). */
+.subject-card-td.large h4 {
+    line-height: 1.22;
+    margin-bottom: 4px;
+}
+.subject-card-td.large .info-text {
+    margin-bottom: 2px;
+}
+.subject-card-td.large .time-text {
+    margin-top: clamp(3px, 0.8cqw, 7px);
+    padding: 2px clamp(4px, 0.9cqw, 8px);
+}
+
+/* Môn nội dung ngắn (.compact): giữ nguyên mức clamp mặc định ở trên, không cần thu nhỏ thêm —
+   khai báo rõ ràng để không lệ thuộc default ngầm định, dễ chỉnh sau này nếu cần. */
+.subject-card-td.compact h4 { font-size: clamp(0.62rem, 1.6cqw, 0.95rem); }
+/* =========================================
+   6. POPUP DETAIL WINDOWS & BADGES
+========================================= */
+.modal { 
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+    background: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; 
+    z-index: 1000; opacity: 1; visibility: visible; 
+    transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), visibility 0.4s;
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); 
+}
+.modal.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.popup-panel { 
+    width: 900px; max-width: 95%; max-height: 90vh; padding: 30px 45px; 
+    display: flex; flex-direction: column; gap: 20px; 
+    transform: scale(1) translateY(0); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform;
+}
+
+.modal-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1; min-height: 0; }
+.modal.hidden .popup-panel { transform: scale(0.96) translateY(25px); }
+
+.modal-header { border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 20px; }
+.modal-subtitle { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); display: block; margin-bottom: 8px; font-weight: 500; }
+.popup-panel h3 { font-size: 1.8rem; font-weight: 500; margin: 0; letter-spacing: -0.5px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+.subject-meta-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.meta-badge { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); padding: 8px 14px; border-radius: 8px; font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+.meta-badge svg { color: var(--text-main); }
+.meta-badge strong { color: var(--text-main); font-weight: 500; }
+.section-header h4 {font-weight: 500; font-size: 1.05rem; margin-bottom: 20px; color: var(--text-main); white-space: nowrap; flex-shrink: 0; }
+.section {min-height: 0; }
+.task-category h5 { font-weight: 500; color: rgba(255, 255, 255, 0.3); font-size: 0.75rem; text-transform: uppercase; margin: 0 0 10px 0; letter-spacing: 0.5px; }
+/* FIX: màu trên hardcode thẳng rgba(255,255,255,...) — chỉ hợp nền tối — quên không có bản đè cho
+   light mode, nên ở light mode nhãn "Sắp tới"/"Đã hoàn thành" gần như trong suốt trên nền trắng
+   (đúng bug trong ảnh chụp). Thêm bản đè dùng chung màu --text-muted (đã đậm hơn) như các nhãn
+   phụ khác trong light mode. */
+body.light-mode .task-category h5 { color: var(--text-muted); }
+
+.input-mac-style { display: flex; align-items: center; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 100px; padding: 4px 6px 4px 20px; transition: all 0.2s ease; margin-top: auto; gap: 8px; min-width: 0; /* FIX: flex item mặc định min-width:auto, không co được dưới mobile -> tràn ngang cả trang */ }
+.input-mac-style:focus-within { background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.2); }
+.input-mac-style input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text-main); outline: none; font-size: 0.95rem; font-weight: 300; }
+.input-mac-style input::placeholder { color: rgba(255, 255, 255, 0.3); }
+/* FIX: nút "Áp dụng" bên trong ô URL không được co lại -> cùng với input tràn ngang khỏi khung
+   trên mobile. Ép nút không co (giữ đọc được chữ) và cho input tự nhường chỗ trước. */
+.input-mac-style .glass-btn.small { flex-shrink: 0; }
+
+/* =========================================
+   MỤC 3: 3 MỨC ĐỘ QUAN TRỌNG (quan trọng / bình thường / không quan trọng lắm) — dùng chung cho
+   cả Ghi chú/Công việc (subject_details) LẪN Kế Hoạch Ngày (daily_plans). Mỗi mức có 1 màu riêng
+   để "nhận biết để phân ra cái nào cần làm trước" theo đúng yêu cầu, và quyết định số ngày báo
+   trước hạn (xem PRIORITY_LEVELS trong calendar.js: quan trọng=7 ngày, bình thường=5, không quan
+   trọng lắm=3).
+========================================= */
+.detail-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+
+.priority-selector { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.priority-selector.mini .priority-btn {
+    width: 22px; height: 22px; padding: 0; border-radius: 50%;
+    /* Ở dạng "mini" (dùng cho Ghi chú/Công việc) chỉ hiện chấm màu tròn, không cần chữ để tiết
+       kiệm diện tích trong modal vốn đã khá chật. */
+    font-size: 0;
+}
+.priority-btn {
+    background: color-mix(in srgb, var(--p-color) 18%, transparent);
+    border: 1.5px solid color-mix(in srgb, var(--p-color) 55%, transparent);
+    color: var(--p-color); font-size: 0.72rem; font-weight: 700;
+    padding: 5px 10px; border-radius: 100px; cursor: pointer;
+    transition: all 0.18s ease; white-space: nowrap;
+}
+.priority-btn:hover { background: color-mix(in srgb, var(--p-color) 30%, transparent); }
+.priority-btn.active {
+    background: var(--p-color); color: #fff; border-color: var(--p-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--p-color) 25%, transparent);
+}
+
+/* "Không quan trọng lắm" dùng --p-color xám nhạt (#8b96a5, khai báo inline trong HTML) — đủ
+   tương phản trên nền kính TỐI mặc định, nhưng gần như "biến mất" trên nền kính sáng của
+   light-mode (chữ xám nhạt trên panel trắng/tím nhạt, không đọc được). Ghi đè riêng các thuộc
+   tính hiển thị (không đụng biến --p-color gốc, vì nó còn dùng cho chấm tròn mức ưu tiên ở
+   nơi khác) bằng 1 tông xanh xám đậm hơn hẳn, đủ tương phản để đọc rõ trên nền sáng.
+   Dùng thuộc tính CSS thật (color/border-color/background) thay vì biến --p-color nên vẫn thắng
+   được style inline trên thẻ <button> (inline chỉ khai báo mỗi --p-color, không khai báo các
+   thuộc tính này). */
+body.light-mode .priority-btn[data-priority="low"] {
+    color: #47546b;
+    border-color: rgba(71, 84, 107, 0.55);
+    background: rgba(71, 84, 107, 0.12);
+}
+body.light-mode .priority-btn[data-priority="low"]:hover { background: rgba(71, 84, 107, 0.22); }
+body.light-mode .priority-btn[data-priority="low"].active {
+    background: #47546b; color: #fff; border-color: #47546b;
+    box-shadow: 0 0 0 3px rgba(71, 84, 107, 0.25);
+}
+
+/* DARK MODE (mặc định, không có class light-mode): màu gốc --p-color #8b96a5 quá xám/mờ trên
+   nền kính tối, chữ "Không quan trọng lắm" gần như chìm vào nền -> đổi sang tông xám-xanh sáng
+   hơn (#c3cbd6) để đủ tương phản, đọc rõ như 2 nút Quan trọng/Bình thường bên cạnh. Chỉ áp dụng
+   khi KHÔNG có class light-mode, nên không ảnh hưởng tới style light-mode ở trên. */
+body:not(.light-mode) .priority-btn[data-priority="low"] {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.14);
+}
+body:not(.light-mode) .priority-btn[data-priority="low"]:hover { background: rgba(255, 255, 255, 0.24); }
+body:not(.light-mode) .priority-btn[data-priority="low"].active {
+    background: #c3cbd6; color: #1c2230; border-color: #c3cbd6;
+    box-shadow: 0 0 0 3px rgba(195, 203, 214, 0.28);
+}
+
+.due-date-input {
+    background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 100px;
+    color: var(--text-main); font-size: 0.8rem; padding: 5px 10px; outline: none;
+    color-scheme: dark; max-width: 140px;
+}
+body.light-mode .due-date-input { background: rgba(255,255,255,0.6); border-color: rgba(0,0,0,0.08); color-scheme: light; }
+
+/* =========================================
+   CUSTOM DATE PICKER — thay cho lịch mặc định (input[type=date]) do trình duyệt/hệ điều
+   hành tự vẽ, CSS không can thiệp được vào bên trong (khung xám mặc định, xem ảnh chụp thực
+   tế) -> tự vẽ nút bấm + bảng lịch riêng, đồng bộ phong cách kính mờ tối của cả app. Input
+   gốc vẫn còn (bị ẩn), initCustomDatePicker() trong calendar.js ghi thẳng vào .value của nó
+   nên mọi chỗ code cũ đọc dueDateInput.value không cần sửa gì. */
+.custom-date-wrapper { position: relative; display: inline-flex; }
+
+.custom-date-trigger {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 100px;
+    color: var(--text-muted); font-size: 0.8rem; font-weight: 600; padding: 5px 12px; outline: none;
+    cursor: pointer; transition: all 0.18s ease; white-space: nowrap;
+}
+.custom-date-trigger:hover { border-color: rgba(255, 255, 255, 0.2); color: var(--text-main); }
+.custom-date-trigger.has-value { color: var(--text-main); border-color: color-mix(in srgb, var(--accent, #0A84FF) 45%, transparent); }
+.custom-date-trigger svg { flex-shrink: 0; opacity: 0.8; }
+body.light-mode .custom-date-trigger { background: rgba(255,255,255,0.6); border-color: rgba(0,0,0,0.08); color: #64748b; }
+body.light-mode .custom-date-trigger.has-value { color: #0f172a; }
+
+.custom-date-panel {
+    /* FIX: trigger "Hạn..." luôn bị đẩy sát mép phải cột nhờ .detail-meta-row
+       {justify-content:space-between}. Neo panel bằng left:0 khiến bảng lịch rộng 260px
+       mở tràn ra khỏi cột hẹp (~360px), đè lên nội dung cột bên cạnh (xem ảnh lỗi). Neo theo
+       right:0 để bảng lịch mở ngược vào trong, luôn nằm gọn trong cột chứa nó. */
+    position: absolute; top: calc(100% + 10px); right: 0; left: auto; z-index: 200;
+    width: 260px; padding: 14px; border-radius: 20px;
+    background: rgba(20, 22, 28, 0.9); backdrop-filter: blur(25px) saturate(150%); -webkit-backdrop-filter: blur(25px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.1);
+    opacity: 1; visibility: visible; transform: scale(1) translateY(0); transform-origin: top left;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.custom-date-panel.hidden-dropdown { opacity: 0; visibility: hidden; transform: scale(0.95) translateY(-8px); pointer-events: none; }
+/* FIX BUG "LỊCH LUÔN MỞ XUỐNG ĐÈ LÊN Ô NHẬP GHI CHÚ/CÔNG VIỆC NGAY BÊN DƯỚI": trigger "Hạn..."
+   nằm sát phía trên ô nhập text (.input-mac-style) trong modal chi tiết môn học, mà bảng lịch
+   mở ra khá cao (~340px) nên trùm kín luôn ô nhập lẫn nút gửi. calendar.js đo trước khoảng trống
+   phía trên/dưới trigger trong khung modal rồi gắn "flip-up" khi không đủ chỗ bên dưới -> bảng
+   lịch tự lật lên mở PHÍA TRÊN trigger thay vì đè xuống ô nhập. */
+.custom-date-panel.flip-up { top: auto; bottom: calc(100% + 10px); transform-origin: bottom left; }
+.custom-date-panel.flip-up.hidden-dropdown { transform: scale(0.95) translateY(8px); }
+body.light-mode .custom-date-panel {
+    background: rgba(255, 255, 255, 0.92); border-color: rgba(0,0,0,0.08); border-top-color: rgba(255,255,255,1);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+}
+
+.cdp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cdp-month-label { font-size: 0.85rem; font-weight: 700; color: var(--text-main); }
+body.light-mode .cdp-month-label { color: #0f172a; }
+.cdp-nav {
+    width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; color: rgba(255,255,255,0.7); font-size: 1rem; cursor: pointer;
+    transition: all 0.18s ease;
+}
+.cdp-nav:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+body.light-mode .cdp-nav { color: #64748b; }
+body.light-mode .cdp-nav:hover { background: rgba(0,0,0,0.06); color: #0f172a; }
+
+.cdp-weekdays, .cdp-days { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cdp-weekdays span {
+    text-align: center; font-size: 0.65rem; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; padding-bottom: 6px;
+}
+.cdp-days { gap: 2px; }
+.cdp-day {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid transparent; border-radius: 10px;
+    color: var(--text-main); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    transition: all 0.15s ease;
+}
+.cdp-day:not(.cdp-empty):not(.cdp-past):hover { background: rgba(255, 255, 255, 0.12); }
+.cdp-day.cdp-today { border-color: color-mix(in srgb, var(--accent, #0A84FF) 60%, transparent); color: var(--accent, #0A84FF); }
+.cdp-day.cdp-selected { background: var(--accent, #0A84FF); color: #fff; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent, #0A84FF) 45%, transparent); }
+.cdp-day.cdp-past { color: rgba(255, 255, 255, 0.2); cursor: not-allowed; }
+.cdp-day.cdp-empty { cursor: default; }
+body.light-mode .cdp-day { color: #334155; }
+body.light-mode .cdp-day.cdp-past { color: rgba(15, 23, 42, 0.2); }
+
+.cdp-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);
+}
+body.light-mode .cdp-footer { border-top-color: rgba(0,0,0,0.08); }
+.cdp-footer-btn {
+    background: transparent; border: none; color: var(--text-muted); font-size: 0.78rem; font-weight: 700;
+    cursor: pointer; padding: 4px 8px; border-radius: 8px; transition: all 0.15s ease;
+}
+.cdp-footer-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-main); }
+.cdp-footer-btn.cdp-footer-today { color: var(--accent, #0A84FF); }
+body.light-mode .cdp-footer-btn:hover { background: rgba(0,0,0,0.06); color: #0f172a; }
+
+/* Chấm màu + nhãn ưu tiên hiển thị trên mỗi dòng ghi chú/công việc đã thêm (xem loadSubjectDetails) */
+.priority-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; vertical-align: middle; }
+.due-date-badge { font-size: 0.72rem; color: var(--text-muted); margin-left: 8px; white-space: nowrap; }
+.due-date-badge.overdue { color: #ff5858; font-weight: 700; }
+
+/* Select dùng cho mục "Thời gian báo trước — Kế Hoạch Ngày" ở Cài Đặt: dùng lại đúng bộ
+   "custom-select-container + custom-dropdown-list" đã xây cho ô chọn Tuần học (mục 20 bên dưới) —
+   vẫn giữ nguyên thẻ <select> gốc ẩn đi để onchange="savePlannerNotifLead(...)" cũ chạy y hệt,
+   không đổi logic JS. (Thay cho <select> mặc định của trình duyệt, vốn luôn mở ra danh sách xám
+   mặc định của hệ điều hành mà CSS không với tới được, lạc tông với giao diện kính mờ tối.) */
+.notif-lead-select-container {
+    width: 100%; max-width: 260px; cursor: pointer;
+    background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px;
+    padding: 10px 14px; box-sizing: border-box;
+}
+body.light-mode .notif-lead-select-container { background: rgba(255,255,255,0.7); border-color: rgba(0,0,0,0.1); }
+.notif-lead-select-container .custom-select-display.notif-lead-display {
+    min-width: 0; height: auto; padding: 0 24px 0 0; justify-content: flex-start;
+    font-size: 0.9rem; font-weight: 600; color: var(--text-main);
+}
+body.light-mode .notif-lead-select-container .custom-select-display.notif-lead-display { color: #0f172a; }
+.notif-lead-select-container .select-arrow { right: 0; color: rgba(255,255,255,0.5); }
+body.light-mode .notif-lead-select-container .select-arrow { color: #94a3b8; }
+.notif-lead-select-container.open .select-arrow { color: var(--text-main); }
+.notif-lead-dropdown-list { top: calc(100% + 8px); left: 0; transform: translateX(0) scale(1); width: 100%; min-width: 220px; }
+.notif-lead-dropdown-list.hidden-dropdown { transform: translateX(0) scale(0.95) translateY(-10px); }
+.notif-lead-dropdown-list li { text-align: left; }
+/* Ô này neo trái (left:0) chứ không căn giữa như .custom-dropdown-list gốc, nên khi lật lên cũng
+   phải giữ neo trái — ghi đè lại transform-origin/translateX cho khớp. */
+.notif-lead-dropdown-list.flip-up { top: auto; bottom: calc(100% + 8px); transform-origin: bottom left; }
+.notif-lead-dropdown-list.flip-up.hidden-dropdown { transform: translateX(0) scale(0.95) translateY(10px); }

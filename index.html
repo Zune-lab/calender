@@ -28,6 +28,10 @@
         <div class="ambient-blob blob-a" id="ambient-blob-a"></div>
         <div class="ambient-blob blob-b" id="ambient-blob-b"></div>
     </div>
+    <!-- Lớp kính mờ (scrim) — CHỈ bật khi có ảnh nền tuỳ chỉnh (xem customBackgroundChange ở
+         index.js), phủ mờ + tối nhẹ lên ảnh nền để chữ/nội dung phía trên luôn đọc rõ, bất kể
+         ảnh nền sáng/tối/nhiều chi tiết thế nào. -->
+    <div class="bg-scrim" id="bg-scrim" aria-hidden="true"></div>
     <div class="desktop-container" id="main-dashboard-ui" style="opacity: 0; pointer-events: none; transition: opacity 0.5s ease;">
         
         <!-- BỌC 2 khối này trong 1 "stack" flex-column: trước đây mỗi khối tự định vị "position:absolute"
@@ -142,6 +146,7 @@
 
     </div>
     <script src="shared.js"></script>
+    <script src="bg-sync.js"></script>
     <script src="index.js"></script>
 </body>
 </html>

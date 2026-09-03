@@ -1,0 +1,1016 @@
+/* ===== calendar-3-desktop-settings-dialog.css =====
+   Phần 3/3 của calendar.css. Nạp SAU calendar-2-notes-glass-lightmode.css.
+   Nội dung: giao diện desktop redesign, khối Cài Đặt & toggle switch, menu chia sẻ nổi,
+   custom dialog kiểu Vision OS, cụm chọn tuần kính mờ, Lịch Thi, và các fix viền/mask/bóng
+   cuối cùng (mục 16-22+).
+*/
+
+/* =========================================
+   16. IMAGE-STYLE DESKTOP REDESIGN (ĐÃ EXPAND)
+========================================= */
+.desktop-environment {
+    position: relative; z-index: 1; width: 100%; height: 100vh; min-height: 650px;
+    display: flex; align-items: center; justify-content: center; 
+    /* FIX: dock đã chuyển sang bên phải -> đảo lại padding trái/phải để chừa chỗ đúng bên
+       (trước đây chừa nhiều bên trái 150px cho dock trái, giờ chừa bên phải). */
+    padding: 40px 150px 40px 132px; 
+}
+
+.desktop-environment .glass-panel-3d, .main-glass-dashboard {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.08));
+    border: 1px solid rgba(255, 255, 255, 0.32); border-top-color: rgba(255, 255, 255, 0.5); border-left-color: rgba(255, 255, 255, 0.38);
+    box-shadow: 0 30px 78px rgba(1, 8, 18, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.48), inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%);
+}
+
+/* FIX: Dashboard (index.html) đặt nav bên PHẢI, còn các trang con (TKB, Lịch thi, Kế hoạch...)
+   lại đặt dock bên TRÁI -> mỗi lần chuyển từ Dashboard vào trang con, mắt/chuột phải nhảy từ
+   phải sang trái rất bất tiện. Đổi dock các trang con sang bên phải cho đồng bộ toàn hệ thống. */
+.floating-left-dock {
+    /* FIX BUG "MENU PHẢI CUỘN MỚI THẤY HẾT" (giống hệt bug đã sửa ở .right-icons-container bên
+       index.css cho trang Dashboard — đây là dock tương đương của các trang con TKB/Lịch thi/Kế
+       hoạch/Cài đặt, bị sót chưa sửa cùng lúc): dock này có 6 icon (Trang chủ, TKB, Lịch thi, Kế
+       hoạch, Cài đặt, Đăng xuất), định vị bằng top:50% + translateY(-50%) — tức ĐOÁN tâm màn
+       hình rồi để icon tự xòe đều 2 phía. Trên cửa sổ trình duyệt thấp hơn dự tính (không full
+       màn hình, laptop thu nhỏ, zoom > 100%...) tổng chiều cao 6 icon vượt khỏi khoảng trống
+       phía trên/dưới điểm 50% đó -> icon đầu/cuối bị đẩy ra ngoài rìa màn hình, phải cuộn trang
+       mới thấy hết.
+       Vẫn giữ top:50%/translateY(-50%) để dock trông đúng như thiết kế gốc (viên thuốc lơ lửng
+       chính giữa) khi đủ chỗ — nhưng thêm max-height chặn cứng không cho nó cao vượt quá vùng an
+       toàn của viewport, cùng overflow-y:auto làm lưới an toàn cuối: nếu màn quá thấp, dock tự
+       cuộn gọn bên trong chính nó thay vì đẩy icon ra ngoài mép màn hình. */
+    /* Vẫn giữ top:50%/translateY(-50%) để dock trông đúng như thiết kế gốc (viên thuốc lơ lửng
+       chính giữa) khi đủ chỗ — max-height + overflow-y:auto là lưới an toàn cuối. Nhưng icon bên
+       dưới giờ đã tự CO NHỎ THEO CHIỀU CAO màn hình (xem .nav-links li), nên trên thực tế lưới
+       an toàn này gần như không bao giờ cần kích hoạt nữa — dock co gọn lại trước khi kịp tràn. */
+    position: fixed; right: 48px; left: auto; top: 50%; transform: translateY(-50%); width: 78px;
+    padding: clamp(10px, 3vh, 24px) 12px; display: flex; flex-direction: column; align-items: center;
+    gap: clamp(6px, 2.2vh, 18px); border-radius: 999px;
+    z-index: 100; /* ĐÃ FIX: Luôn nổi lên trên */
+    max-height: calc(100vh - 48px); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin;
+}
+.floating-left-dock::-webkit-scrollbar { width: 4px; }
+.floating-left-dock::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
+
+.dock-search { display: none !important; }
+.floating-left-dock .nav-links li {
+    /* FIX "VẪN PHẢI CUỘN": trước đây icon cố định cứng 52px, không phản ứng gì với chiều cao màn
+       hình -> cửa sổ càng thấp càng dễ tràn, phải trông cậy hết vào overflow-y ở trên. Giờ dùng
+       min(52px, ...vh) để icon tự co nhỏ dần theo đúng nghĩa "scale nhỏ lại" khi ít chỗ, thay vì
+       giữ nguyên kích thước rồi chờ tràn mới cuộn. */
+    width: min(52px, 6.4vh); height: min(52px, 6.4vh); display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; border: 0; cursor: pointer; transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard);
+}
+
+.floating-left-dock .nav-links { flex: 0; width: auto; display: flex; flex-direction: column; align-items: center; gap: 16px; list-style: none; }
+.floating-left-dock .nav-links li { margin: 0; padding: 0; color: #fff; background: rgba(0, 0, 0, 0.72); }
+.floating-left-dock .nav-links li.active { color: #05080d; background: rgba(255, 255, 255, 0.92); box-shadow: 0 0 24px rgba(255, 255, 255, 0.36); }
+.floating-left-dock .nav-links li:hover { transform: translateY(-2px) scale(1.04); }
+
+.main-glass-dashboard {
+    position: relative; 
+    width: calc(100vw - 140px); 
+    max-width: 1550px; 
+    /* Tăng không gian chiều cao do đã bỏ Dock */
+    height: calc(100vh - 80px); min-height: 560px;
+    display: grid; grid-template-rows: auto 1fr; gap: 20px; padding: 28px; border-radius: 42px; overflow: hidden;
+}
+
+.main-glass-dashboard::before {
+    content: ""; position: absolute; inset: 1px; z-index: -1; border-radius: inherit;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.18), transparent 22%, transparent 72%, rgba(255, 255, 255, 0.12)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.12));
+}
+
+.dashboard-topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; }
+.clock-widget { padding-left: 34px; }
+.clock-widget h1 { margin: 0; font-family: Consolas, "Courier New", monospace; font-size: clamp(2.15rem, 4vw, 3.25rem); line-height: 0.95; font-weight: 700; color: var(--text-main); text-shadow: 0 4px 12px rgba(0, 0, 0, 0.25); }
+.clock-widget p { margin: 6px 0 0; color: var(--text-muted); font-size: 0.95rem; font-weight: 700; }
+.center-title { text-align: center; }
+.center-title span { display: block; margin-bottom: 4px; color: var(--text-muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; }
+.center-title h2 { margin: 0; color: var(--text-main); font-size: clamp(1.45rem, 2vw, 2.1rem); line-height: 1; font-weight: 800; letter-spacing: 0; text-shadow: 0 6px 22px rgba(0, 0, 0, 0.22); }
+
+/* FIX BUG: icon đồng hồ nhỏ (#topbar-title-icon, chỉ hiện ở tab Kế Hoạch Ngày) rớt xuống dòng
+   RIÊNG, tách khỏi chữ "Kế Hoạch Ngày" bên cạnh — vì trước đây .topbar-title-row (bọc ngoài icon
+   + h2) không có rule CSS nào cả. Icon là <span> (JS bật display:flex khi hiện) vẫn là 1 box
+   RIÊNG đứng trước <h2> (vốn là block) trong luồng bình thường -> trình duyệt tự xuống dòng mới
+   cho h2 sau nó, bất kể màn hình to hay nhỏ (không liên quan gì tới breakpoint responsive).
+   Cho .topbar-title-row thành 1 hàng flex ngang, canh giữa: icon luôn nằm NGANG HÀNG, ngay
+   cạnh chữ tiêu đề, ở MỌI kích thước màn hình — vị trí của .center-title (cả khối) vẫn chỉ đổi
+   đúng lúc qua breakpoint mobile như thiết kế ban đầu, không đụng gì thêm ở đây. */
+.topbar-title-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.topbar-title-icon { flex-shrink: 0; align-items: center; justify-content: center; }
+.topbar-title-icon svg { display: block; }
+
+/* Icon đồng hồ ở topbar (kế bên "Kế Hoạch Ngày") chỉ dành cho màn HẸP (<=1180px, xem @media
+   max-width:1180px). Ở desktop/PC/laptop thật (>1180px), thay vào đó dùng .planner-header-icon
+   kế bên dòng "Kéo trên lưới..." trong nội dung tab — tránh lặp lại 2 icon cùng ý nghĩa 1 lúc.
+   !important ở đây thắng cả inline style display:flex mà JS gán (switchTab/applyTargetTabInstant),
+   vì JS chỉ biết bật/tắt theo TAB, không biết theo kích thước màn hình. */
+@media (min-width: 1181px) {
+    #topbar-title-icon { display: none !important; }
+}
+
+/* Icon đồng hồ kế bên dòng "Kéo trên lưới..." (trong .planner-header-title-row) — mặc định hiện
+   (desktop), ẩn hẳn ở màn hẹp trong @media max-width:1180px bên dưới (nhường chỗ cho icon topbar
+   phía trên). Không cần JS riêng: icon này nằm ngay trong tab-pane, tự ẩn/hiện theo tab đang mở
+   sẵn có (giống toàn bộ nội dung khác của tab Kế Hoạch Ngày). */
+.planner-header-icon {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    color: var(--text-muted);
+}
+.planner-header-icon svg { display: block; }
+.top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+
+.import-btn { min-height: 46px; padding: 0 18px; color: #05080d !important; text-shadow: none; background: rgba(255, 255, 255, 0.88) !important; border-color: rgba(255, 255, 255, 0.58) !important; box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16) !important; }
+.profile-pill { 
+    min-width: fit-content; /* ĐÃ SỬA: Tự động ôm sát độ dài chữ */
+    max-width: 230px; 
+    min-height: 46px; 
+    display: grid; align-content: center; gap: 1px; padding: 7px 20px; 
+    border: 1px solid rgba(255, 255, 255, 0.38); border-radius: 999px; 
+    color: #fff; background: rgba(0, 0, 0, 0.28); 
+    transition: min-width 0.25s ease, padding 0.25s ease;
+    overflow: visible !important; 
+}
+.profile-pill.avatar-mode { 
+    min-width: 0; max-width: none; min-height: 0; padding: 0; 
+    display: flex; flex-direction: row; align-items: center; gap: 0; 
+    background: transparent !important; border: none !important; box-shadow: none !important;
+    overflow: visible !important; /* Dòng quan trọng để thả Menu */
+}
+.profile-pill.avatar-mode .profile-display,
+.profile-pill.avatar-mode #profile-display-area { position: relative; }
+.profile-pill.avatar-mode .custom-avatar-img { margin: 0 !important; }
+/* FIX: avatar trước đây bị hardcode cứng 34px ngay trong JS -> quá nhỏ so với layout desktop
+   rộng rãi. Giờ để CSS quyết định, to hơn trên PC (44px), mobile vẫn gọn như cũ (xem media query).
+   MỤC 4: viền avatar trước đây hardcode cứng #FF3366 (hồng), không đổi theo màu accent người dùng
+   tự chọn/random ở Cài Đặt -> avatar trông lạc quẻ với phần còn lại của giao diện mỗi khi đổi màu
+   accent khác đi. Đổi sang var(--accent) để viền LUÔN khớp màu accent hiện tại. */
+.custom-avatar-img { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--accent); }
+.profile-pill.avatar-mode .select-arrow {
+    position: absolute !important;
+    right: -2px; bottom: -2px; top: auto; left: auto; transform: none;
+    color: #fff;
+    background: rgba(20, 20, 25, 0.9);
+    border: 1.5px solid var(--bg-color, #08090c);
+    border-radius: 50%;
+    padding: 2px;
+    width: 12px; height: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+}
+.profile-pill.avatar-mode.open .select-arrow,
+.profile-pill.avatar-mode .select-arrow[style*="180deg"] { background: rgba(0, 0, 0, 0.75); }
+.profile-pill #user-email-display { max-width: 190px; color: #fff; font-size: 0.78rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.floating-bottom-dock {
+    display: none !important;
+}
+.bottom-icon { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 12px; color: #fff; font-size: 0.78rem; font-weight: 900; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2); }
+.win-icon { background: linear-gradient(90deg, transparent 46%, rgba(255, 255, 255, 0.22) 46% 54%, transparent 54%), linear-gradient(0deg, transparent 46%, rgba(255, 255, 255, 0.22) 46% 54%, transparent 54%), #58b7ff; }
+.spotify-icon { border-radius: 50%; background: radial-gradient(circle at center, transparent 38%, rgba(0, 0, 0, 0.08) 39%), #1db954; }
+.ps-icon { color: #001e36; background: #31a8ff; }
+.chrome-icon { border-radius: 50%; background: radial-gradient(circle, #4285f4 0 26%, #fff 27% 36%, transparent 37%), conic-gradient(#ea4335 0 33%, #fbbc05 0 66%, #34a853 0); }
+.ae-icon { color: #d6d0ff; background: #17044f; }
+.discord-icon { border-radius: 50%; background: radial-gradient(circle at 35% 46%, #fff 0 7%, transparent 8%), radial-gradient(circle at 65% 46%, #fff 0 7%, transparent 8%), #5865f2; }
+
+.mobile-bottom-nav { display: none; }
+
+@media (max-width: 1180px) {
+    body { overflow: auto; }
+    .desktop-environment { height: auto; min-height: 100vh; padding: 24px 20px 110px; }
+    .floating-left-dock { display: none; }
+    .main-glass-dashboard { width: min(100%, 980px); height: 760px; min-height: 0; }
+    .dashboard-topbar { grid-template-columns: 1fr auto; position: relative; }
+    /* THEO YÊU CẦU: thay vì ẩn hẳn .center-title và hiện 1 dòng tiêu đề riêng bên dưới (cách cũ),
+       giờ giữ tiêu đề NGAY TRONG hàng header, canh CHÍNH GIỮA theo chiều ngang — nằm lọt giữa
+       khối đồng hồ (bên trái) và avatar (bên phải), y hệt vị trí center-title trên desktop.
+       Dùng position:absolute + left:50%/transform để tự canh giữa bất kể đồng hồ dài ngắn khác
+       nhau, không phụ thuộc vào việc chia cột grid (vì cột giữa đã bị bỏ ở mobile). */
+    .center-title {
+        display: block;
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        max-width: calc(100% - 130px); /* chừa chỗ 2 bên cho đồng hồ + avatar, tránh đè chữ */
+        text-align: center; pointer-events: none;
+    }
+    .center-title span { display: none; } /* ẩn dòng nhãn nhỏ "SGU Workspace" trên mobile, chỉ giữ tên tab để đỡ chật chỗ ngang */
+    .center-title h2 {
+        font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* Màn hẹp (<=1180px): ẩn icon đồng hồ cạnh "Kéo trên lưới..." — đã có icon tương tự cạnh
+       "Kế Hoạch Ngày" trên topbar rồi (xem #topbar-title-icon phía trên), khỏi lặp lại 2 icon. */
+    .planner-header-icon { display: none !important; }
+
+    /* Mobile giữ avatar nhỏ gọn như trước, không cần to như bản desktop */
+    .custom-avatar-img { width: 34px; height: 34px; }
+
+    /* Dock desktop vừa ẩn ở breakpoint này -> bật ngay nav thật cho mobile/tablet, tránh khoảng trống không có nav nào */
+    .floating-bottom-dock { display: none; } /* Ẩn taskbar giả trang trí, nhường chỗ cho nav thật bên dưới */
+    .mobile-bottom-nav {
+        display: flex; position: fixed; left: 12px; right: 12px; z-index: 200;
+        bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+        padding: 10px 14px; border-radius: 24px; justify-content: space-between; align-items: center;
+        gap: 4px; max-width: 420px; margin: 0 auto;
+    }
+    .mobile-bottom-nav button {
+        background: transparent; border: none; color: rgba(255,255,255,0.55); cursor: pointer;
+        width: 52px; height: 52px; border-radius: 14px; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 3px;
+        transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+    }
+    /* Đồng bộ với .icon-label bên index.css (0.7rem) — trước đây 2 file dùng 2 cỡ chữ khác
+       nhau (0.6rem ở đây) cho cùng 1 menu, gây cảm giác "chữ 1 to 1 nhỏ" khi chuyển qua lại
+       giữa Trang chủ và các trang trong Workspace. */
+    .mobile-nav-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.2px; line-height: 1; }
+    .mobile-bottom-nav button.active { background: rgba(255,255,255,0.15); color: #fff; }
+
+    /* .share-menu hiện là widget trang trí (link đều trỏ 404-error-face.html, chưa nối chức năng thật)
+       -> ẩn hẳn trên mobile để không tốn chỗ và không đè lên thanh nav thật bên dưới */
+    .share-menu { display: none !important; }
+
+    /* SỬA ĐÚNG CHỖ: bảng TKB là <table class="timetable-table"> thật, không phải CSS Grid trên .timetable-wrapper
+       (rule grid-template-columns cũ ở đây không có tác dụng gì vì wrapper chỉ là div cuộn bao ngoài).
+       table-layout:fixed + width:100% ép 7 cột Thứ chia đều trong khoảng trống quá hẹp -> chữ "Thứ" đè lên nhau.
+       Fix: bỏ fixed, cho bảng có bề rộng tối thiểu hợp lý, để .timetable-wrapper (đã có overflow:auto) tự cuộn ngang.
+       ĐÃ MỞ RỘNG: trước đây nhóm rule cuộn ngang này chỉ nằm trong @media ≤760px -> máy tính bảng/màn
+       hình vừa (761-1180px) vẫn cần cuộn ngang nhưng chưa được bật overflow-x/cột dính, nên cột Tiết
+       KHÔNG đi theo khi cuộn. Chuyển hẳn nhóm rule cuộn ngang + dính cột Tiết vào đúng breakpoint
+       ≤1180px để áp dụng cho mọi kích thước máy cần cuộn ngang, không riêng gì điện thoại nhỏ. */
+    .timetable-table { width: auto; min-width: 100%; table-layout: auto; border-spacing: 6px; }
+    .timetable-table th:not(:first-child):not(:last-child) { width: auto; min-width: 118px; }
+    .timetable-table th:first-child { width: 38px !important; }
+    .timetable-table th:last-child { width: 48px !important; }
+    /* Bảng có thể rộng hơn khung nhìn (8 cột x 118px+) -> cần cuộn ngang thật */
+    .timetable-wrapper { overflow-x: auto; }
+
+    /* CỘT "TIẾT" - CHỈ TỪNG Ô "TIẾT N" ĐỨNG YÊN, TIÊU ĐỀ CUỘN BÌNH THƯỜNG: đảo ngược lại theo
+       xác nhận của người dùng — CHỈ các ô "Tiết 1", "Tiết 2", "Tiết 3"... (td) trong thân bảng
+       là đứng yên khi cuộn ngang; còn chữ tiêu đề "TIẾT" (th) cuộn trôi bình thường theo bảng
+       như mọi tiêu đề cột khác, không sticky. */
+    .timetable-table td:first-child {
+        position: sticky; left: 0;
+        background: transparent;
+        z-index: 12; /* nổi trên các thẻ môn/ô trống cuộn qua bên dưới nó khi cuộn ngang */
+    }
+    /* AUTO-ADAPT MÀU (v2): backdrop-filter blur thuần từng dùng ở đây không đủ che chữ đậm bên
+       dưới trên thực tế (và có thể mất hẳn hiệu ứng ở một số WebView khi kết hợp sticky). Đổi
+       sang cách chắc ăn: JS (updateStickyTint trong calendar.js) dò xem ngay bên phải cột này,
+       đang cuộn tới đúng thẻ môn học màu gì (đọc --c1 của thẻ), rồi gán vào biến --auto-tint-cell
+       ngay trên chính ô <td> đó. ::before chỉ việc dùng lại biến này làm nền + giữ blur vừa phải
+       làm mềm cạnh. Không có thẻ nào phía sau (ô trống/-chưa kịp chạy JS) -> trong suốt. */
+    .timetable-table td:first-child::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--auto-tint-cell, transparent);
+        backdrop-filter: blur(20px) saturate(100%);
+        -webkit-backdrop-filter: blur(20px) saturate(100%);
+        transition: background 0.45s ease-out, background-color 0.45s ease-out;
+        z-index: -1;
+        pointer-events: none;
+    }
+    body.light-mode .timetable-table td:first-child::before {
+        background: var(--auto-tint-cell, rgba(255, 255, 255, 0.7));
+    }
+    body.light-mode .timetable-table td:first-child {
+        text-shadow: none;
+    }
+}
+
+@media (max-width: 760px) {
+    /* FIX: khoảng đệm dưới trước đây (92px) tính vừa khít bằng đúng chiều cao thanh nav nổi
+       phía dưới -> card và nav gần như dính sát nhau (chỉ còn vài px), nhìn không có khoảng
+       cách. Tăng lên 116px (và cập nhật lại số trừ trong calc height tương ứng: 14+116=130)
+       để luôn chừa ra một khoảng hở rõ ràng giữa khung TKB và thanh nav, mọi kích thước máy. */
+    .desktop-environment { padding: 14px 12px 116px; }
+    .main-glass-dashboard { height: calc(100dvh - 130px); max-height: 720px; padding: 16px; border-radius: 28px; }
+    /* MỤC 4: FIX BUG "ĐỒNG HỒ + NÚT NHẬP BỊ XẾP CHỒNG DỌC, LỆCH KHỎI AVATAR"
+       Ở breakpoint này .dashboard-topbar co từ grid 3 cột về CHỈ 1 CỘT DỌC (grid-template-columns:
+       1fr) -> đồng hồ, tiêu đề (đã ẩn), và .top-actions (chứa nút Nhập + avatar) xếp CHỒNG LÊN
+       NHAU theo chiều dọc thay vì nằm ngang -> nút "Nhập TKB / Nhập Lịch Thi" bị rớt xuống thành
+       1 hàng riêng, trôi lệch khỏi vị trí mong muốn (đúng như lỗi trong ảnh chụp), không còn nằm
+       kế bên avatar và đồng hồ cũng không còn ở hàng trên cùng cùng với các nút. */
+    .dashboard-topbar { grid-template-columns: 1fr; gap: 12px; position: relative; }
+    /* FIX: thay vì tách riêng avatar ra khỏi .top-actions bằng absolute (khiến nút
+       "Nhập TKB / Nhập Lịch Thi" bị bỏ lại một mình, rớt xuống thành 1 hàng riêng, trôi lệch
+       khỏi vị trí mong muốn — đúng như lỗi trong ảnh chụp), giữ nguyên nút Nhập + avatar
+       ĐI CHUNG trong .top-actions, rồi ghim CẢ CỤM này (không tách riêng avatar nữa) cố định
+       vào góc phải trên cùng của topbar. Đồng thời .clock-widget cũng được ghim vào góc trái
+       trên cùng, để 2 khối luôn nằm CHUNG 1 HÀNG NGANG trên cùng (không bị đẩy xuống dòng dưới
+       xếp chồng dọc), đúng ý muốn "đưa đồng hồ lên + nút Nhập nằm kế bên avatar". */
+    .dashboard-topbar { min-height: 60px; }
+    .clock-widget { position: absolute; top: 0; left: 0; padding-left: 0; z-index: 20; }
+    .clock-widget h1 { font-size: 1.55rem; }
+    .clock-widget p { font-size: 0.72rem; margin-top: 3px; }
+    .top-actions {
+        position: absolute; top: 2px; right: 0; z-index: 30;
+        justify-content: flex-end; flex-wrap: nowrap; gap: 8px;
+    }
+    #profile-dropdown-container { position: relative; top: auto; right: auto; }
+    .import-btn { min-height: 32px; padding: 0 10px; gap: 6px; white-space: nowrap; }
+    .import-btn span { font-size: 0.7rem; }
+    .import-btn svg { width: 13px; height: 13px; }
+    /* FIX: KHÔNG scale .profile-pill vì .custom-dropdown-list (menu tài khoản) là con của nó ->
+       bị kéo theo transform-origin:right center, làm dropdown lệch vị trí và đè lên nội dung tab bên dưới.
+       Chỉ scale phần hiển thị (.profile-display), để dropdown giữ nguyên kích thước/vị trí bình thường. */
+    .profile-display { transform: scale(0.85); transform-origin: right center; }
+
+    /* FIX: chữ trong thẻ môn học (tên môn/mã môn/phòng/GV/giờ học) dùng đơn vị cqw co theo bề
+       rộng CONTAINER .timetable-wrapper — nhưng trên mobile, container đó bị ép hẹp bằng đúng
+       màn hình (dù bảng bên trong cuộn ngang rộng hơn), nên cqw luôn chạm SÀN nhỏ nhất của
+       clamp() -> chữ bé tí, khó đọc (đúng như ảnh chụp thực tế). Ép hẳn cỡ chữ cố định lớn hơn
+       trên mobile, không phụ thuộc cqw nữa, để nội dung thẻ môn dễ đọc bằng ngón tay/mắt thật. */
+    .subject-card-td { padding: 12px; min-width: 108px; }
+    .subject-card-td h4 { font-size: 0.92rem !important; line-height: 1.3; margin-bottom: 6px; }
+    .subject-card-td .course-code { font-size: 0.72rem !important; }
+    .subject-card-td .info-text { font-size: 0.75rem !important; margin-bottom: 4px; }
+    .subject-card-td .time-text { font-size: 0.7rem !important; padding: 3px 8px; }
+    .subject-card-td .time-text svg { width: 11px; height: 11px; }
+    .subject-card-td.large h4 { font-size: 0.82rem !important; }
+    .subject-card-td.large .info-text,
+    .subject-card-td.large .course-code { font-size: 0.68rem !important; }
+    .subject-card-td.compact h4 { font-size: 0.92rem !important; }
+    .week-nav-btn { width: 44px; height: 44px; } /* tăng vùng chạm cho ngón tay, desktop vẫn giữ nhỏ gọn 34px */
+
+    /* Thanh "Chọn tuần học" dễ tràn ngang trên điện thoại: ẩn label chữ (icon lịch đã đủ gợi ý),
+       cho cụm dropdown chiếm hết chỗ trống, vẫn cho phép xuống dòng an toàn nếu màn quá hẹp */
+    .timetable-controls { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+    .week-label-text, .week-label-icon { display: none; }
+    .week-controls-row { width: 100%; gap: 10px; }
+    .week-selector-wrapper { flex: 1; min-width: 0; }
+    .custom-select-container { flex: 1; min-width: 0; }
+
+    /* FIX: Thanh điều hướng tuần trong Kế Hoạch Ngày (nút lùi/tới + label "Tuần này, dd/mm - dd/mm"
+       + nút phụ "Tuần này") bị tràn ngang trên mobile vì nút phụ trùng lặp chữ với label, tốn chỗ
+       không cần thiết. Ẩn nút phụ trên mobile (đã có thể bấm vào label để mở lịch chọn tuần bất kỳ),
+       và co gọn label để không đẩy nút mũi tên ra ngoài khung. */
+    .day-selector-wrapper { max-width: 100%; }
+    .day-selector-wrapper > .glass-btn.small { display: none; }
+    .day-selector-display { font-size: 0.8rem; padding: 0 6px; gap: 6px; }
+
+    /* FIX: Tab Cài Đặt -> khối "Đổi hình nền Desktop": ô nhập URL + nút Áp dụng + chữ "HOẶC" +
+       nút Tải ảnh lên bị ép nằm chung 1 hàng ngang, tràn hẳn ra ngoài khung .settings-wrapper
+       trên màn hình hẹp. Xếp lại thành cột dọc, mỗi phần chiếm trọn chiều rộng. */
+    .bg-upload-row { flex-direction: column; align-items: stretch !important; gap: 10px !important; }
+    .bg-url-group { max-width: none !important; width: 100%; }
+    .bg-upload-or { text-align: center; }
+
+    /* FIX: Tab Kế Hoạch Ngày -> icon đồng hồ + tiêu đề + mô tả. Lần sửa trước cho cả hàng
+       flex-wrap khiến icon bị đẩy lên 1 hàng riêng, tạo khoảng trống rỗng kỳ lạ phía trên chữ.
+       Đúng ra chỉ cần cho khối chữ (h3+p) được phép co nhỏ/tự xuống dòng bên trong nó,
+       còn icon vẫn nằm ngang cạnh chữ như thiết kế gốc. */
+    .planner-header-title-row { align-items: flex-start; }
+    .planner-header-text { min-width: 0; }
+    .planner-header-text p { font-size: 0.78rem !important; }
+
+    /* FIX: phần đầu trang Kế Hoạch (icon + tiêu đề + mô tả + thanh chọn tuần) chiếm quá nhiều
+       chiều cao trên mobile, đẩy lưới giờ thật sự (nơi kéo-thả tạo việc) xuống dưới, còn lại rất
+       ít chỗ để nhìn/thao tác -> nén gọn phần đầu lại, dồn khung lưới lên cao hơn. */
+    /* Kéo cả khối "Kế Hoạch Ngày" (tiêu đề + phần dưới) lên gần sát header hơn trên mobile —
+       margin-top âm để bù lại khoảng gap 20px giữa header và nội dung (.main-glass-dashboard
+       gap:20px), chỉ áp dụng riêng cho tab planner, không đụng tới các tab khác. */
+    /* Bỏ margin-top âm trước đây (từng dùng để bù khoảng trống do ".planner-mobile-title" chiếm
+       chỗ) — giờ tiêu đề đã chuyển hẳn lên canh giữa trong header (.center-title), tab-planner
+       không còn dòng tiêu đề riêng nữa nên không cần kéo lên nữa, giữ padding-top mặc định. */
+    #tab-planner { padding-top: 4px !important; }
+    #tab-planner > div:first-of-type { padding: 0 16px !important; margin-bottom: 10px !important; }
+    #tab-planner .planner-header-title-row { margin-bottom: 0 !important; gap: 10px !important; }
+    .planner-header-text p { display: none; } /* mô tả hướng dẫn chỉ cần thấy 1 lần, ẩn bớt trên mobile để nhường chỗ */
+    /* FIX: icon đồng hồ bị "rớt" xuống 1 hàng riêng, tạo khoảng trống rỗng phía trên thanh chọn
+       tuần. Nguyên nhân: .planner-header-title-row vẫn giữ flex-basis 240px (đặt inline trong
+       HTML) dù phần chữ bên trong đã ẩn -> hàng chứa icon vẫn "đòi" rộng 240px, khiến nó không
+       đủ chỗ đứng chung hàng với .day-selector-wrapper và bị đẩy xuống dòng dưới. Ép basis về auto
+       để hàng icon chỉ chiếm đúng bề rộng icon, nhường chỗ cho thanh chọn tuần đứng NGAY BÊN CẠNH,
+       cùng 1 hàng ngang như ý muốn. */
+    .planner-header-title-row { flex: 0 0 auto !important; min-width: 0 !important; }
+    .day-selector-wrapper { padding: 6px 8px !important; }
+    .planner-scroll-area { padding: 0 16px 16px !important; }
+    .custom-select-display { min-width: 0 !important; flex: 1; padding: 0 30px 0 14px !important; justify-content: flex-start !important; }
+    .week-selector-wrapper { flex: 1 !important; width: 100%; }
+    #current-week-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+
+    /* FIX: Popup "Chi tiết môn học" (Ghi chú & Thông báo / Tiến độ công việc) đang bị ép
+       thành lưới CỨNG 2 cột ngang (grid-template-columns: 1fr 1fr; gap: 50px) -> trên mobile
+       cột "Tiến độ công việc" bị đẩy tràn hẳn ra ngoài khung popup, chỉ thấy vài chữ lòi ra
+       mép phải. Chuyển sang xếp chồng dọc 1 cột, mỗi khối chia đều chiều cao còn lại và tự
+       cuộn riêng bên trong (đã có .scrollable lo phần cuộn). */
+    .popup-panel { padding: 24px 18px; width: 95%; }
+    .modal-sections { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; gap: 22px; }
+}
+
+/* =========================================
+   17. SETTINGS & TOGGLE BUTTON (ĐÃ FIX ANIMATION)
+========================================= */
+.settings-wrapper h4 { font-weight: 500; color: var(--text-main); font-size: 1.05rem; margin: 0; }
+.settings-wrapper .setting-group { background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.08); padding: 20px; border-radius: 16px; }
+
+.switch {
+    position: relative;
+    width: 130px;
+    height: 50px;
+    margin: 0px;
+    appearance: none;
+    -webkit-appearance: none;
+    
+    background-image:url('assets/switch-off.png');
+      background-size: cover;
+      background-repeat: no-repeat;
+    
+    border-radius: 25px;
+    box-shadow: inset 0px 0px 4px rgba(0, 0, 0, 0.6);
+    transition: background-position 0.7s ease-in-out;
+    outline: none;
+    cursor: pointer;
+    overflow: hidden;
+    transform: scale(0.65); 
+    transform-origin: center;
+}
+
+.switch:checked {
+    background-image: url('assets/switch-on.png');
+      background-size: cover;
+      transition: background-image 1s ease-in-out;
+}
+
+@keyframes off {
+    0% { transform: translateX(80px); width: 46px; }
+    50% { width: 75px; border-radius: 25px; }
+    100% { transform: translateX(0px); width: 46px; }
+}
+
+.switch:checked:after {
+    animation: on .7s forwards cubic-bezier(.8, .5, .2, 1.4);
+    box-shadow: inset -5px -5px 4px rgba(53, 53, 53, 0.3);
+}
+
+@keyframes on {
+    0% { transform: translateX(0px); width: 46px; }
+    50% { width: 75px; border-radius: 25px; }
+    100% { transform: translateX(80px); width: 46px; }
+}
+
+.switch:checked:before {
+    content: '';
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    position: absolute; left: 15px; top: 5px;
+    transform-origin: 53px 10px;
+    background-color: transparent;
+    box-shadow: 5px -1px 0px #fff;
+    filter: blur(0px);
+    animation: sun .7s forwards ease;
+}
+
+@keyframes sun {
+    0% { transform: rotate(170deg); background-color: transparent; box-shadow: 5px -1px 0px #fff; filter: blur(0px); }
+    50% { background-color: transparent; box-shadow: 5px -1px 0px #fff; filter: blur(0px); }
+    90% { background-color: #f5daaa; box-shadow: 0px 0px 10px #f5deb4, 0px 0px 20px #f5deb4, 0px 0px 30px #f5deb4, inset 0px 0px 2px #efd3a3; filter: blur(1px); }
+    100% { transform: rotate(0deg); background-color: #f5daaa; box-shadow: 0px 0px 10px #f5deb4, 0px 0px 20px #f5deb4, 0px 0px 30px #f5deb4, inset 0px 0px 2px #efd3a3; filter: blur(1px); }
+}
+
+.switch:before {
+    content: '';
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    position: absolute; left: 15px; top: 5px;
+    filter: blur(1px);
+    background-color: #f5daaa;
+    box-shadow: 0px 0px 10px #f5deb4, 0px 0px 20px #f5deb4, 0px 0px 30px #f5deb4, inset 0px 0px 2px #efd3a3;
+    transform-origin: 53px 10px;
+    animation: moon .7s forwards ease;
+}
+
+@keyframes moon {
+    0% { transform: rotate(0deg); filter: blur(1px); }
+    50% { filter: blur(1px); }
+    90% { background-color: transparent; box-shadow: 5px -1px 0px #fff; filter: blur(0px); }
+    100% { transform: rotate(170deg); background-color: transparent; box-shadow: 5px -1px 0px #fff; filter: blur(0px); }
+}
+
+.switch:after {
+    content: '';
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background-color: #fff;
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    transform: translateX(0px);
+    animation: off .7s forwards cubic-bezier(.8, .5, .2, 1.4);
+    box-shadow: inset 5px -5px 4px rgba(53, 53, 53, 0.3);
+}
+
+/* =========================================
+   17b. ROCKER TOGGLE — công tắc bập bênh 3D (dùng riêng cho toggle Thông báo Kế Hoạch,
+   tách khỏi .switch mặt trời/mặt trăng ở trên vì 2 công tắc mang ý nghĩa khác nhau)
+========================================= */
+
+/* =========================================
+   17c. "THEO GIAO DIỆN HỆ THỐNG" — checkbox phụ cạnh công tắc mặt trời/mặt trăng (.switch).
+   Khi bật, công tắc thủ công bị khoá (không bấm được, mờ đi) vì lúc này theme được app tự
+   quyết định theo HĐH/trình duyệt (xem getIsLightForCurrentThemeSetting() ở shared.js).
+========================================= */
+.theme-system-option {
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+    font-size: 0.85rem; color: var(--text-muted); user-select: none;
+}
+.theme-system-option:hover { color: var(--text-main); }
+
+/* Checkbox mặc định của trình duyệt (hình vuông cứng, màu accent-color trần trụi) bị thay hoàn
+   toàn bằng 1 ô vuông bo góc tự vẽ, hợp tông kính mờ của cả app: viền mảnh trong suốt lúc chưa
+   tick, nền --accent + dấu tick SVK trắng khi tick, có hiệu ứng nảy nhẹ lúc chuyển trạng thái. */
+.theme-system-option input[type="checkbox"] {
+    appearance: none; -webkit-appearance: none;
+    width: 20px; height: 20px; margin: 0; flex-shrink: 0;
+    border-radius: 6px;
+    border: 1.5px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+}
+.theme-system-option input[type="checkbox"]:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+}
+.theme-system-option input[type="checkbox"]::after {
+    content: '';
+    width: 11px; height: 11px;
+    /* Dấu tick vẽ bằng SVG inline (đổi được màu qua currentColor không hoạt động với mask trên
+       mọi trình duyệt cũ, nên dùng thẳng stroke trắng cố định — luôn đủ tương phản trên nền
+       --accent). */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+    background-size: contain; background-repeat: no-repeat; background-position: center;
+    opacity: 0; transform: scale(0.5);
+    transition: opacity 0.15s ease, transform 0.15s cubic-bezier(.34, 1.56, .64, 1);
+}
+.theme-system-option input[type="checkbox"]:checked {
+    background: var(--accent, #ff4655);
+    border-color: var(--accent, #ff4655);
+}
+.theme-system-option input[type="checkbox"]:checked::after {
+    opacity: 1; transform: scale(1);
+}
+
+/* LIGHT MODE: khối .setting-group chứa checkbox này vẫn là 1 lớp phủ đen mờ (rgba(0,0,0,0.15))
+   bất kể theme, NHƯNG nó lại nằm trên nền .glass-panel-3d trắng 55% của light-mode -> ra màu
+   xám NHẠT chứ không tối như ở dark-mode. Border/nền trắng mờ phía trên (thiết kế cho nền tối)
+   gần như biến mất trên nền xám nhạt này -> đổi riêng cho light-mode sang tông đen mờ, giống
+   cách các input/readonly-field khác của light-mode đang làm (xem calendar-2-notes-glass-lightmode.css). */
+body.light-mode .theme-system-option input[type="checkbox"] {
+    border-color: rgba(0, 0, 0, 0.32);
+    background: rgba(0, 0, 0, 0.04);
+}
+body.light-mode .theme-system-option input[type="checkbox"]:hover {
+    border-color: rgba(0, 0, 0, 0.55);
+}
+body.light-mode .theme-system-option input[type="checkbox"]:checked {
+    background: var(--accent, #ff4655);
+    border-color: var(--accent, #ff4655);
+}
+
+.switch:disabled {
+    opacity: 0.4; cursor: not-allowed; filter: grayscale(0.4);
+}
+
+
+.rocker-toggle {
+    appearance: none; -webkit-appearance: none;
+    position: relative;
+    width: 46px; height: 84px;
+    margin: 0;
+    border-radius: 16px;
+    background: linear-gradient(145deg, #cfd2d8, #f2f3f5);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.25), inset 0 -2px 3px rgba(255,255,255,0.7), 0 4px 10px rgba(0,0,0,0.3);
+    cursor: pointer;
+    outline: none;
+    flex-shrink: 0;
+    transition: box-shadow 0.2s ease;
+}
+.rocker-toggle:hover { box-shadow: inset 0 2px 4px rgba(0,0,0,0.25), inset 0 -2px 3px rgba(255,255,255,0.7), 0 4px 14px rgba(0,0,0,0.4); }
+
+/* Đèn báo (vạch xanh) nằm cố định phía dưới housing, chỉ hiện sáng khi bật */
+.rocker-toggle::after {
+    content: '';
+    position: absolute;
+    left: 50%; bottom: 13px;
+    width: 4px; height: 16px;
+    border-radius: 3px;
+    background: #22c55e;
+    transform: translateX(-50%);
+    opacity: 0;
+    box-shadow: 0 0 10px 2px rgba(34,197,94,0.8);
+    transition: opacity 0.3s ease 0.1s;
+}
+.rocker-toggle:checked::after { opacity: 1; }
+
+/* Phần "cần bập bênh" trượt lên/xuống khi bật/tắt, có chấm ốc vít trang trí ở giữa */
+.rocker-toggle::before {
+    content: '';
+    position: absolute;
+    left: 4px; right: 4px; top: 4px;
+    height: 42px;
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 50% 42%, rgba(0,0,0,0.18) 0 3px, transparent 4px),
+        linear-gradient(160deg, #ffffff, #c3c6cd);
+    box-shadow: 0 3px 7px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.9);
+    transition: transform 0.35s cubic-bezier(.61,-0.28,.35,1.35);
+}
+.rocker-toggle:checked::before { transform: translateY(34px); }
+.rocker-toggle:active::before { height: 38px; } /* hiệu ứng lún nhẹ khi bấm giữ, tăng cảm giác vật lý */
+
+body.light-mode .rocker-toggle { background: linear-gradient(145deg, #b9bcc4, #e2e4e8); }
+/* =========================================
+   18. FLOATING SHARE MENU (SPEED DIAL VERTICAL)
+========================================= */
+.share-menu {
+    /* FIX "KHUNG ĐEN" GÓC TRÁI DƯỚI: nguyên nhân thật sự là icon "ion-icon" bên trong nút
+       toggle — thư viện ion-icon load qua CDN dạng module, đôi khi không kịp/không tải được,
+       nên icon không hiện ra gì, chỉ còn lại khối tròn kính mờ trông như 1 ô đen trơn. Đã đổi
+       hẳn sang icon Font Awesome (đã có sẵn trong trang, không phụ thuộc thêm thư viện ngoài
+       nào nữa) ở calendar.html nên không còn cảnh "rỗng ruột" này nữa — giữ lại widget bình
+       thường thay vì ẩn đi. */
+    position: fixed;
+    bottom: 32px; 
+    left: 32px; 
+    right: auto;
+    width: 46px; height: 46px;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 150; 
+}
+
+/* Nút Toggle Kính Mờ */
+.share-menu .toggle {
+    position: relative;
+    width: 46px; height: 46px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-main); font-size: 1.3rem;
+    cursor: pointer; transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    z-index: 5;
+}
+
+.share-menu:hover .toggle {
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255,255,255,0.4), 0 0 20px rgba(255,255,255,0.2);
+}
+
+.share-menu.active .toggle { transform: rotate(360deg) scale(0.9); }
+
+/* Các item ẩn - Thuật toán Bắn Cột Dọc (Speed Dial) */
+.share-menu li {
+    position: absolute;
+    left: 4px; top: 4px; /* Căn icon 38px vào đúng tâm nút gốc 46px */
+    width: 38px; height: 38px;
+    list-style: none;
+    
+    /* Khóa tàng hình ngay tại tâm */
+    opacity: 0;
+    transform: translateY(0px) scale(0);
+    
+    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    transition-delay: calc(0.03s * var(--i));
+    z-index: 4;
+}
+
+.share-menu.active li { 
+    opacity: 1; 
+    /* Bắn thẳng lên trên. Mỗi icon cách nhau 44px (trước: 56px, theo tỉ lệ nút thu nhỏ) */
+    transform: translateY(calc(-44px * (var(--i) + 1))) scale(1);
+}
+
+.share-menu li a {
+    display: flex; width: 100%; height: 100%;
+    
+    /* Giao diện nút kính thủy tinh */
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    
+    align-items: center; justify-content: center; border-radius: 50%;
+    font-size: 1.05rem; color: var(--text-muted);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease; text-decoration: none;
+}
+
+/* Hiệu ứng HOVER Neon */
+.share-menu li:hover a {
+    font-size: 1.25rem;
+    color: var(--clr);
+    border-color: var(--clr);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 15px var(--clr), inset 0 0 10px var(--clr);
+    /* Bỏ rotate cũ đi, chỉ cần phóng to nhẹ khi di chuột */
+    transform: scale(1.15); 
+}
+
+/* Thích ứng Light Mode */
+body.light-mode .share-menu .toggle, 
+body.light-mode .share-menu li a {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(255, 255, 255, 1);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+body.light-mode .share-menu .toggle { color: #2c3e50; }
+body.light-mode .share-menu li a { color: rgba(44, 62, 80, 0.6); }
+
+/* .share-menu (widget mạng xã hội trang trí) đã bị ẩn hẳn ở màn hình ≤1180px, xem khối @media phía trên */
+/* =========================================
+   19. CUSTOM DIALOG (APPLE VISION-OS STYLE)
+========================================= */
+.custom-dialog-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.4); 
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    z-index: 999999; display: flex; justify-content: center; align-items: center;
+    opacity: 1; visibility: visible; transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.custom-dialog-overlay.hidden {
+    opacity: 0; visibility: hidden; pointer-events: none;
+}
+
+.custom-dialog-box {
+    width: 360px; max-width: 90%; padding: 35px 25px 25px;
+    display: flex; flex-direction: column; gap: 12px;
+    /* Hiệu ứng nảy (spring bounce) chuẩn Apple khi xuất hiện */
+    transform: scale(1) translateY(0); transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    text-align: center; align-items: center;
+    border-radius: 28px;
+    
+    /* Chất liệu kính mờ cường độ cao */
+    background: linear-gradient(135deg, rgba(40, 40, 45, 0.5), rgba(15, 16, 20, 0.7));
+    backdrop-filter: blur(40px) saturate(200%); -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.1);
+}
+
+.custom-dialog-overlay.hidden .custom-dialog-box {
+    transform: scale(0.9) translateY(30px); opacity: 0;
+}
+
+.dialog-icon {
+    width: 60px; height: 60px; border-radius: 50%;
+    /* Icon phát sáng nhẹ bồng bềnh */
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.02));
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: -10px; margin-bottom: 8px; 
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2), inset 0 1px 2px rgba(255, 255, 255, 0.4);
+}
+
+.dialog-icon svg { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }
+.dialog-content { padding: 0 10px; }
+.dialog-content h3 { font-size: 1.35rem; font-weight: 700; color: #fff; margin-bottom: 8px; letter-spacing: -0.3px; }
+.dialog-content p { font-size: 0.95rem; color: rgba(255,255,255,0.65); line-height: 1.5; font-weight: 400; }
+
+.dialog-actions { display: flex; gap: 12px; width: 100%; justify-content: center; margin-top: 15px; }
+
+/* Ép 2 nút bấm tràn đều sang 2 bên */
+.dialog-actions button { 
+    flex: 1; padding: 12px 0; font-size: 0.95rem; font-weight: 600; border-radius: 16px; 
+    margin: 0 !important; display: flex; justify-content: center; align-items: center;
+}
+
+#custom-dialog-cancel { 
+    background: rgba(255,255,255,0.06) !important; color: #fff !important; 
+    border-color: rgba(255,255,255,0.1) !important; box-shadow: none !important;
+}
+#custom-dialog-cancel:hover { background: rgba(255,255,255,0.12) !important; }
+
+#custom-dialog-ok { 
+    background: var(--accent, #0A84FF) !important; color: #fff !important; 
+    border-color: rgba(255,255,255,0.15) !important; 
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.2) !important;
+}
+#custom-dialog-ok:hover { filter: brightness(1.15); transform: translateY(-2px); }
+
+/* --- Tự động tương thích với Light Mode --- */
+body.light-mode .custom-dialog-overlay { background: rgba(0, 0, 0, 0.25); }
+body.light-mode .custom-dialog-box { 
+    background: rgba(255, 255, 255, 0.75); border-color: rgba(255,255,255,1);
+    box-shadow: 0 30px 60px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(255,255,255,0.5);
+}
+body.light-mode .dialog-icon {
+    background: linear-gradient(135deg, #ffffff, #f0f0f0);
+    color: var(--accent, #0A84FF); border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.06), inset 0 2px 4px rgba(255,255,255,1);
+}
+body.light-mode .dialog-icon svg { filter: none; }
+body.light-mode .dialog-content h3 { color: #0f172a; }
+body.light-mode .dialog-content p { color: #64748b; }
+body.light-mode #custom-dialog-cancel { 
+    color: #475569 !important; background: rgba(0,0,0,0.05) !important; border-color: rgba(0,0,0,0.05) !important; 
+}
+body.light-mode #custom-dialog-cancel:hover { background: rgba(0,0,0,0.1) !important; }
+/* =========================================
+   20. CỤM CHỌN TUẦN KÍNH MỜ (CUSTOM DROPDOWN)
+========================================= */
+.week-selector-wrapper {
+    display: flex; align-items: center; gap: 4px;
+    /* THU NHỎ CỤM CHỌN TUẦN: giảm padding trong để cả cụm thấp/gọn hơn */
+    padding: 4px; border-radius: 24px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.05), 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.week-nav-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none;
+    color: rgba(255, 255, 255, 0.7); cursor: pointer;
+    transition: all 0.2s ease;
+}
+.week-nav-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; transform: scale(1.05); }
+.week-nav-btn:active { transform: scale(0.95); }
+
+.custom-select-container { position: relative; display: flex; align-items: center; }
+
+.custom-select-display {
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 32px 0 12px; height: 28px; min-width: 220px;
+    color: #fff; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.3px;
+    cursor: pointer; user-select: none; transition: all 0.2s ease;
+}
+.custom-select-display:hover { color: rgba(255, 255, 255, 0.8); }
+
+.select-arrow {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    pointer-events: none; color: rgba(255,255,255,0.5);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Xoay mũi tên 180 độ khi danh sách mở */
+.custom-select-container.open .select-arrow { transform: translateY(-50%) rotate(180deg); color: #fff; }
+
+/* DROPDOWN MENU KÍNH MỜ */
+.custom-dropdown-list {
+    position: absolute; top: calc(100% + 15px); left: 50%; transform: translateX(-50%) scale(1);
+    width: 320px; max-height: 380px; overflow-y: auto;
+    padding: 10px; list-style: none; margin: 0; z-index: 9999;
+    border-radius: 20px; transform-origin: top center;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 1; visibility: visible;
+    
+    background: rgba(20, 22, 28, 0.85); /* Nền tối mờ xịn xò */
+    backdrop-filter: blur(25px) saturate(150%); -webkit-backdrop-filter: blur(25px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.1);
+}
+.custom-dropdown-list.hidden-dropdown {
+    opacity: 0; visibility: hidden; transform: translateX(-50%) scale(0.95) translateY(-10px); pointer-events: none;
+    /* FIX: chỉ ẩn bằng opacity/visibility thì hộp <ul> vẫn giữ nguyên kích thước thật (dù vô hình),
+       nên vẫn được tính vào "scrollable overflow" của cha có overflow-y:auto (.settings-wrapper) ->
+       tạo ra 1 khoảng trống thừa cố định ở cuối trang Cài Đặt, kể cả khi chưa từng mở dropdown.
+       Ép max-height/padding/border về 0 khi ẩn để nó không còn chiếm chỗ trong overflow đó. */
+    max-height: 0; padding-top: 0; padding-bottom: 0; border-width: 0; overflow: hidden;
+}
+
+/* FIX BUG "DROPDOWN MỞ XUỐNG ĐÈ LÊN NỘI DUNG BÊN DƯỚI KHI TRIGGER GẦN CUỐI KHUNG CHỨA": trước
+   đây dropdown LUÔN mở xuống dưới (top: calc(100% + ...)) bất kể còn đủ chỗ hay không -> nếu
+   trigger nằm gần cuối trang/khung cuộn (vd ô "Thời gian báo trước" ở Cài Đặt), danh sách dài
+   mở ra sẽ trùm lên các nút/nội dung ngay bên dưới nó. calendar.js (positionFlipUpIfNeeded) đo
+   trước khoảng trống phía trên/dưới trigger rồi tự gắn class "flip-up" khi không đủ chỗ bên
+   dưới -> CSS bên dưới đổi hướng mở lên PHÍA TRÊN trigger thay vì đè xuống dưới. */
+.custom-dropdown-list.flip-up { top: auto; bottom: calc(100% + 15px); transform-origin: bottom center; }
+.custom-dropdown-list.flip-up.hidden-dropdown { transform: translateX(-50%) scale(0.95) translateY(10px); }
+
+.custom-dropdown-list li {
+    padding: 12px 16px; border-radius: 12px; margin-bottom: 4px;
+    color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; font-weight: 500;
+    cursor: pointer; transition: all 0.2s ease; text-align: center;
+    border: 1px solid transparent;
+}
+.custom-dropdown-list li:last-child { margin-bottom: 0; }
+.custom-dropdown-list li:hover {
+    background: rgba(255, 255, 255, 0.1); color: #fff; transform: scale(1.02);
+    border-color: rgba(255,255,255,0.15); box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.custom-dropdown-list li.selected {
+    background: var(--accent, #0A84FF); color: #fff; font-weight: 700;
+    box-shadow: 0 4px 15px rgba(10, 132, 255, 0.4); border-color: transparent;
+}
+.custom-dropdown-list li.selected:hover { transform: none; }
+
+/* Scrollbar mỏng đẹp cho dropdown */
+.custom-dropdown-list::-webkit-scrollbar { width: 6px; }
+.custom-dropdown-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+.custom-dropdown-list::-webkit-scrollbar-track { margin: 10px 0; }
+
+/* Light Mode Adaptations */
+body.light-mode .week-selector-wrapper { background: rgba(255, 255, 255, 0.65); border-color: rgba(255, 255, 255, 1); box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 4px 15px rgba(0,0,0,0.05); }
+body.light-mode .week-nav-btn { color: #64748b; }
+body.light-mode .week-nav-btn:hover { background: rgba(0, 0, 0, 0.08); color: #0f172a; }
+body.light-mode .custom-select-display { color: #0f172a; }
+body.light-mode .select-arrow { color: #94a3b8; }
+body.light-mode .custom-select-container.open .select-arrow { color: #0f172a; }
+body.light-mode .custom-dropdown-list { 
+    background: rgba(255, 255, 255, 0.85); border-color: rgba(255,255,255,1);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,1); 
+}
+body.light-mode .custom-dropdown-list li { color: #475569; }
+body.light-mode .custom-dropdown-list li:hover { background: rgba(0, 0, 0, 0.05); color: #0f172a; border-color: rgba(0,0,0,0.05); }
+body.light-mode .custom-dropdown-list li.selected { background: var(--accent, #0A84FF); color: #fff; }
+body.light-mode .custom-dropdown-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+/* =========================================
+   21. LỊCH THI HỌC KỲ (EXAM CARDS)
+========================================= */
+.exam-card {
+    padding: 24px 20px; border-radius: 24px; position: relative; overflow: hidden;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+    border: 1px solid rgba(255, 255, 255, 0.15); border-top-color: rgba(255, 255, 255, 0.3);
+    transition: transform var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard);
+    /* Thêm 1 dòng này để thẻ thi tự làm mờ phía sau */
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+}
+.exam-card:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.4); border-color: rgba(255, 255, 255, 0.3); }
+
+/* Màu Mã MH sẽ tự động lấy theo màu của TKB (Biến --c1) */
+.exam-course-code { font-size: 0.8rem; color: var(--c1, #FF3366); font-weight: 800; margin-bottom: 8px; letter-spacing: 0.5px; text-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+
+.exam-card h4 { font-size: 1.25rem; font-weight: 700; color: #fff; margin-top: 0; margin-bottom: 20px; line-height: 1.4; text-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+.exam-info-container { display: flex; flex-direction: column; gap: 10px; }
+.exam-info-row { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; color: rgba(255,255,255,0.8); }
+.exam-info-row svg { color: rgba(255,255,255,0.5); }
+
+/* Đổi màu Giờ và Phòng cực nét */
+.highlight-time { color: #FDBB2D; font-weight: 700; background: rgba(253, 187, 45, 0.15); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(253, 187, 45, 0.3); }
+.highlight-room { color: #fff; font-weight: 700; background: rgba(255, 255, 255, 0.15); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.4); text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.exam-countdown { position: absolute; top: 0; right: 0; padding: 6px 16px; font-size: 0.8rem; font-weight: 700; border-bottom-left-radius: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+.exam-countdown.upcoming { background: linear-gradient(135deg, #FF9933, #FF3366); color: #fff; }
+.exam-countdown.today { background: linear-gradient(135deg, #FF3366, #E100FF); color: #fff; animation: pulseGlow 2s infinite; }
+.exam-countdown.urgent {
+    background: #ff1744; color: #fff; font-size: 0.85rem; letter-spacing: 0.5px;
+    animation: urgentPulse 0.9s infinite;
+}
+.exam-card:has(.exam-countdown.urgent) { border-color: #ff1744; box-shadow: 0 0 0 2px rgba(255, 23, 68, 0.4), 0 15px 35px rgba(255,23,68,0.25); }
+@keyframes urgentPulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.85); transform: scale(1); }
+    50% { transform: scale(1.04); }
+    70% { box-shadow: 0 0 0 14px rgba(255, 23, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); transform: scale(1); }
+}
+.exam-countdown.past { background: rgba(0,0,0,0.3); color: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.05); border-top: none; border-right: none; }
+
+@keyframes pulseGlow { 0% { box-shadow: 0 0 0 0 rgba(255, 51, 102, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 51, 102, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 51, 102, 0); } }
+
+/* Light Mode Adaptations */
+body.light-mode .exam-card { background: rgba(255, 255, 255, 0.7); border-color: rgba(255, 255, 255, 1); box-shadow: 0 8px 24px rgba(0,0,0,0.04); }
+body.light-mode .exam-card h4 { color: #0f172a; text-shadow: none; }
+body.light-mode .exam-course-code { text-shadow: none; }
+body.light-mode .popup-panel h3 { color: #0f172a; text-shadow: none; }
+body.light-mode .exam-info-row { color: #475569; }
+body.light-mode .exam-info-row svg { color: #94a3b8; }
+body.light-mode .exam-countdown.past { background: rgba(0,0,0,0.05); color: #94a3b8; border-color: rgba(0,0,0,0.05); }
+body.light-mode .highlight-time { color: #d97706; background: rgba(217, 119, 6, 0.1); border-color: rgba(217, 119, 6, 0.3); }
+body.light-mode .highlight-room { color: #0f172a; background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.2); text-shadow: none; }
+/* =========================================
+   22. FIX TRỌN GÓI ĐƯỜNG VIỀN MASK & CẮT BÓNG
+========================================= */
+/* 2. Gỡ bỏ mặt nạ mờ và nới rộng không gian hai bên của Lịch thi để bóng đổ tỏa ra thoải mái */
+#exams-wrapper {
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+    /* Kéo giãn vùng cuộn ra 20px, sau đó lùi nội dung vào 20px */
+    /* Tuyệt chiêu giúp Shadow có không gian tàng hình 20px để không chạm vách */
+    margin: 0 -20px !important;
+    padding: 0 20px !important;
+}
+/* Đảo ngược màu khung Icon dock bên trái cho Light Mode */
+body.light-mode .floating-left-dock .nav-links li {
+    color: #1e293b; /* Icon màu tối */
+    background: rgba(255, 255, 255, 0.9); /* Nền sáng */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+body.light-mode .floating-left-dock .nav-links li.active {
+    color: #ffffff; /* Icon sáng */
+    background: rgba(15, 23, 42, 0.9); /* Nền tối */
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+}
+
+body.light-mode .floating-left-dock .nav-links li:hover {
+    background: #ffffff;
+    color: #1e293b;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Icon đang active mà bị hover: giữ nguyên nền tối/chữ sáng, không được để hover đè mất màu */
+body.light-mode .floating-left-dock .nav-links li.active:hover {
+    background: rgba(15, 23, 42, 0.9);
+    color: #ffffff;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+}
+
+body.light-mode .mobile-bottom-nav button { color: rgba(30, 41, 59, 0.55); }
+body.light-mode .mobile-bottom-nav button.active { background: rgba(15, 23, 42, 0.08); color: #1e293b; }

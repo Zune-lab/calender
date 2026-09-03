@@ -46,7 +46,13 @@ function applyAccentColor(hex) {
 
     const finalHex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
     document.documentElement.style.setProperty('--accent', finalHex);
-    document.body.style.backgroundImage = `radial-gradient(circle at 30% 0%, ${finalHex}25 0%, transparent 55%)`;
+
+    // Nếu người dùng đã có ảnh nền tuỳ chỉnh (gán thẳng lên body.style.backgroundImage, xem khối
+    // "ẢNH NỀN TUỲ CHỈNH" phía dưới), KHÔNG được ghi đè mất ảnh đó bằng gradient accent này —
+    // cả 2 đều dùng chung 1 thuộc tính background-image trên body.
+    if (!(window.hasCustomBackground ? window.hasCustomBackground() : localStorage.getItem('customBg'))) {
+        document.body.style.backgroundImage = `radial-gradient(circle at 30% 0%, ${finalHex}25 0%, transparent 55%)`;
+    }
 }
 
 function pickAccentForUser(userId) {
@@ -58,11 +64,8 @@ function pickAccentForUser(userId) {
         return;
     }
 
-    let usedColors = [];
-    try {
-        const savedSubjectColors = JSON.parse(localStorage.getItem('subjectCustomColors') || '{}');
-        usedColors = Object.values(savedSubjectColors);
-    } catch(e){}
+    // getSavedSubjectColors() (shared.js) đã tự try/catch bên trong rồi, không cần bọc thêm ở đây.
+    const usedColors = Object.values(getSavedSubjectColors());
 
     let available = ACCENT_POOL.filter(c => !usedColors.includes(c));
     if(!available.length) available = ACCENT_POOL;
@@ -72,13 +75,82 @@ function pickAccentForUser(userId) {
 }
 
 // ==========================================
-// 1. THEME (đồng bộ localStorage 'theme' dùng chung toàn hệ thống)
+// 1. THEME — applyTheme() giờ dùng chung ở shared.js
 // ==========================================
-function applyTheme() {
-    const isLight = localStorage.getItem('theme') === 'light';
-    document.body.classList.toggle('light-mode', isLight);
-}
 applyTheme();
+
+// ==========================================
+// ẢNH NỀN TUỲ CHỈNH — trang Hồ Sơ không còn UI tự đổi ảnh nữa (đã bỏ card riêng), chỉ CÒN
+// hiển thị lại đúng ảnh nền đã đổi từ Dashboard/TKB, qua bg-sync.js dùng chung. Lưu ý:
+// applyAccentColor() ở trên đã tự kiểm tra hasCustomBackground() để KHÔNG ghi đè mất ảnh
+// (cả 2 đều dùng chung thuộc tính background-image của body).
+// ==========================================
+if (window.syncCustomBackground) syncCustomBackground();
+updateTopbarScrimFromBg();
+
+// Nếu ảnh nền đổi (từ trang này, trang khác, hoặc tab khác) trong lúc đang xem Profile, áp lại
+// ngay màu accent hiện tại để nó tự quyết định có vẽ gradient hay không (xem applyAccentColor),
+// đồng thời lấy lại màu chủ đạo của ảnh mới để tô lại thanh topbar.
+window.addEventListener('customBackgroundChange', () => {
+    if (currentAccentBase) applyAccentColor(currentAccentBase);
+    updateTopbarScrimFromBg();
+});
+
+// ==========================================
+// THANH TOPBAR LẤY ĐÚNG MÀU ẢNH NỀN — đọc chính background-image đang áp trên <body> (dù là
+// ảnh tuỳ chỉnh do bg-sync.js gán, hay gradient accent do applyAccentColor() gán), lấy màu
+// trung bình của ảnh và dùng THẲNG màu đó làm --topbar-scrim, không pha trộn/kéo về đen-trắng
+// gì cả — thanh topbar phải đúng màu ảnh nền như yêu cầu. Phần cần đổi để dễ đọc là MÀU CHỮ
+// (--topbar-text / --topbar-muted): dựa vào độ sáng của đúng màu đó để chọn chữ trắng hay đen,
+// không đụng vào màu thanh.
+// ==========================================
+function updateTopbarScrimFromBg() {
+    const bgImage = getComputedStyle(document.body).backgroundImage;
+    const match = bgImage.match(/url\(["']?(.*?)["']?\)/);
+
+    if (!match) {
+        // Không có ảnh nền tuỳ chỉnh (chỉ có gradient hoặc trống) -> bỏ override, trả lại
+        // đúng giá trị mặc định theo theme mà :root / .light-mode đã định nghĩa sẵn.
+        document.body.style.removeProperty('--topbar-scrim');
+        document.body.style.removeProperty('--topbar-text');
+        document.body.style.removeProperty('--topbar-muted');
+        return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+        try {
+            const size = 24; // thu nhỏ ảnh trước khi đọc pixel cho nhanh, chỉ cần màu trung bình
+            const canvas = document.createElement('canvas');
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, size, size);
+
+            const { data } = ctx.getImageData(0, 0, size, size);
+            let r = 0, g = 0, b = 0, count = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                r += data[i]; g += data[i + 1]; b += data[i + 2];
+                count++;
+            }
+            r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count);
+
+            // Thanh topbar = đúng màu trung bình của ảnh, không pha gì thêm.
+            document.body.style.setProperty('--topbar-scrim', `rgba(${r}, ${g}, ${b}, 0.6)`);
+
+            // Độ sáng cảm nhận của đúng màu đó (0 = tối, 255 = sáng) để chọn chữ trắng hay đen.
+            const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+            const bgIsLight = luminance > 150;
+            document.body.style.setProperty('--topbar-text', bgIsLight ? '#1f2328' : '#ffffff');
+            document.body.style.setProperty('--topbar-muted', bgIsLight ? 'rgba(15, 18, 22, 0.65)' : 'rgba(255, 255, 255, 0.75)');
+        } catch (err) {
+            // Ảnh dính CORS (nguồn ngoài, không phải data URL) -> không đọc được pixel, âm thầm
+            // bỏ qua và giữ nguyên màu scrim mặc định thay vì làm vỡ trang.
+            console.warn('[Profile] Không lấy được màu ảnh nền cho topbar:', err);
+        }
+    };
+    img.src = match[1];
+}
 
 // ==========================================
 // 2. HIỂN THỊ LỖI RÕ RÀNG NGAY TRÊN TRANG (thay vì đứng im khó hiểu)
@@ -128,6 +200,7 @@ async function bootProfile() {
     }
 
     pickAccentForUser(session.user.id);
+    updateTopbarScrimFromBg();
 
     try {
         document.getElementById('user-email').innerText = session.user.email;
