@@ -456,6 +456,34 @@ body.has-custom-bg.bg-photo-light .badge-status { background: rgba(255,255,255,0
     .bottom-widgets-container { width: 92%; }
 }
 
+/* =========================================
+   CHỈ DÀNH RIÊNG CHO MÀN HÌNH PC/LỚN (>1300px) — KHÔNG ĐỘNG TỚI LAPTOP/RESPONSIVE.
+   Bù đúng ngưỡng cho @media (max-width: 1300px) ở trên, nên 2 khối không bao giờ chồng chéo
+   phạm vi áp dụng lên nhau.
+========================================= */
+@media (min-width: 1301px) {
+    /* 1) HẾT HẲN THANH CUỘN DƯ TRÊN MÀN HÌNH TO: dù đã nới đệm bottom% ở .hero-stack lần trước,
+       độ lệch sub-pixel do clamp()/vw vẫn có thể còn dư đúng 1-2px tuỳ độ phân giải/tỉ lệ scale
+       màn hình cụ thể của từng máy — rất khó dò đúng % để triệt tiêu 100% cho MỌI màn hình bằng
+       cách chỉnh số liệu mãi. Trên PC đã xác nhận luôn dư khoảng trống rất lớn (ảnh chụp thấy rõ
+       vùng đen trống phía dưới), nên tắt hẳn overflow-y ở đây là an toàn tuyệt đối, không còn
+       thanh cuộn dư nào nữa. Laptop/màn nhỏ (≤1300px) vẫn giữ nguyên overflow-y:auto làm lưới an
+       toàn như cũ (phòng trường hợp hiếm màn quá thấp thật sự thiếu chỗ). */
+    .hero-stack { overflow-y: hidden; }
+
+    /* 2) 2 KHUNG WIDGET (BÀI TẬP/GHI CHÚ + THỐNG KÊ) TO RA: trần cũ 1100px (rộng) / 200px (cao)
+       vẫn còn khá khiêm tốn so với khoảng trống rất lớn đang dư trên PC. Nâng cả 2 trần lên rõ
+       rệt hơn cho cân đối với màn hình lớn. */
+    .bottom-widgets-container { width: clamp(560px, 58vw, 1300px); height: clamp(180px, 22vw, 280px); }
+
+    /* 3) TRẢ LẠI CHỮ "SOON" TO/NỔI BẬT NHƯ BẢN GỐC: trước đây bị "thu nhỏ theo tỉ lệ với tiêu đề
+       h1" (trần 200px) trong đợt ép gọn để chừa chỗ trên màn hình thấp — trên PC đã dư chỗ, nâng
+       trần font-size lên lại 300px để watermark nổi bật đúng như hiệu ứng gốc. Hiệu ứng hover
+       trượt sang phải + sáng lên (.character-tkb-mini:hover .bg-text) vẫn giữ nguyên logic cũ,
+       chỉ là giờ chữ to hơn nên hiệu ứng trông rõ/đã mắt hơn đúng như trước. */
+    .bg-text { font-size: clamp(110px, 15vw, 300px); }
+}
+
 @media (max-width: 850px) {
     body { overflow-y: auto; overflow-x: hidden; height: auto; min-height: 100vh; }
     .desktop-container {
