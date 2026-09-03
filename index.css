@@ -133,7 +133,14 @@ body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
    overflow-y:auto chỉ là lưới an toàn cuối cùng cho trường hợp cực hiếm (màn quá thấp) — khi đó
    toàn khối sẽ tự cuộn thay vì vỡ layout. */
 .hero-stack {
-    position: absolute; left: 6%; right: 3%; top: 12%; bottom: 6%;
+    /* FIX "VẪN CÒN DƯ 1-2PX CÓ THỂ CUỘN TRÊN MÀN LỚN": tác dụng phụ từ lần nâng trần font-size
+       gốc (17px->19px) ở đầu file — mọi kích thước rem trong khối này (h1, p, span...) cũng cao
+       thêm theo tỉ lệ đó trên màn hình lớn, trong khi khung này trước đó đã bị ép sát khít (xem
+       các ghi chú "hạ trần... để vừa màn hình, không cần cuộn" bên dưới, vốn tính cho màn hình
+       THẤP hơn). Nới bottom 6%->5% để trả lại chút khoảng đệm, đủ hấp thụ phần chênh do rem tăng,
+       không còn dư cuộn nữa trên màn hình lớn/thường; overflow-y:auto vẫn giữ nguyên làm lưới an
+       toàn cho trường hợp cực hiếm màn hình quá thấp (đúng đúng tinh thần thiết kế ban đầu). */
+    position: absolute; left: 6%; right: 3%; top: 12%; bottom: 5%;
     display: flex; flex-direction: column; align-items: flex-start;
     z-index: 10; overflow-y: auto; overflow-x: hidden;
 }
@@ -215,7 +222,11 @@ body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
     font-weight: 800; 
     line-height: 1.2; 
     padding-top: 6px; 
-    margin-bottom: 6px; 
+    /* NỚI KHOẢNG CÁCH TIÊU ĐỀ -> MÔ TẢ: 6px cũ là giá trị bị ép rất sát từ đợt thu gọn trước
+       (nhắm cho màn hình thấp). Nới lên 10px cho dễ thở hơn trên màn hình bình thường/lớn — vẫn
+       đủ nhẹ để không đẩy tổng chiều cao khối vượt khung trên đa số màn hình (nếu màn hình quá
+       thấp, overflow-y:auto ở .hero-stack đã lo phần cuộn dự phòng). */
+    margin-bottom: 10px; 
     letter-spacing: normal;
     text-transform: uppercase; 
     text-shadow: 0 10px 30px rgba(0,0,0,0.6);
@@ -225,7 +236,9 @@ body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
 }
 .tkb-content p { font-size: clamp(0.9rem, 0.8rem + 0.35vw, 1.15rem); color: rgba(255,255,255,0.85); font-weight: 500; margin-bottom: 20px; }
 
-.tkb-details { display: flex; flex-direction: column; gap: 10px; }
+/* NỚI GAP GIỮA "PHÒNG:" VÀ "GIẢNG VIÊN:": 10px cũ hơi chật, nhất là giờ chữ đã to hơn (trần
+   font gốc 19px) — nới lên 14px cho rõ ràng, dễ đọc hơn giữa 2 dòng thông tin. */
+.tkb-details { display: flex; flex-direction: column; gap: 14px; }
 .tkb-details span { font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.15rem); color: var(--text-main); display: flex; align-items: center; gap: 15px; font-weight: 500; }
 .tkb-details i { color: var(--accent); width: 25px; text-align: center; font-size: 1.3rem; }
 
