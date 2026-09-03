@@ -90,6 +90,23 @@
 .center-title span { display: block; margin-bottom: 4px; color: var(--text-muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; }
 .center-title h2 { margin: 0; color: var(--text-main); font-size: clamp(1.45rem, 2vw, 2.1rem); line-height: 1; font-weight: 800; letter-spacing: 0; text-shadow: 0 6px 22px rgba(0, 0, 0, 0.22); }
 
+/* ==== TỰ ĐỘNG ĐỔI MÀU CHỮ ĐỒNG HỒ + TIÊU ĐỀ HEADER THEO ĐỘ SÁNG ẢNH NỀN ====
+   JS (calendar-1-core.js, hàm updateTopbarContrast) tự đo độ sáng trung bình của ảnh nền đang
+   áp cho <body> (chỉ đo dải trên cùng, đúng vùng header nằm đè lên) rồi gắn class "bg-is-light"
+   khi ảnh đủ sáng. Đặt SAU cả rule của body.light-mode (file calendar-2-notes-glass-lightmode.css,
+   nạp trước file này) để luôn thắng — dù app đang ở theme sáng hay tối, hễ ảnh nền tuỳ chỉnh đủ
+   sáng thì chữ header LUÔN chuyển tối để đọc được, không phụ thuộc theme thủ công. */
+body.bg-is-light .clock-widget h1,
+body.bg-is-light .center-title h2 {
+    color: #12141a;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.55), 0 2px 14px rgba(255, 255, 255, 0.35);
+}
+body.bg-is-light .clock-widget p,
+body.bg-is-light .center-title span {
+    color: rgba(18, 20, 26, 0.75);
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.45);
+}
+
 /* FIX BUG: icon đồng hồ nhỏ (#topbar-title-icon, chỉ hiện ở tab Kế Hoạch Ngày) rớt xuống dòng
    RIÊNG, tách khỏi chữ "Kế Hoạch Ngày" bên cạnh — vì trước đây .topbar-title-row (bọc ngoài icon
    + h2) không có rule CSS nào cả. Icon là <span> (JS bật display:flex khi hiện) vẫn là 1 box

@@ -160,6 +160,86 @@ function renderPlannerNowLine() {
     col.appendChild(line);
 }
 
+// ---- Chia cột khi nhiều việc trùng giờ trong cùng 1 ngày (kiểu Google Calendar) ----
+// Trước đây mọi .planner-block đều full chiều ngang cột (left:5px; right:5px) -> nếu 2 việc
+// trùng giờ, việc render sau sẽ NẰM ĐÈ HOÀN TOÀN lên việc render trước, che mất tiêu đề/nút tick,
+// không thao tác được. Thuật toán dưới đây gom các việc chồng giờ thành từng "cụm" (group), rồi
+// gán mỗi việc 1 cột trong cụm đó (interval graph coloring tham lam) để chúng nằm CẠNH NHAU thay
+// vì đè lên nhau, y như cách Google Calendar / Outlook vẫn làm.
+const PLANNER_COL_GAP = 4;  // px hở giữa 2 cột việc trùng giờ
+const PLANNER_COL_EDGE = 5; // px lề trái/phải mặc định của khối (giữ nguyên như bản cũ)
+
+function computePlannerDayLayout(blocks) {
+    const layout = new Map();
+    if (!blocks || blocks.length === 0) return layout;
+
+    // 1) Sắp theo giờ bắt đầu, rồi gom thành từng cụm việc chồng giờ liên tiếp nhau
+    const sorted = blocks.slice().sort((a, b) => a.start_min - b.start_min || a.end_min - b.end_min);
+    const groups = [];
+    let group = [];
+    let groupEnd = -Infinity;
+    sorted.forEach(b => {
+        if (group.length === 0 || b.start_min < groupEnd) {
+            group.push(b);
+            groupEnd = Math.max(groupEnd, b.end_min);
+        } else {
+            groups.push(group);
+            group = [b];
+            groupEnd = b.end_min;
+        }
+    });
+    if (group.length) groups.push(group);
+
+    // 2) Trong mỗi cụm, gán cột theo kiểu tham lam: việc nào bắt đầu sau khi 1 cột đã "trống"
+    //    (việc trước đó trong cột kết thúc rồi) thì dùng lại cột đó; không thì mở cột mới.
+    groups.forEach(g => {
+        const colEnds = []; // giờ kết thúc của việc cuối cùng đang chiếm mỗi cột
+        g.forEach(b => {
+            let colIndex = colEnds.findIndex(endMin => endMin <= b.start_min);
+            if (colIndex === -1) {
+                colIndex = colEnds.length;
+                colEnds.push(b.end_min);
+            } else {
+                colEnds[colIndex] = b.end_min;
+            }
+            layout.set(b.id, { col: colIndex, totalCols: 0 }); // totalCols điền nốt bên dưới
+        });
+        const totalCols = colEnds.length;
+        g.forEach(b => { layout.get(b.id).totalCols = totalCols; });
+    });
+    return layout;
+}
+
+// Tính lại layout (không đổi dữ liệu) cho 1 ngày, có tính thêm 1 khối "đang kéo/đang vẽ nháp"
+// (movingId có thể là id thật của khối đang kéo, hoặc id giả '__draft__' khi đang tạo khối mới).
+// Áp dụng vị trí mới cho các khối CÒN LẠI (khác movingId) ngay trong hàm này; trả về {col,totalCols}
+// dành riêng cho khối đang kéo/vẽ để nơi gọi tự đặt vị trí cho nó.
+function plannerReflowDayWithDraft(dateStr, colEl, movingId, movingStart, movingEnd) {
+    const others = (plannerBlocksByDate[dateStr] || []).filter(b => b.id !== movingId);
+    const combined = others.map(b => ({ id: b.id, start_min: b.start_min, end_min: b.end_min }));
+    combined.push({ id: movingId, start_min: movingStart, end_min: movingEnd });
+    const layout = computePlannerDayLayout(combined);
+    others.forEach(b => {
+        const el = colEl.querySelector(`.planner-block[data-id="${b.id}"]`);
+        if (!el) return;
+        const L = layout.get(b.id) || { col: 0, totalCols: 1 };
+        positionPlannerBlockEl(el, b.start_min, b.end_min, L.col, L.totalCols);
+    });
+    return layout.get(movingId) || { col: 0, totalCols: 1 };
+}
+
+// Vẽ lại layout (cột) cho toàn bộ khối của 1 ngày, dùng khi render tĩnh (không kéo-thả)
+function applyPlannerDayReflow(dateStr, colEl) {
+    const blocks = plannerBlocksByDate[dateStr] || [];
+    const layout = computePlannerDayLayout(blocks);
+    blocks.forEach(b => {
+        const el = colEl.querySelector(`.planner-block[data-id="${b.id}"]`);
+        if (!el) return;
+        const L = layout.get(b.id) || { col: 0, totalCols: 1 };
+        positionPlannerBlockEl(el, b.start_min, b.end_min, L.col, L.totalCols);
+    });
+}
+
 function renderPlannerBlocks() {
     let totalBlocks = 0;
     for (let i = 0; i < 7; i++) {
@@ -170,6 +250,7 @@ function renderPlannerBlocks() {
         const blocks = plannerBlocksByDate[dateStr] || [];
         totalBlocks += blocks.length;
         blocks.forEach(b => col.appendChild(buildPlannerBlockEl(b, dateStr)));
+        applyPlannerDayReflow(dateStr, col);
     }
     const emptyHint = document.getElementById('planner-empty-hint');
     if (emptyHint) emptyHint.classList.toggle('is-hidden', totalBlocks > 0);
@@ -232,11 +313,29 @@ async function togglePlannerBlockDone(blockId, dateStr, checkBtn) {
     }
 }
 
-function positionPlannerBlockEl(el, startMin, endMin) {
+function positionPlannerBlockEl(el, startMin, endMin, col = 0, totalCols = 1) {
     el.style.top = ((startMin / 60) * PLANNER_HOUR_PX) + 'px';
     el.style.height = Math.max(20, ((endMin - startMin) / 60) * PLANNER_HOUR_PX) + 'px';
     const durationMin = endMin - startMin;
     el.classList.toggle('is-compact', durationMin <= 40);
+    applyPlannerBlockColumn(el, col, totalCols);
+}
+
+// Đặt left/width theo cột: totalCols===1 (không trùng giờ với ai) -> giữ y hệt bản cũ (full ngang,
+// chừa lề 5px 2 bên). totalCols>1 (đang trùng giờ với ít nhất 1 việc khác) -> chia đều chiều ngang
+// thành totalCols phần, mỗi khối chỉ chiếm đúng phần cột của nó + hở PLANNER_COL_GAP với cột kế bên.
+function applyPlannerBlockColumn(el, col, totalCols) {
+    if (!totalCols || totalCols <= 1) {
+        el.style.left = PLANNER_COL_EDGE + 'px';
+        el.style.right = PLANNER_COL_EDGE + 'px';
+        el.style.width = '';
+        return;
+    }
+    const edge2 = PLANNER_COL_EDGE * 2;
+    const frac = col / totalCols;
+    el.style.right = 'auto';
+    el.style.left = `calc(${PLANNER_COL_EDGE}px + (100% - ${edge2}px) * ${frac} + ${PLANNER_COL_GAP / 2}px)`;
+    el.style.width = `calc((100% - ${edge2}px) / ${totalCols} - ${PLANNER_COL_GAP}px)`;
 }
 
 // ---- Tự cuộn khung khi kéo gần sát mép (trên/dưới/trái/phải) ----
@@ -304,8 +403,10 @@ function onPlannerTracksPointerDown(e) {
     const tempEl = document.createElement('div');
     tempEl.className = 'planner-block planner-block-drafting';
     tempEl.style.setProperty('--block-color', PLANNER_COLORS[existingCount % PLANNER_COLORS.length]);
-    positionPlannerBlockEl(tempEl, startMin, startMin + PLANNER_SNAP_MIN);
     col.appendChild(tempEl);
+    const initEnd = startMin + PLANNER_SNAP_MIN;
+    const layoutSelf = plannerReflowDayWithDraft(dateStr, col, '__draft__', startMin, initEnd);
+    positionPlannerBlockEl(tempEl, startMin, initEnd, layoutSelf.col, layoutSelf.totalCols);
 
     plannerDrag = { mode: 'create', col, dateStr, originStart: startMin, el: tempEl, moved: false, lastClientX: e.clientX, lastClientY: e.clientY };
 
@@ -322,7 +423,8 @@ function plannerRecalcCreateDrag(clientY) {
     if (Math.abs(currentMin - plannerDrag.originStart) >= PLANNER_SNAP_MIN) plannerDrag.moved = true;
     plannerDrag.finalStart = start;
     plannerDrag.finalEnd = end;
-    positionPlannerBlockEl(plannerDrag.el, start, end);
+    const layoutSelf = plannerReflowDayWithDraft(plannerDrag.dateStr, plannerDrag.col, '__draft__', start, end);
+    positionPlannerBlockEl(plannerDrag.el, start, end, layoutSelf.col, layoutSelf.totalCols);
 }
 
 function onPlannerTracksPointerMove(e) {
@@ -382,10 +484,15 @@ function plannerRecalcBlockDrag(clientX, clientY) {
             const r = c.getBoundingClientRect();
             if (clientX >= r.left && clientX < r.right) {
                 if (c.dataset.date !== plannerDrag.currentDateStr) {
+                    const prevCol = plannerDrag.currentCol;
+                    const prevDateStr = plannerDrag.currentDateStr;
                     c.appendChild(plannerDrag.el);
                     plannerDrag.currentCol = c;
                     plannerDrag.currentDateStr = c.dataset.date;
                     plannerDrag.moved = true;
+                    // Ngày cũ vừa mất khối đang kéo -> dồn lại cột cho các việc còn lại ở ngày đó,
+                    // y như khi khối này chưa từng tồn tại ở đó nữa.
+                    if (prevCol && prevDateStr) plannerReflowDayWithDraft(prevDateStr, prevCol, plannerDrag.blockId, -1, -1);
                 }
                 break;
             }
@@ -411,7 +518,8 @@ function plannerRecalcBlockDrag(clientX, clientY) {
     }
     plannerDrag.finalStart = start;
     plannerDrag.finalEnd = end;
-    positionPlannerBlockEl(plannerDrag.el, start, end);
+    const layoutSelf = plannerReflowDayWithDraft(plannerDrag.currentDateStr, plannerDrag.currentCol, plannerDrag.blockId, start, end);
+    positionPlannerBlockEl(plannerDrag.el, start, end, layoutSelf.col, layoutSelf.totalCols);
     const timeSpan = plannerDrag.el.querySelector('.planner-block-time');
     if (timeSpan) timeSpan.innerText = `${plannerFmtHM(start)} - ${plannerFmtHM(end)}`;
 }
@@ -453,8 +561,10 @@ async function onPlannerBlockPointerUp(e) {
         plannerBlocksByDate[dateStr] = (plannerBlocksByDate[dateStr] || []).filter(b => b.id !== blockId);
         if (!plannerBlocksByDate[finalDateStr]) plannerBlocksByDate[finalDateStr] = [];
         plannerBlocksByDate[finalDateStr].push(block);
-        renderPlannerBlocks();
     }
+    // Luôn vẽ lại toàn bộ khối sau khi dời/co giãn xong (kể cả khi không đổi ngày), để đảm bảo
+    // layout cột (khi trùng giờ với việc khác) khớp chính xác với dữ liệu vừa cập nhật.
+    renderPlannerBlocks();
 
     const updatePayload = { start_min: start, end_min: end };
     if (dateChanged) updatePayload.plan_date = finalDateStr;

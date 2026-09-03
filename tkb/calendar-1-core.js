@@ -182,6 +182,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.syncCustomBackground) window.syncCustomBackground();
     else window._customBgReadyPromise = Promise.resolve();
 
+    // Đo độ sáng ảnh nền lần đầu SAU KHI bg-sync.js đã gán xong background-image cho <body>
+    // (nếu chờ luôn thì có thể đo phải ảnh nền mặc định cũ, chưa kịp đổi sang ảnh người dùng chọn).
+    initAdaptiveHeaderContrast();
+    (window._customBgReadyPromise || Promise.resolve()).then(scheduleTopbarContrastUpdate);
+
     const shareMenu = document.getElementById("share-menu-widget");
     const shareToggleBtn = document.getElementById("share-toggle-btn");
     
@@ -205,6 +210,71 @@ function updateDesktopClock() {
     const now = new Date();
     timeEl.innerText = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     dateEl.innerText = now.toLocaleDateString('en-US', { weekday: 'long', month: '2-digit', day: '2-digit' }).replace(',', '');
+}
+
+// =========================================
+// TỰ ĐỘNG ĐỔI MÀU CHỮ ĐỒNG HỒ + TIÊU ĐỀ HEADER THEO ĐỘ SÁNG ẢNH NỀN
+// =========================================
+// Đồng hồ (.clock-widget) và tiêu đề giữa (.center-title) trước giờ luôn cố định chữ trắng —
+// hợp với nền tối mặc định, nhưng khi người dùng đổi ảnh nền tuỳ chỉnh (sáng màu, ví dụ ảnh
+// chụp ban ngày) thì chữ trắng dễ bị mờ/khó đọc. Đoạn dưới tự lấy MẪU vùng trên cùng của ảnh
+// nền hiện tại (đúng chỗ header nằm đè lên) để đo độ sáng trung bình, rồi gắn/gỡ class
+// "bg-is-light" trên <body> — CSS (xem calendar-3-desktop-settings-dialog.css) dựa vào class
+// này để tự chuyển chữ + text-shadow sang tông tối khi ảnh nền đủ sáng, và ngược lại.
+let _bgContrastRAF = null;
+function scheduleTopbarContrastUpdate() {
+    if (_bgContrastRAF) return;
+    _bgContrastRAF = requestAnimationFrame(() => { _bgContrastRAF = null; updateTopbarContrast(); });
+}
+
+function updateTopbarContrast() {
+    const bgImage = getComputedStyle(document.body).backgroundImage;
+    // backgroundImage có thể là NHIỀU lớp (gradient trang trí mặc định + url ảnh người dùng),
+    // url() luôn nằm cuối cùng nếu bg-sync.js chèn thêm layer/ hoặc là lớp duy nhất nếu ảnh
+    // được gán trực tiếp thay thế toàn bộ -> tìm match url(...) CUỐI CÙNG trong chuỗi cho chắc.
+    const matches = [...bgImage.matchAll(/url\((['"]?)(.*?)\1\)/g)];
+    if (matches.length === 0) {
+        document.body.classList.remove('bg-is-light');
+        return;
+    }
+    const url = matches[matches.length - 1][2];
+
+    const img = new Image();
+    // Cần để đọc được pixel qua canvas; ảnh từ URL ngoài không cho phép CORS sẽ khiến canvas
+    // bị "tainted" -> getImageData ném lỗi, bắt ở catch bên dưới và bỏ qua an toàn (giữ mặc định).
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+        try {
+            const SAMPLE = 24; // chỉ cần mẫu nhỏ để tính độ sáng trung bình, không cần full-res
+            const canvas = document.createElement('canvas');
+            canvas.width = SAMPLE; canvas.height = SAMPLE;
+            const ctx = canvas.getContext('2d');
+            // Chỉ lấy mẫu dải TRÊN CÙNG của ảnh (nơi .dashboard-topbar thực sự nằm đè lên) thay
+            // vì trung bình cả bức ảnh — đúng ngữ cảnh hơn vì ảnh có thể sáng dưới/tối trên...
+            const srcH = Math.max(1, img.naturalHeight * 0.28);
+            ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, 0, 0, SAMPLE, SAMPLE);
+            const { data } = ctx.getImageData(0, 0, SAMPLE, SAMPLE);
+            let total = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                total += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+            }
+            const avgLuminance = total / (data.length / 4); // 0 (đen) -> 255 (trắng)
+            document.body.classList.toggle('bg-is-light', avgLuminance > 150);
+        } catch (err) {
+            console.warn('[Contrast] Không đọc được độ sáng ảnh nền (có thể do CORS):', err.message);
+        }
+    };
+    img.onerror = () => {}; // ảnh lỗi/URL sai -> im lặng bỏ qua, giữ màu chữ mặc định
+    img.src = url;
+}
+
+function initAdaptiveHeaderContrast() {
+    updateTopbarContrast();
+    // Theo dõi MỌI lần <body> đổi background-image (bg-sync.js gán trực tiếp qua style inline,
+    // dù đổi bằng URL hay upload file) để tự đo lại độ sáng ngay khi ảnh nền thay đổi, không cần
+    // sửa gì trong bg-sync.js.
+    const observer = new MutationObserver(scheduleTopbarContrastUpdate);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
 }
 
 // escapeHtml() và parseVNExamDate() giờ nằm ở shared.js (load trước file này trong calendar.html)
