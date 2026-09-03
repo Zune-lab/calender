@@ -133,16 +133,16 @@ body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
    overflow-y:auto chỉ là lưới an toàn cuối cùng cho trường hợp cực hiếm (màn quá thấp) — khi đó
    toàn khối sẽ tự cuộn thay vì vỡ layout. */
 .hero-stack {
-    /* FIX "VẪN CÒN DƯ 1-2PX CÓ THỂ CUỘN TRÊN MÀN LỚN": tác dụng phụ từ lần nâng trần font-size
-       gốc (17px->19px) ở đầu file — mọi kích thước rem trong khối này (h1, p, span...) cũng cao
-       thêm theo tỉ lệ đó trên màn hình lớn, trong khi khung này trước đó đã bị ép sát khít (xem
-       các ghi chú "hạ trần... để vừa màn hình, không cần cuộn" bên dưới, vốn tính cho màn hình
-       THẤP hơn). Nới bottom 6%->5% để trả lại chút khoảng đệm, đủ hấp thụ phần chênh do rem tăng,
-       không còn dư cuộn nữa trên màn hình lớn/thường; overflow-y:auto vẫn giữ nguyên làm lưới an
-       toàn cho trường hợp cực hiếm màn hình quá thấp (đúng đúng tinh thần thiết kế ban đầu). */
+    /* HẾT HẲN THANH CUỘN DƯ (áp dụng cho MỌI màn hình, không tách riêng breakpoint): nguyên nhân
+       gốc là sai số làm tròn sub-pixel của clamp()/vw — mỗi độ phân giải/tỉ lệ scale màn hình lại
+       lệch 1 chút khác nhau, nên cách "nới % đệm cho khớp" ở lần sửa trước không triệt để 100%
+       được cho MỌI máy. Đổi hẳn sang overflow-y: hidden — không còn thanh cuộn dư ở bất kỳ đâu.
+       Đánh đổi: khối "lưới an toàn cho màn hình cực thấp" (trường hợp hiếm mới cần cuộn thật) bị
+       bỏ theo — nếu gặp đúng màn cực thấp đó, vài px cuối cùng của khối widget có thể bị che mất
+       thay vì cuộn được xuống xem, thay vì hiện thanh cuộn dư khó chịu ở mọi màn hình khác. */
     position: absolute; left: 6%; right: 3%; top: 12%; bottom: 5%;
     display: flex; flex-direction: column; align-items: flex-start;
-    z-index: 10; overflow-y: auto; overflow-x: hidden;
+    z-index: 10; overflow-y: hidden; overflow-x: hidden;
 }
 .hero-stack::-webkit-scrollbar { width: 4px; }
 .hero-stack::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
@@ -189,8 +189,12 @@ body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
        kế gốc, chỉ không còn bị cắt ở đầu chữ bên trái nữa). */
     position: absolute; left: 0; top: 50%; transform: translateY(-50%);
     /* Thu nhỏ theo tỉ lệ với tiêu đề h1 đã hạ trần ở trên, giữ đúng cảm giác watermark phía sau
-       chữ chứ không lấn át hẳn tiêu đề khi tiêu đề đã nhỏ lại. */
-    font-size: clamp(110px, 15vw, 200px); font-weight: 800; color: var(--accent); opacity: 0.1;
+       chữ chứ không lấn át hẳn tiêu đề khi tiêu đề đã nhỏ lại.
+       CÔNG THỨC 2 ĐIỂM (dùng chung mọi màn hình, không breakpoint riêng): khớp đúng giá trị cũ
+       (~195px) tại mốc ~1300px nên không tụt so với trước ở dải laptop, rồi tiếp tục lớn dần
+       thêm tới 300px khi màn hình lớn hơn (~2200px+) — chữ SOON to/nổi bật dần theo màn hình
+       thay vì đứng khựng ở 200px như công thức cũ (15vw chạm trần ngay từ ~1333px). */
+    font-size: clamp(110px, 43px + 11.7vw, 300px); font-weight: 800; color: var(--accent); opacity: 0.1;
     z-index: 1; pointer-events: none; transition: 0.4s ease; text-transform: uppercase; line-height: 0.85; white-space: nowrap;
 }
 
@@ -263,10 +267,12 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
        (58vw = 800px tại đó), cùng nguyên nhân với .character-tkb-mini phía trên. Nâng trần lên
        1100px (chạm trần ở ~1897px, khớp mốc với 2 chỗ đã nâng ở trên) để 2 khối widget tiếp tục
        phình theo màn hình lớn thay vì dừng lại quá sớm rồi để trống nguyên mảng bên phải. */
-    display: flex; gap: clamp(14px, 1.6vw, 24px); width: clamp(560px, 58vw, 1100px); max-width: 100%;
-    /* Hạ trần chiều cao (240px->200px) cùng đợt thu gọn thẻ TKB phía trên, để tổng chiều cao
-       .hero-stack (thẻ TKB + widget này) vừa vặn trong màn hình, không cần cuộn nữa. */
-    height: clamp(180px, 18vw, 200px); z-index: 10;
+    display: flex; gap: clamp(14px, 1.6vw, 24px); width: clamp(560px, 58vw, 1300px); max-width: 100%;
+    /* CHIỀU CAO — công thức 2 điểm (không dùng breakpoint riêng, áp dụng mượt cho MỌI màn hình):
+       khớp ĐÚNG giá trị cũ (200px, mốc trần cũ) tại ~1300px nên không hề tụt so với trước ở dải
+       laptop/màn vừa, rồi tiếp tục tăng dần thêm tới 280px khi màn hình lớn hơn (~2200px+), thay
+       vì đứng khựng ở 200px như công thức cũ (18vw chạm trần ngay từ ~1111px, quá sớm). */
+    height: clamp(180px, 84px + 8.9vw, 280px); z-index: 10;
 }
 .widget-box {
     flex: 1; min-width: 0; background: var(--panel-bg); backdrop-filter: blur(20px);
@@ -454,34 +460,6 @@ body.has-custom-bg.bg-photo-light .badge-status { background: rgba(255,255,255,0
        hẹp nhất trong khi tiêu đề vẫn to theo vw toàn màn hình -> dễ tràn/cắt chữ nhất. */
     .character-tkb-mini { width: 58%; }
     .bottom-widgets-container { width: 92%; }
-}
-
-/* =========================================
-   CHỈ DÀNH RIÊNG CHO MÀN HÌNH PC/LỚN (>1300px) — KHÔNG ĐỘNG TỚI LAPTOP/RESPONSIVE.
-   Bù đúng ngưỡng cho @media (max-width: 1300px) ở trên, nên 2 khối không bao giờ chồng chéo
-   phạm vi áp dụng lên nhau.
-========================================= */
-@media (min-width: 1301px) {
-    /* 1) HẾT HẲN THANH CUỘN DƯ TRÊN MÀN HÌNH TO: dù đã nới đệm bottom% ở .hero-stack lần trước,
-       độ lệch sub-pixel do clamp()/vw vẫn có thể còn dư đúng 1-2px tuỳ độ phân giải/tỉ lệ scale
-       màn hình cụ thể của từng máy — rất khó dò đúng % để triệt tiêu 100% cho MỌI màn hình bằng
-       cách chỉnh số liệu mãi. Trên PC đã xác nhận luôn dư khoảng trống rất lớn (ảnh chụp thấy rõ
-       vùng đen trống phía dưới), nên tắt hẳn overflow-y ở đây là an toàn tuyệt đối, không còn
-       thanh cuộn dư nào nữa. Laptop/màn nhỏ (≤1300px) vẫn giữ nguyên overflow-y:auto làm lưới an
-       toàn như cũ (phòng trường hợp hiếm màn quá thấp thật sự thiếu chỗ). */
-    .hero-stack { overflow-y: hidden; }
-
-    /* 2) 2 KHUNG WIDGET (BÀI TẬP/GHI CHÚ + THỐNG KÊ) TO RA: trần cũ 1100px (rộng) / 200px (cao)
-       vẫn còn khá khiêm tốn so với khoảng trống rất lớn đang dư trên PC. Nâng cả 2 trần lên rõ
-       rệt hơn cho cân đối với màn hình lớn. */
-    .bottom-widgets-container { width: clamp(560px, 58vw, 1300px); height: clamp(180px, 22vw, 280px); }
-
-    /* 3) TRẢ LẠI CHỮ "SOON" TO/NỔI BẬT NHƯ BẢN GỐC: trước đây bị "thu nhỏ theo tỉ lệ với tiêu đề
-       h1" (trần 200px) trong đợt ép gọn để chừa chỗ trên màn hình thấp — trên PC đã dư chỗ, nâng
-       trần font-size lên lại 300px để watermark nổi bật đúng như hiệu ứng gốc. Hiệu ứng hover
-       trượt sang phải + sáng lên (.character-tkb-mini:hover .bg-text) vẫn giữ nguyên logic cũ,
-       chỉ là giờ chữ to hơn nên hiệu ứng trông rõ/đã mắt hơn đúng như trước. */
-    .bg-text { font-size: clamp(110px, 15vw, 300px); }
 }
 
 @media (max-width: 850px) {
