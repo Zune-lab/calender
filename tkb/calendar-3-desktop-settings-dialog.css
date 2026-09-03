@@ -181,17 +181,18 @@
     .desktop-environment { height: auto; min-height: 100vh; padding: 24px 20px 110px; }
     .floating-left-dock { display: none; }
     .main-glass-dashboard { width: min(100%, 980px); height: 760px; min-height: 0; }
-    .dashboard-topbar { grid-template-columns: 1fr auto; position: relative; }
-    /* THEO YÊU CẦU: thay vì ẩn hẳn .center-title và hiện 1 dòng tiêu đề riêng bên dưới (cách cũ),
-       giờ giữ tiêu đề NGAY TRONG hàng header, canh CHÍNH GIỮA theo chiều ngang — nằm lọt giữa
-       khối đồng hồ (bên trái) và avatar (bên phải), y hệt vị trí center-title trên desktop.
-       Dùng position:absolute + left:50%/transform để tự canh giữa bất kể đồng hồ dài ngắn khác
-       nhau, không phụ thuộc vào việc chia cột grid (vì cột giữa đã bị bỏ ở mobile). */
+    /* FIX BUG "NÚT NHẬP ĐÈ LÊN CHỮ TIÊU ĐỀ": bản cũ dùng grid 2 cột (1fr auto) rồi kéo tiêu đề
+       ra khỏi luồng bằng position:absolute + left:50%, đoán chừng chừa 130px hai bên cho đồng hồ
+       + avatar. Nút "Nhập Lịch Thi"/"Nhập TKB" thực tế rộng hơn số đoán này tùy độ dài chữ ->
+       tràn đè lên chữ tiêu đề đang căn giữa (xem ảnh lỗi). Fix triệt để: dùng grid 3 cột thật
+       (auto | 1fr co giãn | auto) để trình duyệt tự tính đúng khoảng trống còn lại cho tiêu đề
+       thay vì đoán mò — tiêu đề tự ellipsis khi hết chỗ, không bao giờ chồng lên 2 cột hai bên. */
+    .dashboard-topbar { grid-template-columns: auto minmax(0, 1fr) auto; position: relative; }
     .center-title {
         display: block;
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        max-width: calc(100% - 130px); /* chừa chỗ 2 bên cho đồng hồ + avatar, tránh đè chữ */
-        text-align: center; pointer-events: none;
+        position: static; transform: none;
+        max-width: 100%; min-width: 0;
+        text-align: center;
     }
     .center-title span { display: none; } /* ẩn dòng nhãn nhỏ "SGU Workspace" trên mobile, chỉ giữ tên tab để đỡ chật chỗ ngang */
     .center-title h2 {
@@ -285,28 +286,16 @@
        để luôn chừa ra một khoảng hở rõ ràng giữa khung TKB và thanh nav, mọi kích thước máy. */
     .desktop-environment { padding: 14px 12px 116px; }
     .main-glass-dashboard { height: calc(100dvh - 130px); max-height: 720px; padding: 16px; border-radius: 28px; }
-    /* MỤC 4: FIX BUG "ĐỒNG HỒ + NÚT NHẬP BỊ XẾP CHỒNG DỌC, LỆCH KHỎI AVATAR"
-       Ở breakpoint này .dashboard-topbar co từ grid 3 cột về CHỈ 1 CỘT DỌC (grid-template-columns:
-       1fr) -> đồng hồ, tiêu đề (đã ẩn), và .top-actions (chứa nút Nhập + avatar) xếp CHỒNG LÊN
-       NHAU theo chiều dọc thay vì nằm ngang -> nút "Nhập TKB / Nhập Lịch Thi" bị rớt xuống thành
-       1 hàng riêng, trôi lệch khỏi vị trí mong muốn (đúng như lỗi trong ảnh chụp), không còn nằm
-       kế bên avatar và đồng hồ cũng không còn ở hàng trên cùng cùng với các nút. */
-    .dashboard-topbar { grid-template-columns: 1fr; gap: 12px; position: relative; }
-    /* FIX: thay vì tách riêng avatar ra khỏi .top-actions bằng absolute (khiến nút
-       "Nhập TKB / Nhập Lịch Thi" bị bỏ lại một mình, rớt xuống thành 1 hàng riêng, trôi lệch
-       khỏi vị trí mong muốn — đúng như lỗi trong ảnh chụp), giữ nguyên nút Nhập + avatar
-       ĐI CHUNG trong .top-actions, rồi ghim CẢ CỤM này (không tách riêng avatar nữa) cố định
-       vào góc phải trên cùng của topbar. Đồng thời .clock-widget cũng được ghim vào góc trái
-       trên cùng, để 2 khối luôn nằm CHUNG 1 HÀNG NGANG trên cùng (không bị đẩy xuống dòng dưới
-       xếp chồng dọc), đúng ý muốn "đưa đồng hồ lên + nút Nhập nằm kế bên avatar". */
-    .dashboard-topbar { min-height: 60px; }
-    .clock-widget { position: absolute; top: 0; left: 0; padding-left: 0; z-index: 20; }
+    /* MỤC 4 - ĐÃ FIX TẬN GỐC Ở TRÊN (xem @media max-width:1180px): .dashboard-topbar giờ dùng
+       grid 3 cột thật (auto | 1fr co giãn | auto) nên đồng hồ / tiêu đề / cụm nút+avatar tự nằm
+       chung 1 hàng ngang, không cần position:absolute đoán độ rộng nữa -> hết cảnh xếp chồng dọc
+       lẫn nút Nhập đè lên chữ tiêu đề như lỗi cũ. Ở breakpoint này chỉ còn cần chỉnh nhỏ cỡ
+       chữ/khoảng cách cho vừa màn hình điện thoại. */
+    .dashboard-topbar { gap: 8px; min-height: 60px; }
+    .clock-widget { padding-left: 0; }
     .clock-widget h1 { font-size: 1.55rem; }
     .clock-widget p { font-size: 0.72rem; margin-top: 3px; }
-    .top-actions {
-        position: absolute; top: 2px; right: 0; z-index: 30;
-        justify-content: flex-end; flex-wrap: nowrap; gap: 8px;
-    }
+    .top-actions { justify-content: flex-end; flex-wrap: nowrap; gap: 8px; }
     #profile-dropdown-container { position: relative; top: auto; right: auto; }
     .import-btn { min-height: 32px; padding: 0 10px; gap: 6px; white-space: nowrap; }
     .import-btn span { font-size: 0.7rem; }
