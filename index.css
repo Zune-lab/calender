@@ -7,7 +7,14 @@ html {
        Font-size gốc co giãn mượt theo bề rộng màn hình (thay vì cố định 16px) —
        nhờ vậy MỌI kích thước khai báo bằng rem trong file này tự động scale mượt
        theo mọi kích thước màn hình, không chỉ nhảy bậc tại các @media breakpoint. */
-    font-size: clamp(14px, 12px + 0.45vw, 17px);
+    /* FIX "NỀN LỚN BỊ ÉP NHỎ, CO CỤM 1 GÓC": trần 17px cũ bị chạm ngay từ ~1111px chiều rộng màn
+       hình (12px + 0.45vw = 17px tại vw ≈ 1111px) -> MỌI màn hình desktop/laptop thông thường (đa
+       số đã rộng hơn 1111px) đều bị khoá cứng ở đúng 17px, không bao giờ lớn thêm dù màn hình có
+       to cỡ nào (1920px, 2K, ultrawide...). Nâng trần lên 19px và giảm nhẹ hệ số vw (0.45->0.36)
+       để mốc chạm trần lùi ra ~1920px (màn hình phổ thông cỡ lớn) thay vì ~1111px, cho chữ tiếp
+       tục phình theo màn hình rộng hơn thay vì bị ép nhỏ + dừng quá sớm.
+    */
+    font-size: clamp(14px, 12px + 0.36vw, 19px);
     -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
 }
 
@@ -141,7 +148,13 @@ body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
        phía sau, dùng position:absolute) — nếu không, .bg-text sẽ neo nhầm vào .hero-stack bên
        ngoài thay vì đúng thẻ này. */
     position: relative;
-    width: clamp(460px, 46vw, 660px); max-width: 100%;
+    /* FIX "TRÊN MÀN HÌNH TO BỊ ÉP NHỎ, CO CỤM 1 GÓC": trần cũ 660px bị chạm ngay từ ~1435px chiều
+       rộng màn hình (46vw = 660px tại đó) -> mọi màn hình lớn hơn 1435px (đa số desktop/laptop
+       phổ thông) đều bị khoá cứng ở đúng 660px, để lại khoảng trống lớn bên phải/dưới thay vì thẻ
+       tiếp tục phình theo màn hình. Nâng trần lên 880px, mốc chạm trần lùi ra ~1913px (khớp với
+       trần font-size ở đầu file) -> thẻ tiếp tục scale mượt tới đúng ngưỡng màn hình lớn phổ biến
+       rồi mới dừng, thay vì dừng sớm giữa chừng như trước. */
+    width: clamp(460px, 46vw, 880px); max-width: 100%;
     flex-shrink: 0;
     display: flex; flex-direction: column; justify-content: center;
     cursor: pointer;
@@ -233,7 +246,11 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
    xuống dưới thay vì bị đè. */
 .bottom-widgets-container {
     margin-top: auto; flex-shrink: 0;
-    display: flex; gap: clamp(14px, 1.6vw, 24px); width: clamp(560px, 58vw, 800px); max-width: 100%;
+    /* FIX "TRÊN MÀN HÌNH TO BỊ ÉP NHỎ": trần cũ 800px bị chạm ngay từ ~1380px chiều rộng màn hình
+       (58vw = 800px tại đó), cùng nguyên nhân với .character-tkb-mini phía trên. Nâng trần lên
+       1100px (chạm trần ở ~1897px, khớp mốc với 2 chỗ đã nâng ở trên) để 2 khối widget tiếp tục
+       phình theo màn hình lớn thay vì dừng lại quá sớm rồi để trống nguyên mảng bên phải. */
+    display: flex; gap: clamp(14px, 1.6vw, 24px); width: clamp(560px, 58vw, 1100px); max-width: 100%;
     /* Hạ trần chiều cao (240px->200px) cùng đợt thu gọn thẻ TKB phía trên, để tổng chiều cao
        .hero-stack (thẻ TKB + widget này) vừa vặn trong màn hình, không cần cuộn nữa. */
     height: clamp(180px, 18vw, 200px); z-index: 10;
