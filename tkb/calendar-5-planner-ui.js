@@ -117,6 +117,18 @@ async function loadPlannerBlocks() {
     if (!tracksWrap) return;
     closePlannerEditor();
 
+    // TỰ ĐỘNG XOÁ HẲN các việc ĐÃ TICK XONG quá 7 NGÀY khỏi bảng daily_plans, giải phóng dữ
+    // liệu Supabase — chạy NGẦM mỗi lần vào tab Kế Hoạch (không đợi, không chặn tải tuần hiện
+    // tại), và lọc thẳng ở DB bằng is_done + plan_date thay vì tải hết dữ liệu về rồi lọc, nên
+    // KHÔNG phụ thuộc đang xem đúng tuần nào — việc cũ ở tuần khác (không phải tuần đang mở)
+    // vẫn bị dọn đúng hạn. Cùng kiểu với cách loadExams() tự xóa lịch thi cũ quá 14 ngày.
+    const cleanupCutoff = new Date(); cleanupCutoff.setHours(0, 0, 0, 0); cleanupCutoff.setDate(cleanupCutoff.getDate() - 7);
+    sbClient.from('daily_plans').delete()
+        .eq('user_id', currentUser.id).eq('is_done', true).lt('plan_date', plannerFmtDateInput(cleanupCutoff))
+        .then(({ error: cleanupErr }) => {
+            if (cleanupErr) console.warn('[Planner] Lỗi tự xóa việc đã xong quá hạn:', cleanupErr.message);
+        });
+
     const dates = plannerWeekDates();
     const startStr = plannerFmtDateInput(dates[0]);
     const endStr = plannerFmtDateInput(dates[6]);

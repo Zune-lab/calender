@@ -14,7 +14,12 @@
    index.html vốn đã có clamp() này. Thêm vào đây để ĐỒNG BỘ 3 trang (Dashboard/TKB/Hồ sơ),
    toàn bộ chữ "rem" trong trang tự động scale mượt theo bề rộng màn hình. */
 html {
-    font-size: clamp(14px, 12px + 0.45vw, 17px);
+    /* ĐỒNG BỘ CÔNG THỨC VỚI index.css (Dashboard): trần cũ 17px bị chạm ngay từ ~1111px chiều
+       rộng màn hình, khoá cứng chữ không lớn thêm dù màn hình to cỡ nào. Đổi sang công thức neo
+       2 điểm — sàn 14px tại ~500px, trần 19px tại ~2200px — để chữ lớn dần liên tục mượt theo
+       gần suốt dải màn hình, y hệt cách đã sửa cho Dashboard (dùng chung công thức cho đồng nhất
+       cảm giác giữa 2 trang). */
+    font-size: clamp(14px, 12.5px + 0.29vw, 19px);
     /* FIX BUG "MENU CHỮ 1 TO 1 NHỎ" TRÊN IPHONE/SAFARI: tắt auto-boost cỡ chữ theo bề rộng
        riêng từng phần tử (xem giải thích chi tiết ở index.css) -> đồng bộ với trang Dashboard,
        để label menu dưới (Trang chủ/Lịch/Lịch thi/...) luôn hiện đúng 1 cỡ như nhau. */
@@ -186,11 +191,13 @@ h2 { font-weight: 300; font-size: 2.2rem; letter-spacing: -0.5px; }
 .timetable-wrapper {
     /* FIX GỐC: trước đây chữ trong thẻ môn học dùng clamp(...vw...) tức là co theo bề rộng
        TOÀN MÀN HÌNH — nhưng .timetable-wrapper thực tế bị .main-glass-dashboard giới hạn
-       max-width: 1550px, nên ở hầu hết màn hình desktop bình thường (>=1220px) giá trị vw
-       đã CHẠM TRẦN ngay từ đầu -> chữ coi như không co tí nào, y hệt cỡ cũ.
+       max-width (trước là 1550px, giờ đã nâng lên 1900px — xem giải thích ở
+       calendar-3-desktop-settings-dialog.css), nên ở hầu hết màn hình desktop bình thường giá
+       trị vw dễ CHẠM TRẦN ngay từ đầu -> chữ coi như không co tí nào, y hệt cỡ cũ.
        Đổi sang Container Query: biến .timetable-wrapper thành 1 "container" kích thước riêng,
        để các thẻ môn học bên trong co giãn chữ theo đúng bề rộng THẬT của chính khung bảng
-       (cqw), không phải bề rộng cả trang -> đúng bản chất vấn đề (cột hẹp hay rộng). */
+       (cqw), không phải bề rộng cả trang -> đúng bản chất vấn đề (cột hẹp hay rộng). Cách này
+       tự động ăn theo khi .main-glass-dashboard được nâng trần, không cần sửa lại gì thêm ở đây. */
     container-type: inline-size;
     container-name: tkb-table;
 
@@ -487,7 +494,8 @@ body.light-mode #week-selector { color: #1e293b; }
 
 /* FIX GỐC (quan trọng nhất): trước dùng clamp(...vw...) -> co theo bề rộng CẢ TRANG, và ở đa
    số màn desktop bình thường giá trị đó CHẠM TRẦN max ngay từ đầu (vì main-dashboard giới hạn
-   max-width 1550px) nên thực chất chữ KHÔNG co tí nào, y hệt cỡ cũ -> đây là lý do card vẫn vỡ
+   max-width — lúc đó là 1550px, giờ đã nâng lên 1900px, xem calendar-3-desktop-settings-dialog.css)
+   nên thực chất chữ KHÔNG co tí nào, y hệt cỡ cũ -> đây là lý do card vẫn vỡ
    y như trước dù đã "sửa". Giờ đổi hẳn sang cqw (container query width) — co theo đúng bề rộng
    THẬT của khung bảng .timetable-wrapper (đã bật container-type ở trên), tức là co theo đúng
    độ hẹp/rộng của CỘT chứa thẻ, không quan tâm màn hình to hay nhỏ, có sidebar hay không. */

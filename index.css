@@ -7,14 +7,13 @@ html {
        Font-size gốc co giãn mượt theo bề rộng màn hình (thay vì cố định 16px) —
        nhờ vậy MỌI kích thước khai báo bằng rem trong file này tự động scale mượt
        theo mọi kích thước màn hình, không chỉ nhảy bậc tại các @media breakpoint. */
-    /* FIX "NỀN LỚN BỊ ÉP NHỎ, CO CỤM 1 GÓC": trần 17px cũ bị chạm ngay từ ~1111px chiều rộng màn
-       hình (12px + 0.45vw = 17px tại vw ≈ 1111px) -> MỌI màn hình desktop/laptop thông thường (đa
-       số đã rộng hơn 1111px) đều bị khoá cứng ở đúng 17px, không bao giờ lớn thêm dù màn hình có
-       to cỡ nào (1920px, 2K, ultrawide...). Nâng trần lên 19px và giảm nhẹ hệ số vw (0.45->0.36)
-       để mốc chạm trần lùi ra ~1920px (màn hình phổ thông cỡ lớn) thay vì ~1111px, cho chữ tiếp
-       tục phình theo màn hình rộng hơn thay vì bị ép nhỏ + dừng quá sớm.
-    */
-    font-size: clamp(14px, 12px + 0.36vw, 19px);
+    /* CÔNG THỨC SCALE LIÊN TỤC TOÀN DẢI (không riêng PC nữa): neo đúng giá trị SÀN (14px) tại
+       ~500px (ngay trên mốc chuyển layout mobile) và giá trị TRẦN (19px) tại ~2200px (PC lớn) ->
+       từ 500px trở lên, chữ lớn dần đều đặn liên tục theo từng px màn hình, không còn đứng yên
+       giữa chừng rồi mới "chạy nước rút" tăng vọt gần cuối như công thức cũ. Dưới 500px vẫn giữ
+       nguyên sàn 14px (không đổi so với trước), trên 2200px vẫn giữ trần 19px (không phình vô hạn
+       trên màn 4K/ultrawide). */
+    font-size: clamp(14px, 12.5px + 0.29vw, 19px);
     -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
 }
 
@@ -155,13 +154,10 @@ body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
        phía sau, dùng position:absolute) — nếu không, .bg-text sẽ neo nhầm vào .hero-stack bên
        ngoài thay vì đúng thẻ này. */
     position: relative;
-    /* FIX "TRÊN MÀN HÌNH TO BỊ ÉP NHỎ, CO CỤM 1 GÓC": trần cũ 660px bị chạm ngay từ ~1435px chiều
-       rộng màn hình (46vw = 660px tại đó) -> mọi màn hình lớn hơn 1435px (đa số desktop/laptop
-       phổ thông) đều bị khoá cứng ở đúng 660px, để lại khoảng trống lớn bên phải/dưới thay vì thẻ
-       tiếp tục phình theo màn hình. Nâng trần lên 880px, mốc chạm trần lùi ra ~1913px (khớp với
-       trần font-size ở đầu file) -> thẻ tiếp tục scale mượt tới đúng ngưỡng màn hình lớn phổ biến
-       rồi mới dừng, thay vì dừng sớm giữa chừng như trước. */
-    width: clamp(460px, 46vw, 880px); max-width: 100%;
+    /* CÔNG THỨC SCALE LIÊN TỤC TOÀN DẢI: neo sàn 460px tại ~500px và trần 880px tại ~2200px ->
+       thẻ TKB lớn dần đều theo từng px màn hình xuyên suốt từ ngay trên mốc mobile cho tới PC
+       lớn, không còn đoạn "đứng yên" giữa chừng như công thức cũ. */
+    width: clamp(460px, 336px + 24.7vw, 880px); max-width: 100%;
     flex-shrink: 0;
     display: flex; flex-direction: column; justify-content: center;
     cursor: pointer;
@@ -190,11 +186,10 @@ body.light-mode .bg-scrim { background: rgba(8, 9, 12, 0.28); }
     position: absolute; left: 0; top: 50%; transform: translateY(-50%);
     /* Thu nhỏ theo tỉ lệ với tiêu đề h1 đã hạ trần ở trên, giữ đúng cảm giác watermark phía sau
        chữ chứ không lấn át hẳn tiêu đề khi tiêu đề đã nhỏ lại.
-       CÔNG THỨC 2 ĐIỂM (dùng chung mọi màn hình, không breakpoint riêng): khớp đúng giá trị cũ
-       (~195px) tại mốc ~1300px nên không tụt so với trước ở dải laptop, rồi tiếp tục lớn dần
-       thêm tới 300px khi màn hình lớn hơn (~2200px+) — chữ SOON to/nổi bật dần theo màn hình
-       thay vì đứng khựng ở 200px như công thức cũ (15vw chạm trần ngay từ ~1333px). */
-    font-size: clamp(110px, 43px + 11.7vw, 300px); font-weight: 800; color: var(--accent); opacity: 0.1;
+       CÔNG THỨC SCALE LIÊN TỤC TOÀN DẢI: neo sàn 110px tại ~500px và trần 300px tại ~2200px ->
+       chữ SOON lớn dần đều theo từng px màn hình xuyên suốt, không còn đứng yên rồi tăng vọt
+       giữa chừng như công thức cũ. */
+    font-size: clamp(110px, 54px + 11.2vw, 300px); font-weight: 800; color: var(--accent); opacity: 0.1;
     z-index: 1; pointer-events: none; transition: 0.4s ease; text-transform: uppercase; line-height: 0.85; white-space: nowrap;
 }
 
@@ -263,16 +258,12 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
    xuống dưới thay vì bị đè. */
 .bottom-widgets-container {
     margin-top: auto; flex-shrink: 0;
-    /* FIX "TRÊN MÀN HÌNH TO BỊ ÉP NHỎ": trần cũ 800px bị chạm ngay từ ~1380px chiều rộng màn hình
-       (58vw = 800px tại đó), cùng nguyên nhân với .character-tkb-mini phía trên. Nâng trần lên
-       1100px (chạm trần ở ~1897px, khớp mốc với 2 chỗ đã nâng ở trên) để 2 khối widget tiếp tục
-       phình theo màn hình lớn thay vì dừng lại quá sớm rồi để trống nguyên mảng bên phải. */
-    display: flex; gap: clamp(14px, 1.6vw, 24px); width: clamp(560px, 58vw, 1300px); max-width: 100%;
-    /* CHIỀU CAO — công thức 2 điểm (không dùng breakpoint riêng, áp dụng mượt cho MỌI màn hình):
-       khớp ĐÚNG giá trị cũ (200px, mốc trần cũ) tại ~1300px nên không hề tụt so với trước ở dải
-       laptop/màn vừa, rồi tiếp tục tăng dần thêm tới 280px khi màn hình lớn hơn (~2200px+), thay
-       vì đứng khựng ở 200px như công thức cũ (18vw chạm trần ngay từ ~1111px, quá sớm). */
-    height: clamp(180px, 84px + 8.9vw, 280px); z-index: 10;
+    /* CHIỀU RỘNG — công thức scale liên tục toàn dải: neo sàn 560px tại ~500px và trần 1300px
+       tại ~2200px -> 2 khung widget lớn dần đều theo từng px màn hình xuyên suốt, không còn
+       đứng yên rồi tăng vọt giữa chừng như công thức cũ. */
+    display: flex; gap: clamp(14px, 1.6vw, 24px); width: clamp(560px, 342px + 43.5vw, 1300px); max-width: 100%;
+    /* CHIỀU CAO — cùng công thức, neo sàn 180px tại ~500px và trần 280px tại ~2200px. */
+    height: clamp(180px, 151px + 5.9vw, 280px); z-index: 10;
 }
 .widget-box {
     flex: 1; min-width: 0; background: var(--panel-bg); backdrop-filter: blur(20px);

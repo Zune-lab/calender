@@ -52,6 +52,10 @@ const PRIORITY_LEVELS = {
 };
 function getPriorityInfo(key) { return PRIORITY_LEVELS[key] || PRIORITY_LEVELS.normal; }
 let plannerNotifTimer = null;
+// TIẾNG CHUÔNG BÁO ĐÚNG GIỜ (giống báo thức/Google Calendar) — xem chi tiết ở mục "CHUÔNG BÁO
+// ĐÚNG GIỜ" phía dưới. AudioContext phải được tạo/resume trong 1 cử chỉ bấm thật của người
+// dùng thì mới phát được ở lần gọi sau (browser chặn tự phát âm thanh không do người dùng bấm).
+let plannerAlarmAudioCtx = null;
 
 // Khóa công khai VAPID — an toàn khi để lộ ở client (chỉ khóa RIÊNG TƯ mới cần giữ bí mật,
 // khóa đó nằm trong Edge Function secrets, không xuất hiện ở đây).
@@ -163,6 +167,12 @@ function initPlannerNotifications() {
                 }
                 if (perm === 'granted') {
                     localStorage.setItem('plannerNotifEnabled', '1');
+                    // Tạo AudioContext NGAY TRONG cử chỉ bấm này (bắt buộc — trình duyệt chặn phát
+                    // âm thanh không do người dùng chủ động bấm). Giữ lại để tái dùng lúc chuông
+                    // reo sau này, dù lúc đó chỉ chạy từ setInterval (không có cử chỉ bấm mới).
+                    try {
+                        plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    } catch (e) { console.warn('[PlannerAlarm] Trình duyệt không hỗ trợ Web Audio:', e.message); }
                     startPlannerNotifPolling();
                     await plannerSubscribePush(); // đăng ký nhận Push thật từ server (chạy nền được)
                     // Thông báo xác nhận nhẹ để người dùng biết đã bật thành công
@@ -190,6 +200,18 @@ function initPlannerNotifications() {
     if (plannerNotifEnabled() && Notification.permission === 'granted') {
         startPlannerNotifPolling();
         plannerSubscribePush();
+        // Lần này KHÔNG có cử chỉ bấm mới (trang vừa tải lại) -> AudioContext tạo ra sẽ ở trạng
+        // thái "suspended" (bị khoá). Lắng nghe cú click ĐẦU TIÊN bất kỳ ở đâu trên trang (mở
+        // modal, đổi tab, v.v.) để âm thầm resume() ngay khi có cơ hội, không cần người dùng
+        // phải bật/tắt lại thông báo mới có chuông.
+        try {
+            plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) { /* trình duyệt không hỗ trợ, bỏ qua — chuông sẽ không phát được nhưng thông báo chữ vẫn hoạt động bình thường */ }
+        const unlockPlannerAlarm = () => {
+            if (plannerAlarmAudioCtx && plannerAlarmAudioCtx.state === 'suspended') plannerAlarmAudioCtx.resume();
+        };
+        document.addEventListener('click', unlockPlannerAlarm, { once: true });
+        document.addEventListener('keydown', unlockPlannerAlarm, { once: true });
     }
 }
 
@@ -197,9 +219,13 @@ function startPlannerNotifPolling() {
     if (plannerNotifTimer) return; // đã chạy rồi, tránh chạy trùng nhiều interval
     checkUpcomingPlannerNotifications(); // kiểm tra ngay 1 lần, không đợi đủ 30s đầu tiên
     checkUpcomingDeadlineNotifications(); // MỤC 3: kiểm tra luôn thông báo theo Hạn (ngày)
+    checkPlannerAlarmArrival(); // FIX: hàm chuông báo đúng giờ đã viết sẵn nhưng bị BỎ QUÊN, chưa
+    // từng được gọi ở đâu cả -> chuông không bao giờ kêu dù code đã có đủ. Nối vào đây, chạy
+    // cùng nhịp với 2 hàm kiểm tra kia (ngay lần đầu + lặp lại mỗi 30s bên dưới).
     plannerNotifTimer = setInterval(() => {
         checkUpcomingPlannerNotifications();
         checkUpcomingDeadlineNotifications();
+        checkPlannerAlarmArrival();
     }, PLANNER_NOTIF_POLL_MS);
 }
 
@@ -210,6 +236,90 @@ function stopPlannerNotifPolling() {
 function plannerNotifiedSet() {
     try { return new Set(JSON.parse(localStorage.getItem('plannerNotifiedIds') || '[]')); }
     catch (e) { return new Set(); }
+}
+
+// =========================================
+// CHUÔNG BÁO ĐÚNG GIỜ (giống báo thức/Google Calendar) — TÁCH RIÊNG khỏi thông báo "báo trước
+// N phút" ở checkUpcomingPlannerNotifications() phía dưới, vì đó là 2 khái niệm khác nhau:
+//   - "Báo trước N phút" (đã có từ trước): 1 thông báo CHỮ im lặng, bắn sớm trong khoảng
+//     [0, N phút] TRƯỚC giờ bắt đầu, chỉ bắn ĐÚNG 1 LẦN mỗi việc/ngày.
+//   - "Chuông báo đúng giờ" (MỚI): phát tiếng chuông + thông báo riêng, bắn đúng lúc GIỜ THẬT
+//     đã điểm (không phải trước đó), y như báo thức thật.
+// Dùng bộ nhớ đã lưu (plannerAlarmFiredIds) riêng, không dùng chung set với "báo trước N phút"
+// ở trên, để 2 cơ chế không đụng/chặn lẫn nhau.
+// GIỚI HẠN: chuông chỉ phát được khi TAB ĐANG MỞ (kể cả chạy nền, không cần đang xem trang này)
+// vì Web Audio API cần trình duyệt đang chạy để phát âm thanh tuỳ chỉnh. Khi tắt hẳn trình
+// duyệt, vẫn nhận được thông báo hệ thống qua Push (sw.js) như bình thường, kèm âm thanh mặc
+// định của hệ điều hành (không tuỳ biến được vì đó là giới hạn chung của Web Push, không phải
+// thiếu sót ở đây).
+// =========================================
+function plannerAlarmFiredSet() {
+    try { return new Set(JSON.parse(localStorage.getItem('plannerAlarmFiredIds') || '[]')); }
+    catch (e) { return new Set(); }
+}
+function plannerSaveAlarmFiredSet(set) {
+    const todayStr = plannerFmtDateInput(new Date());
+    const kept = [...set].filter(key => key.startsWith(todayStr + '_'));
+    localStorage.setItem('plannerAlarmFiredIds', JSON.stringify(kept));
+}
+
+// Phát 3 tiếng "tinh" ngắn liên tiếp bằng Web Audio (không cần file âm thanh ngoài nào).
+function playPlannerAlarmSound() {
+    if (!plannerAlarmAudioCtx) return;
+    if (plannerAlarmAudioCtx.state === 'suspended') plannerAlarmAudioCtx.resume();
+    const ctx = plannerAlarmAudioCtx;
+    [0, 0.35, 0.7].forEach(offset => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880; // note A5 — âm "tinh" quen thuộc kiểu chuông báo
+        const t0 = ctx.currentTime + offset;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);   // vào nhanh
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28); // tắt dần, tránh tiếng "tách" khó chịu
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.3);
+    });
+}
+
+// Kiểm tra mọi việc hôm nay xem có việc nào VỪA ĐIỂM đúng giờ bắt đầu chưa (cho phép trễ tối đa
+// 1 phút so với lúc poll thực sự chạy, vì poll cách nhau 30s — đủ để không bỏ lỡ mốc chính xác
+// dù JS timer có thể trôi vài giây). Chỉ báo ĐÚNG 1 LẦN mỗi việc/ngày.
+async function checkPlannerAlarmArrival() {
+    if (!currentUser || !plannerNotifEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+    const now = new Date();
+    const todayStr = plannerFmtDateInput(now);
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+
+    const { data, error } = await sbClient.from('daily_plans')
+        .select('id, title, start_min, is_done')
+        .eq('user_id', currentUser.id)
+        .eq('plan_date', todayStr);
+    if (error || !data) return;
+
+    const fired = plannerAlarmFiredSet();
+    let changed = false;
+
+    data.forEach(b => {
+        if (b.is_done) return; // việc đã tick xong rồi thì khỏi báo thức nữa
+        const key = `${todayStr}_${b.id}`;
+        if (nowMin >= b.start_min && nowMin <= b.start_min + 1 && !fired.has(key)) {
+            try {
+                new Notification('⏰ Đến giờ: ' + (b.title || 'Việc chưa đặt tên'), {
+                    body: `Bắt đầu lúc ${plannerFmtHM(b.start_min)}`,
+                    tag: 'alarm_' + key,
+                    requireInteraction: true, // giữ nguyên trên màn hình tới khi người dùng bấm tắt, giống báo thức thật
+                });
+            } catch (e) { console.warn('[PlannerAlarm] Không bắn được thông báo:', e.message); }
+            playPlannerAlarmSound();
+            fired.add(key);
+            changed = true;
+        }
+    });
+
+    if (changed) plannerSaveAlarmFiredSet(fired);
 }
 
 function plannerClearNotifiedFor(dateStr, id) {

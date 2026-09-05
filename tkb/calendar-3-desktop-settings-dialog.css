@@ -70,7 +70,14 @@
 .main-glass-dashboard {
     position: relative; 
     width: calc(100vw - 140px); 
-    max-width: 1550px; 
+    /* FIX "CẢ TRANG TKB BỊ ÉP NHỎ, CO CỤM GIỮA MÀN HÌNH TO": trần cũ 1550px bị chạm ngay từ
+       ~1690px chiều rộng màn hình (100vw - 140px = 1550px tại đó) -> mọi PC/monitor rộng hơn
+       1690px (rất phổ biến) đều bị khoá cứng ở đúng 1550px, để trống viền 2 bên ngày càng rộng
+       khi màn hình càng to. Toàn bộ bảng TKB bên trong dùng Container Query (cqw) ăn theo đúng
+       bề rộng khung này, nên nâng trần ở ĐÚNG 1 CHỖ DUY NHẤT này là đủ để cả bảng lịch/badge/chữ
+       bên trong tự động lớn theo, không cần sửa lại từng nơi nhỏ lẻ. Nâng lên 1900px, mốc chạm
+       trần lùi ra ~2040px màn hình -> khung tiếp tục phình theo màn hình lớn thay vì dừng sớm. */
+    max-width: 1900px; 
     /* Tăng không gian chiều cao do đã bỏ Dock */
     height: calc(100vh - 80px); min-height: 560px;
     display: grid; grid-template-rows: auto 1fr; gap: 20px; padding: 28px; border-radius: 42px; overflow: hidden;
@@ -84,11 +91,14 @@
 
 .dashboard-topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; }
 .clock-widget { padding-left: 34px; }
-.clock-widget h1 { margin: 0; font-family: Consolas, "Courier New", monospace; font-size: clamp(2.15rem, 4vw, 3.25rem); line-height: 0.95; font-weight: 700; color: var(--text-main); text-shadow: 0 4px 12px rgba(0, 0, 0, 0.25); }
+/* ĐỒNG HỒ + TIÊU ĐỀ GIỮA TOPBAR: cùng công thức neo 2 điểm (sàn ~500px, trần ~2200px) như
+   .main-glass-dashboard/html — trần cũ (4vw/2vw thuần) chạm sớm ở ~1544px, giờ dời ra ~2200px
+   để 2 chữ này tiếp tục lớn theo màn hình PC thay vì đứng yên sớm như trước. */
+.clock-widget h1 { margin: 0; font-family: Consolas, "Courier New", monospace; font-size: clamp(2.15rem, 20.9px + 1.84vw, 3.25rem); line-height: 0.95; font-weight: 700; color: var(--text-main); text-shadow: 0 4px 12px rgba(0, 0, 0, 0.25); }
 .clock-widget p { margin: 6px 0 0; color: var(--text-muted); font-size: 0.95rem; font-weight: 700; }
 .center-title { text-align: center; }
 .center-title span { display: block; margin-bottom: 4px; color: var(--text-muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; }
-.center-title h2 { margin: 0; color: var(--text-main); font-size: clamp(1.45rem, 2vw, 2.1rem); line-height: 1; font-weight: 800; letter-spacing: 0; text-shadow: 0 6px 22px rgba(0, 0, 0, 0.22); }
+.center-title h2 { margin: 0; color: var(--text-main); font-size: clamp(1.45rem, 14.6px + 1.14vw, 2.1rem); line-height: 1; font-weight: 800; letter-spacing: 0; text-shadow: 0 6px 22px rgba(0, 0, 0, 0.22); }
 
 /* ==== TỰ ĐỘNG ĐỔI MÀU CHỮ ĐỒNG HỒ + TIÊU ĐỀ HEADER THEO ĐỘ SÁNG ẢNH NỀN ====
    JS (calendar-1-core.js, hàm updateTopbarContrast) tự đo độ sáng trung bình của ảnh nền đang

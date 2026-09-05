@@ -1,7 +1,10 @@
 /* FIX SCALE TOÀN TRANG: giống calendar.css — trang Hồ Sơ trước đây cũng không có rule set
    font-size gốc, toàn bộ "rem" bị neo cứng 16px. Thêm vào để đồng bộ 3 trang. */
 html {
-    font-size: clamp(14px, 12px + 0.45vw, 17px);
+    /* ĐỒNG BỘ CÔNG THỨC VỚI index.css (Dashboard) + calendar-1-base.css (TKB): trần cũ 17px bị
+       chạm ngay từ ~1111px chiều rộng màn hình. Đổi sang công thức neo 2 điểm — sàn 14px tại
+       ~500px, trần 19px tại ~2200px — để cả 3 trang scale chữ đồng nhất với nhau trên màn lớn. */
+    font-size: clamp(14px, 12.5px + 0.29vw, 19px);
 }
 
 /* =========================================
@@ -56,8 +59,11 @@ body {
 }
 .topbar-left { display: flex; align-items: center; gap: 16px; }
 .topbar-shortcuts { display: flex; align-items: center; gap: 10px; }
+/* CÙNG CÔNG THỨC NEO 2 ĐIỂM VỚI index.css/calendar-*.css: sàn tại ~500px, trần tại ~2200px —
+   trần cũ (3.4vw thuần) chạm sớm, giờ dời ra ~2200px để 2 nút này lớn theo màn hình đồng bộ
+   với phần còn lại của web. */
 .shortcut-btn {
-    width: clamp(38px, 3.4vw, 44px); height: clamp(38px, 3.4vw, 44px); border-radius: 13px;
+    width: clamp(38px, 36.2px + 0.35vw, 44px); height: clamp(38px, 36.2px + 0.35vw, 44px); border-radius: 13px;
     background: var(--panel-bg); border: 1px solid var(--panel-border);
     backdrop-filter: blur(20px); display: flex; align-items: center; justify-content: center;
     color: var(--text-muted); font-size: 1rem; cursor: pointer;
@@ -66,7 +72,7 @@ body {
 .shortcut-btn:hover { color: var(--text-main); border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.08); }
 
 .back-btn {
-    width: clamp(38px, 3.4vw, 44px); height: clamp(38px, 3.4vw, 44px); border-radius: 14px;
+    width: clamp(38px, 36.2px + 0.35vw, 44px); height: clamp(38px, 36.2px + 0.35vw, 44px); border-radius: 14px;
     background: var(--panel-bg); border: 1px solid var(--panel-border);
     backdrop-filter: blur(20px); display: flex; align-items: center; justify-content: center;
     color: var(--text-main); font-size: 1.1rem; cursor: pointer;
@@ -118,8 +124,10 @@ body {
 }
 
 /* ---------- ẢNH ĐẠI DIỆN ---------- */
+/* Cùng công thức neo 2 điểm (sàn ~500px, trần ~2200px) — ảnh đại diện lớn dần mượt theo màn
+   hình thay vì đứng khựng sớm. */
 .avatar-preview {
-    width: clamp(88px, 9vw, 120px); height: clamp(88px, 9vw, 120px); border-radius: 50%; flex-shrink: 0; margin: 0 auto 16px;
+    width: clamp(88px, 78.6px + 1.88vw, 120px); height: clamp(88px, 78.6px + 1.88vw, 120px); border-radius: 50%; flex-shrink: 0; margin: 0 auto 16px;
     background: rgba(255,255,255,0.05); border: 2px solid var(--accent);
     display: flex; align-items: center; justify-content: center; overflow: hidden;
     transition: border-color var(--duration-normal) var(--ease-standard);

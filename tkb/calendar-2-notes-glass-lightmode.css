@@ -436,7 +436,8 @@ body.light-mode .planner-day-header { text-shadow: none; }
 .planner-block.is-compact .planner-block-body { padding-right: 26px; }
 
 /* Khối đã tick xong: làm dịu màu + gạch ngang tên việc, để phân biệt rõ với việc còn dang dở
-   mà không cần xoá khối khỏi lưới (vẫn giữ nguyên lịch sử trong ngày). */
+   mà không cần xoá khối khỏi lưới ngay lập tức (vẫn giữ lịch sử trong vài ngày) — việc đã xong
+   sẽ tự bị xoá hẳn khỏi Supabase sau 7 ngày, xem loadPlannerBlocks() ở calendar-5-planner-ui.js. */
 .planner-block.is-done { opacity: 0.55; filter: saturate(0.7); }
 .planner-block.is-done:hover { opacity: 0.8; }
 .planner-block.is-done .planner-block-title { text-decoration: line-through; text-decoration-thickness: 1.5px; }
