@@ -217,16 +217,30 @@ function initPlannerNotifications() {
 
 function startPlannerNotifPolling() {
     if (plannerNotifTimer) return; // đã chạy rồi, tránh chạy trùng nhiều interval
-    checkUpcomingPlannerNotifications(); // kiểm tra ngay 1 lần, không đợi đủ 30s đầu tiên
+    checkTodayPlannerBlocks(); // kiểm tra ngay 1 lần, không đợi đủ 30s đầu tiên
     checkUpcomingDeadlineNotifications(); // MỤC 3: kiểm tra luôn thông báo theo Hạn (ngày)
-    checkPlannerAlarmArrival(); // FIX: hàm chuông báo đúng giờ đã viết sẵn nhưng bị BỎ QUÊN, chưa
-    // từng được gọi ở đâu cả -> chuông không bao giờ kêu dù code đã có đủ. Nối vào đây, chạy
-    // cùng nhịp với 2 hàm kiểm tra kia (ngay lần đầu + lặp lại mỗi 30s bên dưới).
     plannerNotifTimer = setInterval(() => {
-        checkUpcomingPlannerNotifications();
+        checkTodayPlannerBlocks();
         checkUpcomingDeadlineNotifications();
-        checkPlannerAlarmArrival();
     }, PLANNER_NOTIF_POLL_MS);
+}
+
+// GỘP 2 HÀM (báo trước N phút + chuông báo đúng giờ) VỀ CHUNG 1 LẦN QUERY DUY NHẤT: cả hai vốn
+// đọc CÙNG bảng daily_plans với CÙNG điều kiện lọc (user_id + plan_date hôm nay), chỉ khác nhau
+// ở LOGIC xử lý sau khi có dữ liệu — tách riêng thành 2 lần gọi Supabase mỗi 30 giây là dư thừa
+// không cần thiết. Query 1 lần ở đây, rồi truyền thẳng data cho cả 2 hàm logic bên dưới.
+async function checkTodayPlannerBlocks() {
+    if (!currentUser || !plannerNotifEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+    const todayStr = plannerFmtDateInput(new Date());
+    const { data, error } = await sbClient.from('daily_plans')
+        .select('id, title, start_min, end_min, is_done')
+        .eq('user_id', currentUser.id)
+        .eq('plan_date', todayStr);
+    if (error || !data) return;
+
+    checkUpcomingPlannerNotifications(data, todayStr);
+    checkPlannerAlarmArrival(data, todayStr);
 }
 
 function stopPlannerNotifPolling() {
@@ -286,18 +300,11 @@ function playPlannerAlarmSound() {
 // Kiểm tra mọi việc hôm nay xem có việc nào VỪA ĐIỂM đúng giờ bắt đầu chưa (cho phép trễ tối đa
 // 1 phút so với lúc poll thực sự chạy, vì poll cách nhau 30s — đủ để không bỏ lỡ mốc chính xác
 // dù JS timer có thể trôi vài giây). Chỉ báo ĐÚNG 1 LẦN mỗi việc/ngày.
-async function checkPlannerAlarmArrival() {
+async function checkPlannerAlarmArrival(data, todayStr) {
     if (!currentUser || !plannerNotifEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
 
     const now = new Date();
-    const todayStr = plannerFmtDateInput(now);
     const nowMin = now.getHours() * 60 + now.getMinutes();
-
-    const { data, error } = await sbClient.from('daily_plans')
-        .select('id, title, start_min, is_done')
-        .eq('user_id', currentUser.id)
-        .eq('plan_date', todayStr);
-    if (error || !data) return;
 
     const fired = plannerAlarmFiredSet();
     let changed = false;
@@ -334,19 +341,24 @@ function plannerSaveNotifiedSet(set) {
     localStorage.setItem('plannerNotifiedIds', JSON.stringify(kept));
 }
 
-async function checkUpcomingPlannerNotifications() {
+async function checkUpcomingPlannerNotifications(data, todayStr) {
     if (!currentUser || !plannerNotifEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
 
     const now = new Date();
-    const todayStr = plannerFmtDateInput(now);
+    // 2 CHỖ GỌI KHÁC (đăng nhập xong, vừa lưu 1 việc mới) không có sẵn data để truyền vào —
+    // vẫn giữ khả năng tự query lấy data khi không được gọi kèm tham số, để không phải sửa lại
+    // 2 nơi đó. Chỉ khi gọi TỪ checkTodayPlannerBlocks() (vòng lặp poll mỗi 30s, tần suất cao
+    // nhất) mới thực sự tận dụng được data đã có sẵn, tránh query Supabase thừa.
+    if (!data) {
+        todayStr = plannerFmtDateInput(now);
+        const { data: fetched, error } = await sbClient.from('daily_plans')
+            .select('id, title, start_min, end_min')
+            .eq('user_id', currentUser.id)
+            .eq('plan_date', todayStr);
+        if (error || !fetched) return;
+        data = fetched;
+    }
     const nowMin = now.getHours() * 60 + now.getMinutes();
-
-    const { data, error } = await sbClient.from('daily_plans')
-        .select('id, title, start_min, end_min')
-        .eq('user_id', currentUser.id)
-        .eq('plan_date', todayStr);
-
-    if (error || !data) return;
 
     const notified = plannerNotifiedSet();
     let changed = false;

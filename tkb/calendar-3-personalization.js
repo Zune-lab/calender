@@ -129,7 +129,12 @@ window.applyPresetColor = function(color, btnElement) {
     const subject = document.getElementById('subject-color-select').value;
     if(!subject) { showAlert("Vui lòng chọn một môn học từ danh sách ở trên trước khi chọn màu!", "Chưa chọn môn"); return; }
 
-    document.querySelectorAll('.neon-color-btn').forEach(b => b.classList.remove('active'));
+    // FIX: trước đây querySelectorAll('.neon-color-btn') KHÔNG giới hạn phạm vi, nên vô tình xoá
+    // luôn cả trạng thái "active" của các nút màu ACCENT HỆ THỐNG ở #accent-color-presets (2 khối
+    // nằm cạnh nhau trong cùng tab Cài Đặt, dùng CHUNG class .neon-color-btn) — chọn màu môn học
+    // xong quay lại thấy màu accent đã chọn trước đó mất viền "đang chọn", dù màu thật không đổi.
+    // Giới hạn đúng trong #neon-color-presets (khối màu MÔN HỌC) để 2 tính năng không đụng nhau.
+    document.querySelectorAll('#neon-color-presets .neon-color-btn').forEach(b => b.classList.remove('active'));
     if(btnElement) btnElement.classList.add('active');
 
     saveSubjectColor(subject, color);
@@ -144,7 +149,7 @@ window.applySubjectColor = function() {
     
     if(!subject) { showAlert("Vui lòng chọn một môn học từ danh sách để đổi màu!", "Chưa chọn môn"); return; }
 
-    document.querySelectorAll('.neon-color-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#neon-color-presets .neon-color-btn').forEach(b => b.classList.remove('active'));
 
     saveSubjectColor(subject, color);
 
@@ -675,4 +680,3 @@ window.loadExams = async function() {
     html += '</div>';
     wrapper.innerHTML = html;
 }
-
