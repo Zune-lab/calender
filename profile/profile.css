@@ -146,7 +146,7 @@ body {
 }
 .btn-pill:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.25); }
 .btn-pill.danger { color: #ff8a93; border-color: rgba(255,70,85,0.25); }
-.btn-pill.danger:hover { background: rgba(255,70,85,0.15); border-color: var(--accent); color: var(--accent); }
+.btn-pill.danger:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); border-color: var(--accent); color: var(--accent); }
 input[type="file"] { display: none; }
 
 /* ---------- FORM ---------- */
@@ -161,7 +161,7 @@ input[type="file"] { display: none; }
     color: var(--text-main); font-size: 0.95rem; outline: none;
     transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
 }
-.form-group input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,70,85,0.15); }
+.form-group input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
 .form-group input[type="text"]::placeholder { color: rgba(255,255,255,0.25); }
 
 .readonly-field { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); cursor: not-allowed; }
@@ -199,9 +199,9 @@ input[type="file"] { display: none; }
     background: var(--accent); color: #fff; border: none; padding: 14px 32px;
     border-radius: 14px; font-size: 0.95rem; font-weight: 700; cursor: pointer;
     transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
-    box-shadow: 0 10px 25px rgba(255,70,85,0.25);
+    box-shadow: 0 10px 25px color-mix(in srgb, var(--accent) 25%, transparent);
 }
-.save-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(255,70,85,0.35); }
+.save-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 35%, transparent); }
 .save-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 .save-status { font-size: 0.85rem; color: var(--text-muted); }
 .save-status.ok { color: #4ade80; }

@@ -388,14 +388,30 @@ body.light-mode .timetable-table th { text-shadow: none; }
     transition: opacity 0.1s ease-out;
 }
 
-/* FIX: Tô sáng cột "Thứ" của ngày hôm nay thật, để mở TKB lên là thấy ngay hôm nay là thứ mấy */
+/* FIX: Đánh dấu cột "Thứ" của ngày hôm nay thật, để mở TKB lên là thấy ngay hôm nay là thứ mấy.
+   Không dùng khung/box nữa (đã thử khối tô màu rồi viền mảnh, đều bị chê nhìn kì / lỗi vẽ) ->
+   chỉ còn CHỮ đảm nhiệm việc báo hiệu: đậm + màu accent + gạch chân nhỏ dưới tên Thứ. */
 .timetable-table th.current-day-th {
-    background: linear-gradient(135deg, var(--accent), rgba(255, 255, 255, 0.15)) !important;
-    border-radius: 14px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    background: transparent !important;
+    box-shadow: none;
+    color: var(--accent) !important;
+    /* !important bắt buộc: body.light-mode .timetable-table th (ở calendar-2-notes-glass-
+       lightmode.css) có độ đặc hiệu CAO HƠN selector này (thêm "body"+".light-mode"), nên nếu
+       không có !important thì ở Light Mode nó âm thầm đè font-weight về lại 400, chữ mất đậm. */
+    font-weight: 700 !important;
+    text-shadow: none !important;
 }
-.timetable-table th.current-day-th .date-sub { color: rgba(255, 255, 255, 0.9); }
-body.light-mode .timetable-table th.current-day-th .date-sub { color: rgba(255, 255, 255, 0.85); }
+.timetable-table th.current-day-th::after {
+    content: '';
+    display: block;
+    width: 22px;
+    height: 2.5px;
+    border-radius: 2px;
+    background: var(--accent);
+    margin: 4px auto 0;
+}
+.timetable-table th.current-day-th .date-sub { color: color-mix(in srgb, var(--accent) 85%, rgba(255, 255, 255, 0.5)); }
+body.light-mode .timetable-table th.current-day-th .date-sub { color: color-mix(in srgb, var(--accent) 80%, rgba(15, 23, 42, 0.4)); }
 
 .timetable-table td.grid-time { color: rgba(255, 255, 255, 0.9); font-weight: 700; font-size: clamp(0.54rem, 1.1cqw, 0.75rem); background: transparent; text-align: center; text-shadow: 0 1px 4px rgba(0,0,0,0.3); line-height: 1.25; padding: 0 2px; }
 .timetable-table td.time-col { font-size: clamp(0.54rem, 1.1cqw, 0.78rem); }
