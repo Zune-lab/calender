@@ -405,7 +405,7 @@ async function loadSubjectDetails(relatedSubjectIds) {
     const lists = { notes: document.getElementById('notes-list'), notesTrash: document.getElementById('notes-trash'), tasksUp: document.getElementById('tasks-upcoming'), tasksDone: document.getElementById('tasks-done'), tasksTrash: document.getElementById('tasks-trash') };
     Object.values(lists).forEach(el => el.innerHTML = '');
     
-    let counts = { notesActive: 0, notesTrash: 0, tasksTrash: 0 }; 
+    let counts = { notesActive: 0, notesTrash: 0, tasksActive: 0, tasksTrash: 0 }; 
 
     // MỤC 3: sắp xếp Quan trọng lên trước, rồi tới Bình thường, Không quan trọng lắm — trong cùng
     // 1 mức thì việc có Hạn gần nhất lên trước (để "nhận biết cái nào cần làm trước" đúng yêu cầu).
@@ -463,7 +463,7 @@ async function loadSubjectDetails(relatedSubjectIds) {
                         ${actionBtn}
                         <input type="checkbox" class="mac-checkbox" onchange="markTaskDone('${item.id}')">
                     </div>`;
-                lists.tasksUp.appendChild(li);
+                lists.tasksUp.appendChild(li); counts.tasksActive++;
             } else {
                 li.innerHTML = `
                     <div class="item-content"><span class="text" style="text-decoration: line-through; opacity: 0.5;">${priorityHtml}${escapeHtml(item.content)}</span>${dueHtml}${originHtml}</div>
@@ -471,7 +471,7 @@ async function loadSubjectDetails(relatedSubjectIds) {
                         ${actionBtn}
                         <input type="checkbox" class="mac-checkbox" checked onchange="unmarkTask('${item.id}')">
                     </div>`;
-                lists.tasksDone.appendChild(li);
+                lists.tasksDone.appendChild(li); counts.tasksActive++;
             }
         }
     });
@@ -523,6 +523,18 @@ async function loadSubjectDetails(relatedSubjectIds) {
             notesClearAllBtn.classList.remove('hidden-trash');
         }
     }
+
+    // FIX "1 BÊN RỖNG VẪN CHIẾM NỬA KHUNG": trên mobile 2 khối Ghi chú/Tiến độ chia đều
+    // 1fr 1fr chiều cao popup — nếu 1 bên không có dữ liệu gì (VD "Tiến độ công việc" rỗng)
+    // nó vẫn choán nửa khung trong khi bên còn lại có nội dung lại bị ép nhỏ lại. Gắn class
+    // "section-empty" khi bên đó không có mục active nào (không tính thùng rác, vì thùng rác
+    // mặc định đang ẩn) để CSS (xem calendar-3-desktop-settings-dialog.css, khối
+    // @media max-width:760px) tự chuyển hàng đó về "auto" (co khít nội dung) và nhường phần
+    // còn lại cho bên có dữ liệu.
+    const noteSection = document.getElementById('note-section');
+    const taskSection = document.getElementById('task-section');
+    if (noteSection) noteSection.classList.toggle('section-empty', counts.notesActive === 0);
+    if (taskSection) taskSection.classList.toggle('section-empty', counts.tasksActive === 0);
 }
 
 window.handleEnter = function(e, type) {
