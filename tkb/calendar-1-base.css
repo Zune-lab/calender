@@ -61,17 +61,26 @@ html {
 .global-loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 
 .loader { width: 200px; height: 60px; position: relative; z-index: 1; }
+/* FIX "BOUNCE ĐÔI KHI ĐỨNG HÌNH": bản cũ animate trực tiếp `top` + `height` mỗi khung hình ->
+   2 thuộc tính này bắt trình duyệt LAYOUT LẠI (reflow) trên main thread ở từng frame. Khi lúc
+   loading có JS đang bận xử lý (fetch Supabase, dựng TKB...) chiếm main thread, animation kiểu
+   này bị giật/đứng khựng vì phải tranh chấp main thread với JS. Đổi hẳn sang chỉ dùng `transform`
+   (translateY + scale) — thuộc tính này chạy trên compositor/GPU riêng, không phụ thuộc main
+   thread bận hay rảnh, nên dù JS đang xử lý nặng thì các chấm vẫn nảy mượt bình thường.
+   `top: 0` giữ cố định làm vị trí gốc (đỉnh), dùng translateY(40px) để "hạ" xuống đáy container
+   60px (60 - 20 chiều cao chấm = 40px) thay vì đổi top; scale thay cho đổi height. */
 .loader__dot {
-    width: var(--dot-size); height: var(--dot-size); position: absolute; border-radius: 50%;
+    width: var(--dot-size); height: var(--dot-size); position: absolute; top: 0; border-radius: 50%;
     background: linear-gradient(135deg, var(--dot-highlight), var(--dot-base));
-    left: 15%; transform-origin: 50%;
+    left: 15%; transform-origin: 50% 100%;
     animation: bounce-dot var(--cycle) alternate infinite var(--ease);
     box-shadow: 0 1px 10px rgba(255, 255, 255, 0.35);
+    will-change: transform;
 }
 @keyframes bounce-dot {
-    0% { top: 60px; height: 5px; border-radius: 50px 50px 25px 25px; transform: scaleX(1.7); }
-    40% { height: 20px; border-radius: 50%; transform: scaleX(1); }
-    100% { top: 0%; }
+    0% { transform: translateY(40px) scale(1.7, 0.25); border-radius: 50px 50px 25px 25px; }
+    40% { transform: translateY(0) scale(1, 1); border-radius: 50%; }
+    100% { transform: translateY(0) scale(1, 1); border-radius: 50%; }
 }
 .loader__dot:nth-child(2) { left: 45%; animation-delay: 0.2s; }
 .loader__dot:nth-child(3) { left: auto; right: 15%; animation-delay: 0.3s; }
@@ -81,6 +90,7 @@ html {
     position: absolute; top: 62px; transform-origin: 50%; z-index: -1; left: 15%;
     filter: blur(var(--shadow-blur));
     animation: bounce-shadow var(--cycle) alternate infinite var(--ease);
+    will-change: transform;
 }
 @keyframes bounce-shadow {
     0% { transform: scaleX(1.5); }
