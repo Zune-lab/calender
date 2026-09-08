@@ -10,6 +10,12 @@ let dashClient = null;
 let dashSubjects = [];
 let semesterStartDate = new Date('2026-05-18');
 let currentUserId = null;
+// FIX: id của MÔN HỌC đang hiển thị ở Hero (nếu có) — dùng để lọc đúng BÀI TẬP/GHI CHÚ của
+// riêng môn đó ở widget bên dưới. Trước đây widget lấy thẳng window.allTasks/allNotes (TOÀN
+// BỘ ghi chú của MỌI môn học gộp chung), nên hero đang hiện "Cầu Lông 1" mà dưới lại lòi ra
+// ghi chú của môn khác (vd "làm code theo HƯỚNG ĐỐI TƯỢNG") — rất dễ gây hiểu lầm. reset về
+// null mỗi lần renderHero() chạy lại, chỉ gán khi thực sự có 1 môn học cụ thể đang hiển thị.
+let heroSubjectId = null;
 
 // escapeHtml(), parseVNExamDate() và toàn bộ logic màu accent (ACCENT_POOL,
 // hashStringToIndex, resolveAccentForUser...) giờ nằm ở shared.js
@@ -392,11 +398,13 @@ function renderHero(now, weekIndex, examsData) {
     // bất kể lịch học bình thường còn hay đã hết (thi quan trọng hơn lớp học thường)
     const todayExam = findTodayExam(examsData, now);
     if (todayExam) {
+        heroSubjectId = null; // ngày thi không gắn với 1 "subject_details.subject_id" cụ thể
         renderExamDayHero(todayExam, now);
         return;
     }
 
     if (!dashSubjects.length) {
+        heroSubjectId = null;
         document.getElementById('mini-tkb-name').innerText = "TRỐNG LỊCH HỌC";
         document.getElementById('mini-tkb-time').innerText = "Click icon TKB bên phải để tải dữ liệu";
         document.getElementById('val-bg-text').innerText = "SGU";
@@ -457,6 +465,7 @@ function renderHero(now, weekIndex, examsData) {
 
     // ĐÃ SỬA: Khi lịch học kết thúc, background cũng sẽ random thay vì chỉ là màu Đỏ mặc định
     if (!upcoming) {
+        heroSubjectId = null;
         if (weekIndex < 0) {
             // weekIndex = -1 nghĩa là semesterStartDate còn nằm trong TƯƠNG LAI -> kỳ CHƯA bắt đầu,
             // không phải đã kết thúc. Tách nhánh riêng để không hiển thị nhầm "KỲ HỌC KẾT THÚC".
@@ -488,6 +497,10 @@ function renderHero(now, weekIndex, examsData) {
         applyAmbientTint(randomColor);
         return;
     }
+
+    // FIX: lưu lại đúng id môn học đang hiển thị ở Hero, để widget BÀI TẬP/GHI CHÚ bên dưới lọc
+    // đúng theo môn này (xem switchWidget) thay vì gộp chung ghi chú của mọi môn học lại.
+    heroSubjectId = upcoming.id;
 
     const rawName = (upcoming.name || 'Môn Ẩn').split('-')[0].split('(')[0].trim();
     document.getElementById('mini-tkb-name').innerText = rawName;
@@ -533,11 +546,19 @@ window.switchWidget = function(idx, btn) {
     const box = document.getElementById('widget-dynamic-content');
     if(!box) return;
 
-    const data = idx === 0 ? (window.allTasks || []) : (window.allNotes || []);
+    const rawData = idx === 0 ? (window.allTasks || []) : (window.allNotes || []);
+    // FIX: CHỈ hiện đúng bài tập/ghi chú của MÔN đang hiển thị ở Hero phía trên (so theo
+    // subject_details.subject_id), thay vì gộp ghi chú của TẤT CẢ môn học lại — trước đây hero
+    // đang hiện "Cầu Lông 1" mà widget dưới lại lòi ra ghi chú của môn hoàn toàn khác, gây hiểu
+    // lầm là ghi chú đó thuộc về môn đang hiển thị.
+    const data = heroSubjectId ? rawData.filter(d => d.subject_id === heroSubjectId) : [];
     const icon = idx === 0 ? 'fa-tasks' : 'fa-pen';
 
     if (!data.length) {
-        box.innerHTML = `<div class="empty-state"><i class="fas ${idx === 0 ? 'fa-check-circle' : 'fa-sticky-note'}"></i> ${idx === 0 ? "Xong hết bài tập!" : "Chưa có ghi chú nào."}</div>`;
+        const emptyMsg = !heroSubjectId
+            ? "Không có môn học cụ thể đang hiển thị."
+            : (idx === 0 ? "Xong hết bài tập môn này!" : "Chưa có ghi chú nào cho môn này.");
+        box.innerHTML = `<div class="empty-state"><i class="fas ${idx === 0 ? 'fa-check-circle' : 'fa-sticky-note'}"></i> ${emptyMsg}</div>`;
         return;
     }
 
