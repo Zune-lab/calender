@@ -439,6 +439,29 @@ body.bg-is-light .center-title span {
     .subject-meta-grid { margin-top: 10px; gap: 6px; }
     .meta-badge { padding: 5px 9px; gap: 5px; font-size: 0.68rem; }
     .meta-badge svg { width: 11px !important; height: 11px !important; }
+
+    /* FIX "NÚT DỌN RÁC TRÀN RA NGOÀI POPUP": .section-header (và div bọc cụm nút bên phải,
+       cả 2 đều set inline "display:flex" không có flex-wrap) xếp chung 1 hàng KHÔNG XUỐNG DÒNG:
+       tiêu đề h4 ("Ghi chú & Thông báo"/"Tiến độ công việc", ép white-space:nowrap+flex-shrink:0)
+       + nút "Xóa hết" (.clear-all-btn, cũng flex-shrink:0) + cụm "Dọn rác"+"Khôi phục tất cả"
+       (#notes-trash-actions, chỉ ẩn/hiện theo trạng thái BẤM MỞ thùng rác — độc lập với
+       .clear-all-btn, nên có thể hiện CÙNG LÚC cả 2) + nút thùng rác (.trash-toggle). Không món
+       nào được co lại hay xuống dòng -> khi mở thùng rác trên mobile trong lúc vẫn còn ghi chú
+       đang active, tổng bề rộng 4 control vượt xa khung popup đã hẹp lại (95vw, padding 18px),
+       phần dư (thường là "Dọn rác") bị đẩy lòi hẳn ra ngoài card vì .popup-panel không có
+       overflow:hidden để chặn (đúng bug trong ảnh chụp). Cho cả 2 hàng flex được wrap, cụm nút
+       xuống dòng riêng bên dưới tiêu đề khi không đủ chỗ, đồng thời thu gọn từng nút (bỏ nhãn
+       chữ, chỉ giữ icon) để ưu tiên vẫn vừa 1 hàng trên phần lớn màn hình trước khi phải wrap. */
+    .section-header { flex-wrap: wrap; row-gap: 6px; }
+    .section-header > div { flex-wrap: wrap; row-gap: 6px; justify-content: flex-end; flex: 1 1 auto; }
+    .section-header h4 { white-space: normal; font-size: 0.95rem; flex: 1 1 auto; }
+    .clear-all-btn { padding: 0 10px; }
+    .clear-all-btn span { display: none; } /* giữ icon thùng rác, ẩn chữ "Xóa hết" cho gọn */
+    .header-trash-btn { min-width: 0; padding: 6px 10px; }
+    .header-trash-btn .fancy-delete-btn__label { display: none; } /* giữ icon, ẩn chữ "Dọn rác" */
+    .restore-all-btn { width: 30px; height: 30px; }
+    .restore-all-btn svg { width: 14px; height: 14px; }
+    .trash-toggle { padding: 5px 8px; font-size: 0.68rem; }
 }
 
 /* =========================================
