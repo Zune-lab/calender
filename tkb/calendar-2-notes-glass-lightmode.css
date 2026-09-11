@@ -212,7 +212,12 @@ body.light-mode .subject-card-td:hover {
 
 /* Đậm chữ hơn cho dễ đọc */
 body.light-mode .subject-card-td h4 { color: #0f172a; text-shadow: none; font-weight: 800; }
-body.light-mode .subject-card-td .course-code { text-shadow: none; }
+/* FIX BUG "MÃ HỌC PHẦN GẦN NHƯ VÔ HÌNH Ở CHẾ ĐỘ SÁNG": 2 dòng h4/info-text bên cạnh đều có đổi
+   "color" tối cho light-mode, riêng dòng course-code chỉ đổi text-shadow mà QUÊN đổi color -> vẫn
+   giữ nguyên màu trắng gốc (rgba(255,255,255,0.92) từ .subject-card-td .course-code) - chữ trắng
+   trên nền thẻ sáng gần như vô hình. Phát hiện khi tự test tính năng "Chụp TKB" ở light-mode
+   (ảnh chụp lộ rõ y hệt, không phải lỗi riêng của tính năng chụp). Thêm color tối cùng tông h4. */
+body.light-mode .subject-card-td .course-code { color: #0f172a; text-shadow: none; }
 body.light-mode .subject-card-td .info-text { color: #334155; text-shadow: none; font-weight: 600; }
 body.light-mode .subject-card-td .time-text { 
     background: rgba(0, 0, 0, 0.06); 

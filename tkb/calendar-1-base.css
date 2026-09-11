@@ -580,6 +580,18 @@ body.light-mode #week-selector { color: #1e293b; }
 /* Môn nội dung ngắn (.compact): giữ nguyên mức clamp mặc định ở trên, không cần thu nhỏ thêm —
    khai báo rõ ràng để không lệ thuộc default ngầm định, dễ chỉnh sau này nếu cần. */
 .subject-card-td.compact h4 { font-size: clamp(0.62rem, 1.6cqw, 0.95rem); }
+
+/* =========================================
+   5B. NÚT "CHỤP TKB" (xem captureFullTimetable() trong calendar-6-export-capture.js)
+========================================= */
+/* FIX BUG "MẤT TIẾT 1/TIẾT 10 + ẢNH XẤU": bản đầu tiên chỉnh trực tiếp #timetable-wrapper
+   trên chính trang thật rồi chụp — nhưng .main-glass-dashboard (khối cha) có height cố định +
+   overflow:hidden nên vẫn cắt mất phần trên/dưới dù wrapper đã giãn ra. Giờ toàn bộ việc thu
+   nhỏ/chụp chạy trên 1 BẢN SAO tách hẳn ra ngoài DOM (gắn vào <body>, đẩy ra ngoài màn hình) do
+   JS tự tạo/tự xoá mỗi lần bấm nút — không còn style CSS "chế độ chụp" nào cần khai báo sẵn ở
+   đây nữa (JS gán thẳng style cho bản sao), nên mục 5B giờ chỉ còn trạng thái loading của nút. */
+#capture-timetable-btn.is-capturing { opacity: 0.6; pointer-events: none; }
+
 /* =========================================
    6. POPUP DETAIL WINDOWS & BADGES
 ========================================= */

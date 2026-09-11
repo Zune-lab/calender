@@ -327,6 +327,13 @@ body.bg-is-light .center-title span {
     .import-btn { min-height: 32px; padding: 0 10px; gap: 6px; white-space: nowrap; }
     .import-btn span { font-size: 0.7rem; }
     .import-btn svg { width: 13px; height: 13px; }
+    /* FIX PHÒNG NGỪA: thêm hẳn 1 nút "Chụp TKB" nữa cạnh "Nhập TKB" trong .top-actions (đang
+       flex-wrap:nowrap có chủ đích - xem FIX MỤC 4 phía trên) sẽ lặp lại đúng kiểu tràn ngang
+       vừa sửa ở popup Chi tiết môn học, lần này là ở cả hàng topbar. Thu #capture-timetable-btn
+       về chỉ còn icon vuông (ẩn chữ "Chụp TKB") trên mobile, giữ đúng cỡ với các nút icon khác. */
+    #capture-timetable-btn { min-height: 32px; width: 32px; padding: 0; justify-content: center; gap: 0; }
+    #capture-timetable-btn span { display: none; }
+    #capture-timetable-btn svg { width: 15px; height: 15px; }
     /* FIX: KHÔNG scale .profile-pill vì .custom-dropdown-list (menu tài khoản) là con của nó ->
        bị kéo theo transform-origin:right center, làm dropdown lệch vị trí và đè lên nội dung tab bên dưới.
        Chỉ scale phần hiển thị (.profile-display), để dropdown giữ nguyên kích thước/vị trí bình thường. */
@@ -876,6 +883,28 @@ body.light-mode #custom-dialog-cancel {
     color: #475569 !important; background: rgba(0,0,0,0.05) !important; border-color: rgba(0,0,0,0.05) !important; 
 }
 body.light-mode #custom-dialog-cancel:hover { background: rgba(0,0,0,0.1) !important; }
+
+/* =========================================
+   19B. XEM TRƯỚC ẢNH TKB TRƯỚC KHI LƯU (#capture-preview-overlay)
+   Dùng lại đúng khung .custom-dialog-overlay/.custom-dialog-box cho đồng bộ, chỉ nới rộng riêng
+   cho hộp này (ảnh TKB thường cao/rộng hơn nhiều 1 hộp thông báo chữ bình thường) và cho phần
+   ảnh tự cuộn riêng bên trong nếu vẫn cao hơn màn hình, thay vì đẩy tràn cả hộp thoại.
+========================================= */
+.capture-preview-box { width: min(720px, 92vw); max-width: 92vw; }
+.capture-preview-header p { margin-top: 2px; }
+.capture-preview-scroll {
+    width: 100%; max-height: min(65vh, 560px); overflow: auto;
+    border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.25);
+}
+#capture-preview-img { display: block; width: 100%; height: auto; }
+body.light-mode .capture-preview-scroll { border-color: rgba(0,0,0,0.08); background: rgba(0,0,0,0.04); }
+
+@media (max-width: 760px) {
+    .capture-preview-box { width: 94vw; padding: 24px 16px 18px; }
+    .capture-preview-scroll { max-height: 55vh; }
+}
+
 /* =========================================
    20. CỤM CHỌN TUẦN KÍNH MỜ (CUSTOM DROPDOWN)
 ========================================= */

@@ -15,6 +15,17 @@
     <link rel="apple-touch-icon" href="../icon-192.png">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Dùng để chụp #timetable-wrapper thành ảnh PNG cho tính năng "Chụp TKB" - xem
+         calendar-6-export-capture.js.
+         FIX "LỖI CHỤP ẢNH: Attempting to parse an unsupported color function color-mix": bản
+         html2canvas gốc (niklasvh/html2canvas, kể cả bản mới nhất 1.4.1) KHÔNG hiểu các hàm màu
+         CSS hiện đại như color-mix()/oklch() - mà toàn bộ codebase đang dùng color-mix() rất
+         nhiều (biến --accent, badge ngày hiện tại, khối kế hoạch theo màu môn...) -> hễ chụp là
+         thư viện ném lỗi parse màu và toàn bộ ảnh fail ngay từ đầu, đúng lỗi trong ảnh chụp màn
+         hình thực tế. Đổi qua html2canvas-pro (fork giữ nguyên 100% API/tên hàm global
+         "html2canvas" gốc, chỉ thêm phần hiểu được color-mix()/oklch()/lab()/lch()...) - không
+         cần sửa gì thêm ở calendar-6-export-capture.js vì tên hàm gọi vẫn y hệt. -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas-pro@2.4.2/dist/html2canvas-pro.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
@@ -142,6 +153,14 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                         <span id="top-import-text">Nhập TKB</span>
                     </label>
+
+                    <!-- Chụp toàn bộ TKB thành ảnh PNG: tự thu nhỏ bảng vừa đủ để hiện hết mọi cột/tiết
+                         (không còn phải cuộn ngang/dọc) rồi mới chụp - xem captureFullTimetable()
+                         trong calendar-6-export-capture.js -->
+                    <button type="button" id="capture-timetable-btn" class="glass-btn import-btn" onclick="captureFullTimetable()" title="Thu nhỏ và chụp toàn bộ thời khóa biểu thành ảnh">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        <span id="capture-timetable-text">Chụp TKB</span>
+                    </button>
 
                     <!-- Bọc lại Profile Pill để hỗ trợ Dropdown -->
 <div class="profile-pill custom-select-container" id="profile-dropdown-container" onclick="toggleProfileDropdown(event)" style="cursor: pointer; position: relative; overflow: visible;">
@@ -629,6 +648,30 @@
             </div>
         </div>
     </div>
+
+    <!-- =========================================
+         XEM TRƯỚC ẢNH TKB TRƯỚC KHI LƯU (captureFullTimetable() trong
+         calendar-6-export-capture.js) - bấm "Chụp TKB" xong không tải file ngay nữa, mà hiện ảnh
+         ra đây trước để xem/ưng ý rồi mới bấm tải, hoặc huỷ bỏ không lưu gì cả.
+    ========================================= -->
+    <div id="capture-preview-overlay" class="custom-dialog-overlay capture-preview-overlay hidden">
+        <div class="custom-dialog-box capture-preview-box">
+            <div class="dialog-content capture-preview-header">
+                <h3>Xem trước ảnh TKB</h3>
+                <p>Ưng ý thì tải về, không thì huỷ - chưa lưu gì cả.</p>
+            </div>
+            <div class="capture-preview-scroll">
+                <img id="capture-preview-img" alt="Ảnh xem trước thời khóa biểu" src="">
+            </div>
+            <div class="dialog-actions">
+                <button id="capture-preview-cancel" class="glass-btn" type="button">Huỷ</button>
+                <button id="capture-preview-download" class="glass-btn" type="button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Tải ảnh về</span>
+                </button>
+            </div>
+        </div>
+    </div>
     <div class="share-menu" id="share-menu-widget">
         <div class="toggle" id="share-toggle-btn">
             <i class="fas fa-share-nodes"></i>
@@ -654,5 +697,6 @@
     <script src="calendar-3-personalization.js"></script>
     <script src="calendar-4-planner-notify.js"></script>
     <script src="calendar-5-planner-ui.js"></script>
+    <script src="calendar-6-export-capture.js"></script>
 </body>
 </html>
