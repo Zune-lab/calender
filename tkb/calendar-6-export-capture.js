@@ -84,7 +84,22 @@ window.captureFullTimetable = async function () {
     // .tab-pane.active/.main-glass-dashboard (2 khối overflow:hidden + height cố định gây lỗi
     // cắt hình ở bản trước), nên không bị bất kỳ khung cha nào của trang thật giới hạn kích thước.
     const stage = document.createElement('div');
-    stage.style.cssText = 'position:fixed; left:-99999px; top:0; z-index:-1; pointer-events:none;';
+    // FIX BUG "CHỤP TRÊN ĐIỆN THOẠI XONG LÀ MÁY TỰ RESTART": bản trước đẩy khối chứa bản sao ra
+    // "left: -99999px" để giấu khỏi màn hình. Vấn đề là trên nhiều trình duyệt mobile,
+    // "position: fixed" đặt ở toạ độ âm cực lớn như vậy VẪN khiến document.documentElement bị
+    // tính là có scrollWidth cỡ ~100000px (dù mắt thường không thấy gì, không cuộn tới được).
+    // html2canvas(-pro) mặc định KHÔNG được báo trước windowWidth/windowHeight sẽ tự lấy đúng
+    // scrollWidth/scrollHeight đó để dựng 1 iframe ẩn render toàn trang rồi mới cắt phần cần chụp
+    // ra - nghĩa là nó cố cấp phát 1 canvas nội bộ rộng cỡ 100000px, nhân thêm với scale (tối đa
+    // x2 cho nét) -> yêu cầu cấp phát bộ nhớ khổng lồ, đủ để làm crash hẳn trình duyệt, thậm chí
+    // kéo sập luôn cả máy trên điện thoại yếu RAM (khớp đúng hiện tượng "chụp/zoom xong tự
+    // restart máy"). Trên máy tính bàn RAM dư dả nên không lộ ra khi tự test.
+    // Sửa: đổi cách giấu bản sao - dùng "opacity:0" + "pointer-events:none" ngay tại toạ độ
+    // (0,0) bình thường thay vì đẩy ra toạ độ âm khổng lồ - không còn gì để làm phình scrollWidth
+    // của trang nữa, html2canvas quay lại tự đo kích thước hợp lý như bình thường (đã thử ép
+    // thẳng windowWidth/windowHeight cho html2canvas nhưng nó khiến html2canvas layout lại theo
+    // "khung nhìn ảo" đó và cắt mất phần bên phải dù bản sao vẫn đủ chỗ - nên bỏ hướng đó).
+    stage.style.cssText = 'position:fixed; left:0; top:0; opacity:0; z-index:-1; pointer-events:none;';
 
     const clone = wrapper.cloneNode(true);
     // Gỡ id trên bản sao (và mọi phần tử con có id bên trong) để tránh trùng id với trang thật
@@ -172,9 +187,29 @@ window.captureFullTimetable = async function () {
 
         await _waitTwoFrames();
 
+        // Kích thước THẬT SỰ cần chụp (đã tính cả phần "thu nhỏ vừa khung" ở trên nếu có) - chỉ
+        // dùng để TÍNH renderScale an toàn bên dưới, KHÔNG truyền thẳng làm windowWidth/
+        // windowHeight cho html2canvas (đã thử - làm nó tự layout lại theo "khung nhìn ảo" kích
+        // thước đó và cắt mất phần bên phải, dù bản sao vẫn đủ chỗ). Việc phình scrollWidth do
+        // "left: -99999px" cũ đã được xử lý tận gốc ở bước tạo "stage" phía trên rồi.
+        const captureWidth = clone.offsetWidth;
+        const captureHeight = clone.offsetHeight;
+
+        // An toàn thêm 1 lớp: nhiều trình duyệt di động (đặc biệt Safari iOS) có giới hạn CỨNG cỡ
+        // ~4096px cho 1 chiều canvas - vượt qua là crash/canvas trắng chứ không lỗi rõ ràng. Tự
+        // giảm bớt hệ số nét (renderScale, mặc định vẫn nhân theo devicePixelRatio để ảnh nét) nếu
+        // kích thước cuối cùng có nguy cơ vượt mốc này, thay vì luôn cố nhân tối đa x2 bất kể máy
+        // yếu hay bảng to cỡ nào.
+        const MAX_CANVAS_DIMENSION = 4096;
+        let renderScale = Math.min(window.devicePixelRatio || 1, 2);
+        const longestSide = Math.max(captureWidth, captureHeight) * renderScale;
+        if (longestSide > MAX_CANVAS_DIMENSION) {
+            renderScale = MAX_CANVAS_DIMENSION / Math.max(captureWidth, captureHeight);
+        }
+
         const canvas = await html2canvas(clone, {
             backgroundColor: isLight ? '#eef2f7' : '#0b0f1a',
-            scale: Math.min(window.devicePixelRatio || 1, 2), // ảnh nét, không quá nặng
+            scale: renderScale, // ảnh nét nhưng có trần an toàn, xem giải thích ở trên
             useCORS: true,
             // Tạm bật logging (thay vì false như trước) để nếu html2canvas-pro âm thầm bỏ qua
             // 1 khai báo CSS nào đó nó không hiểu được (khác hẳn kiểu ném lỗi cứng như vụ
