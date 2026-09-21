@@ -944,6 +944,35 @@ body.light-mode .capture-preview-scroll { border-color: rgba(0,0,0,0.08); backgr
 .capture-preview-close-x:hover { background: rgba(20, 22, 30, 0.9); }
 body.light-mode .capture-preview-close-x { background: rgba(255, 255, 255, 0.85); color: #12141a; border-color: rgba(0,0,0,0.1); }
 
+/* FIX BUG "CHỤP TKB TRÊN ĐIỆN THOẠI, ZOOM VÀO-RA VÀI GIÂY SAU THÌ ĐỨNG MÁY + RESTART":
+   Modal xem trước này dùng lại khung .custom-dialog-overlay (blur 15px phủ TOÀN MÀN HÌNH) +
+   .custom-dialog-box (blur 40px + saturate 200%) + nút X (blur 8px), chồng lên 1 trang phía dưới
+   vốn đã có ~16 lớp backdrop-filter và các blob nền chạy animation vô hạn. Chỉ cần pinch-zoom (iOS
+   bỏ qua user-scalable=no), Safari phải vẽ lại TẤT CẢ các lớp blur chồng nhau đó ở độ phân giải phóng
+   to, liên tục -> phình bộ nhớ GPU -> hệ thống kill/restart máy. Ở đây ta:
+   - bỏ backdrop-filter khỏi modal này, thay bằng nền gần như đặc (nhìn vẫn tối/sáng đúng tông);
+   - ẩn hẳn phần trang phía dưới (visibility:hidden, không đổi layout) + dừng animation nền trong
+     lúc modal mở, nên GPU chỉ còn phải vẽ đúng 1 lớp modal;
+   - khoá cử chỉ pinch của trang bằng touch-action (JS chặn thêm gesturestart cho Safari). */
+.capture-preview-overlay {
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: rgba(8, 10, 15, 0.94);
+    touch-action: pan-x pan-y; overscroll-behavior: contain;
+}
+body.light-mode .capture-preview-overlay { background: rgba(236, 240, 246, 0.96); }
+.capture-preview-box {
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: #1b1e27;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); /* bóng nhẹ hơn 0 40px 80px cũ, đỡ tốn GPU */
+    -webkit-overflow-scrolling: touch;
+}
+body.light-mode .capture-preview-box { background: #ffffff; }
+.capture-preview-scroll { touch-action: pan-x pan-y; }
+.capture-preview-close-x { backdrop-filter: none; -webkit-backdrop-filter: none; }
+body.capture-preview-open > *:not(.custom-dialog-overlay):not(script) { visibility: hidden; }
+body.capture-preview-open .blob,
+body.capture-preview-open .auth-ambient-bg * { animation-play-state: paused !important; }
+
 @media (max-width: 760px) {
     .capture-preview-box { width: 94vw; padding: 24px 16px 18px; }
     .capture-preview-scroll { max-height: 55vh; }

@@ -211,10 +211,19 @@ window.captureFullTimetable = async function () {
         // Max devicePixelRatio=3, vốn sẽ bị ép về 2 do Math.min bên dưới, nhưng vẫn cần thêm trần
         // tuyệt đối này phòng khi bảng tự nó đã to sẵn).
         const MAX_CANVAS_DIMENSION = 4096;
+        // FIX BUG "CHỤP XONG ZOOM VÀI GIÂY LÀ ĐỨNG MÁY + RESTART": ngoài trần 1 chiều, iOS còn giới hạn
+        // TỔNG DIỆN TÍCH canvas (~16.7 triệu px/canvas, và tổng bộ nhớ canvas toàn trang cũng có trần).
+        // Trần theo chiều 4096 vẫn cho phép 4096x4096 = đúng mốc đó. Đặt thêm trần diện tích thấp hơn
+        // hẳn (6 triệu px, dư sức nét cho ảnh TKB) để không bao giờ chạm sát giới hạn của Safari.
+        const MAX_CANVAS_AREA = 6000000;
         let renderScale = Math.min(window.devicePixelRatio || 1, 2);
         const longestSide = Math.max(captureWidth, captureHeight) * renderScale;
         if (longestSide > MAX_CANVAS_DIMENSION) {
             renderScale = MAX_CANVAS_DIMENSION / Math.max(captureWidth, captureHeight);
+        }
+        const area = captureWidth * captureHeight * renderScale * renderScale;
+        if (area > MAX_CANVAS_AREA) {
+            renderScale *= Math.sqrt(MAX_CANVAS_AREA / area);
         }
 
         const canvas = await html2canvas(clone, {
@@ -226,12 +235,24 @@ window.captureFullTimetable = async function () {
 
         const now = new Date();
         const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-        // THEO YÊU CẦU: không tự tải file ngay nữa - lưu tạm data URL + tên file lại, mở modal
-        // cho xem ảnh trước, người dùng ưng ý mới bấm "Tải ảnh về" (xem _confirmCaptureDownload),
-        // không thì bấm "Huỷ" (_cancelCapturePreview) là huỷ luôn, không lưu gì cả.
-        _pendingCaptureDataUrl = canvas.toDataURL('image/png');
+        // THEO YÊU CẦU: không tự tải file ngay nữa - lưu tạm ảnh + tên file lại, mở modal cho xem
+        // ảnh trước, người dùng ưng ý mới bấm "Tải ảnh về" (xem _confirmCaptureDownload), không thì
+        // bấm "Huỷ" (_cancelCapturePreview) là huỷ luôn, không lưu gì cả.
+        //
+        // ĐỔI toDataURL -> toBlob + URL.createObjectURL: toDataURL('image/png') tạo 1 chuỗi base64
+        // vài MB nằm trong RAM JS, rồi <img> lại giải mã thêm 1 bản bitmap nữa, canvas gốc vẫn còn
+        // giữ bản thứ 3 => 3 bản ảnh cùng lúc trên máy yếu RAM. Blob URL chỉ giữ dữ liệu nén 1 lần
+        // (ngoài RAM JS), và ta giải phóng canvas ngay bên dưới.
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        // Safari giữ bộ nhớ canvas cho tới khi GC thật sự chạy (rất chậm) - đưa kích thước về 0 để
+        // trả bộ nhớ ngay lập tức, không dồn cục với phần giải mã ảnh của modal xem trước.
+        canvas.width = 0;
+        canvas.height = 0;
+        if (!blob) throw new Error('canvas.toBlob trả về null');
+
+        _pendingCaptureUrl = URL.createObjectURL(blob);
         _pendingCaptureFilename = `TKB_${stamp}.png`;
-        _openCapturePreview(_pendingCaptureDataUrl);
+        _openCapturePreview(_pendingCaptureUrl);
     } catch (err) {
         console.error('Lỗi khi chụp toàn bộ TKB:', err);
         showAlert('Đã có lỗi xảy ra khi chụp thời khóa biểu. Vui lòng thử lại.', 'Lỗi chụp ảnh');
@@ -247,24 +268,36 @@ window.captureFullTimetable = async function () {
 };
 
 // ----- Modal xem trước ảnh trước khi lưu -----
-let _pendingCaptureDataUrl = null;
+let _pendingCaptureUrl = null; // blob: URL của ảnh xem trước
 let _pendingCaptureFilename = null;
 
-function _openCapturePreview(dataUrl) {
+// Chặn pinch-zoom CẢ TRANG trong lúc modal mở. "user-scalable=no" trong viewport meta bị iOS Safari
+// (từ iOS 10) BỎ QUA hoàn toàn để phục vụ trợ năng, nên trước đây 2 ngón tay vẫn zoom cả trang.
+// Đây chính là mắt xích dẫn tới crash: zoom trang khi đang có nhiều lớp backdrop-filter phủ toàn màn
+// hình khiến Safari phải vẽ lại từng lớp blur ở độ phân giải phóng to liên tục -> phình bộ nhớ GPU ->
+// đứng máy/restart. "gesturestart" là sự kiện riêng của Safari cho pinch; touchmove nhiều ngón bao
+// các trình duyệt khác.
+function _blockPinchZoom(e) {
+    if (e.type === 'gesturestart' || e.type === 'gesturechange' || (e.touches && e.touches.length > 1)) {
+        e.preventDefault();
+    }
+}
+
+function _openCapturePreview(url) {
     const overlay = document.getElementById('capture-preview-overlay');
     const img = document.getElementById('capture-preview-img');
     const closeX = document.getElementById('capture-preview-close-x');
     if (!overlay || !img) return;
-    img.src = dataUrl;
+    img.decoding = 'async';
+    img.src = url;
     overlay.classList.remove('hidden');
     closeX?.classList.remove('hidden');
-    // FIX BUG "ZOOM XONG KẸT LUÔN, KHÔNG THOÁT RA ĐƯỢC": .capture-preview-scroll vốn tự cuộn
-    // được nếu ảnh cao hơn khung, NHƯNG trang chưa từng chặn pinch-zoom CỦA CẢ TRANG (viewport
-    // meta gốc không có maximum-scale/user-scalable) - nên 2 ngón tay zoom ảnh vô tình zoom LUÔN
-    // CẢ TRANG bằng zoom gốc của Safari, đẩy 2 nút "Huỷ"/"Tải ảnh về" ra ngoài vùng nhìn thấy mà
-    // không cách nào bấm lại được (phải zoom out thủ công mới thoát). Khoá tạm zoom toàn trang
-    // trong lúc modal này đang mở (đổi lại viewport meta), trả lại y nguyên lúc đóng modal - không
-    // đụng gì tới hành vi zoom của các trang/màn hình khác trong app.
+    // Báo CSS biết modal đang mở: ẩn hẳn trang phía dưới + tạm dừng animation nền (xem mục 19B).
+    document.body.classList.add('capture-preview-open');
+    document.addEventListener('gesturestart', _blockPinchZoom, { passive: false });
+    document.addEventListener('gesturechange', _blockPinchZoom, { passive: false });
+    document.addEventListener('touchmove', _blockPinchZoom, { passive: false });
+    // Vẫn giữ viewport meta cho các trình duyệt còn tôn trọng nó (Chrome Android...).
     const viewportMeta = document.querySelector('meta[name="viewport"]');
     if (viewportMeta && !viewportMeta.dataset.captureOriginalContent) {
         viewportMeta.dataset.captureOriginalContent = viewportMeta.getAttribute('content') || '';
@@ -278,12 +311,18 @@ function _closeCapturePreview() {
     const closeX = document.getElementById('capture-preview-close-x');
     if (overlay) overlay.classList.add('hidden');
     closeX?.classList.add('hidden');
-    // Gỡ luôn src sau khi đóng để trình duyệt giải phóng data URL (có thể khá nặng vì là ảnh
-    // full độ phân giải) khỏi bộ nhớ, không giữ lại trong <img> khi modal đã ẩn.
-    if (img) img.src = '';
-    _pendingCaptureDataUrl = null;
+    document.body.classList.remove('capture-preview-open');
+    document.removeEventListener('gesturestart', _blockPinchZoom);
+    document.removeEventListener('gesturechange', _blockPinchZoom);
+    document.removeEventListener('touchmove', _blockPinchZoom);
+    // Gỡ src để trình duyệt giải phóng bitmap đã giải mã, và thu hồi blob URL (trễ 1.5s để không
+    // cắt ngang lượt tải file vừa được kích hoạt bởi _confirmCaptureDownload).
+    if (img) img.removeAttribute('src');
+    const urlToRevoke = _pendingCaptureUrl;
+    if (urlToRevoke) setTimeout(() => URL.revokeObjectURL(urlToRevoke), 1500);
+    _pendingCaptureUrl = null;
     _pendingCaptureFilename = null;
-    // Trả lại đúng viewport meta gốc - cho zoom lại bình thường ở các màn hình khác của app.
+    // Trả lại đúng viewport meta gốc.
     const viewportMeta = document.querySelector('meta[name="viewport"]');
     if (viewportMeta && viewportMeta.dataset.captureOriginalContent !== undefined) {
         viewportMeta.setAttribute('content', viewportMeta.dataset.captureOriginalContent);
@@ -298,10 +337,10 @@ window._cancelCapturePreview = function () {
 
 // Bấm "Tải ảnh về" trong modal xem trước - lúc này mới thật sự tạo file cho tải xuống.
 window._confirmCaptureDownload = function () {
-    if (!_pendingCaptureDataUrl || !_pendingCaptureFilename) return;
+    if (!_pendingCaptureUrl || !_pendingCaptureFilename) return;
     const link = document.createElement('a');
     link.download = _pendingCaptureFilename;
-    link.href = _pendingCaptureDataUrl;
+    link.href = _pendingCaptureUrl;
     link.click();
     _closeCapturePreview();
 };
