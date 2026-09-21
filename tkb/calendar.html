@@ -655,10 +655,25 @@
          ra đây trước để xem/ưng ý rồi mới bấm tải, hoặc huỷ bỏ không lưu gì cả.
     ========================================= -->
     <div id="capture-preview-overlay" class="custom-dialog-overlay capture-preview-overlay hidden">
+        <!-- Nút X cố định theo MÀN HÌNH (không theo khung ảnh) - lớp an toàn thứ 2 để luôn thoát
+             được modal này, phòng trường hợp lỡ zoom/cuộn lệch đi đâu đó vẫn còn cách bấm ra. -->
+        <button type="button" id="capture-preview-close-x" class="capture-preview-close-x hidden" onclick="window._cancelCapturePreview()" aria-label="Đóng xem trước">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
         <div class="custom-dialog-box capture-preview-box">
             <div class="dialog-content capture-preview-header">
                 <h3>Xem trước ảnh TKB</h3>
                 <p>Ưng ý thì tải về, không thì huỷ - chưa lưu gì cả.</p>
+                <!-- LƯU Ý QUAN TRỌNG (đặc biệt với Safari iOS - đúng máy/trình duyệt bạn đang dùng
+                     để test tính năng này): thuộc tính "download" của thẻ <a> với ảnh dạng data
+                     URI (như canvas.toDataURL() xuất ra) có lịch sử hỗ trợ khá phập phù trên
+                     Safari iOS qua các phiên bản - có lúc tự tải về đúng ý, có lúc lại chỉ MỞ ảnh
+                     ra xem chứ không lưu gì (không phải lỗi ở code chụp ảnh, mà là giới hạn của
+                     chính trình duyệt với kiểu link này). Vì không có Safari/iPhone thật để tự
+                     kiểm chứng 100% hành vi mới nhất, thêm dòng hướng dẫn dự phòng LUÔN CHẮC ĂN
+                     100% trên mọi trình duyệt: giữ tay lên ảnh xem trước rồi chọn lưu - đã kiểm
+                     tra không có CSS nào (touch-callout/user-select) chặn thao tác này. -->
+                <p class="capture-preview-hint">Trên iPhone, nếu bấm "Tải ảnh về" mà không thấy lưu, hãy giữ tay lên ảnh bên dưới rồi chọn "Lưu vào Ảnh".</p>
             </div>
             <div class="capture-preview-scroll">
                 <img id="capture-preview-img" alt="Ảnh xem trước thời khóa biểu" src="">

@@ -9,7 +9,8 @@
 // #timetable-wrapper nằm lồng trong 2 lớp cha đều tự giới hạn cứng chiều cao + overflow:hidden:
 //   - .tab-pane.active { height: 100%; overflow: hidden; }
 //   - .main-glass-dashboard { height: calc(100vh - 80px); overflow: hidden; }
-// (xem calendar-1-base.css mục "0. TAB-PANE" và calendar-3-desktop-settings-dialog.css mục 16)
+// (xem rule ".tab-pane.active" ở đầu calendar-1-base.css và mục 16 trong
+// calendar-3-desktop-settings-dialog.css)
 // -> dù wrapper có tự giãn cao/rộng ra bao nhiêu, 2 khối cha này vẫn CẮT PHẦN DƯ THỪA ở trên lẫn
 // dưới như cũ, nên ảnh chụp vẫn thiếu Tiết 1 và Tiết 10 (đúng ảnh lỗi thực tế). Đồng thời việc
 // tắt hẳn backdrop-filter (kính mờ) rồi thay bằng 1 màu nền ĐẶC PHẲNG khiến các thẻ môn học (vốn
@@ -18,10 +19,11 @@
 //
 // Cách xử lý MỚI - KHÔNG động gì vào trang thật, chụp trên 1 BẢN SAO tách rời hoàn toàn khỏi 2
 // lớp cha bị giới hạn ở trên:
-//   1. cloneNode(true) #timetable-wrapper, nhét bản sao vào 1 div "position: fixed" nhưng đẩy ra
-//      khỏi màn hình (left: -99999px) và gắn THẲNG vào <body> - tức ở NGOÀI mọi khung cha có
-//      overflow:hidden/height cố định của trang thật, nên không còn gì bị cắt nữa dù bảng cao/
-//      rộng bao nhiêu.
+//   1. cloneNode(true) #timetable-wrapper, nhét bản sao vào 1 div "position: fixed" giấu bằng
+//      "opacity: 0" (KHÔNG đẩy ra toạ độ âm khổng lồ kiểu "left: -99999px" - xem lý do ở đúng chỗ
+//      set stage.style.cssText bên dưới, đó từng là nguyên nhân crash máy trên mobile) rồi gắn
+//      THẲNG vào <body> - tức ở NGOÀI mọi khung cha có overflow:hidden/height cố định của trang
+//      thật, nên không còn gì bị cắt nữa dù bảng cao/rộng bao nhiêu.
 //   2. Trên bản sao: gỡ hẳn overflow/height, đo kích thước THẬT (chưa cắt) của bảng, rồi tính hệ
 //      số scale = bề ngang khung đang hiển thị / bề ngang thật của bảng (luôn <= 1) và áp
 //      transform: scale() - đúng kiểu "Fit to width" khi in trang web - để mọi cột/tiết đều lọt
@@ -75,94 +77,103 @@ window.captureFullTimetable = async function () {
     if (btn) btn.classList.add('is-capturing');
     if (btnText) btnText.textContent = 'Đang chụp...';
 
-    // Bề ngang khung đang hiển thị THẬT trên màn hình người dùng - dùng làm mốc "vừa khung" để
-    // tính scale, vì bản sao khi tách ra ngoài màn hình sẽ không còn khung nào giới hạn nữa.
-    const targetWidth = wrapper.clientWidth;
-    const isLight = document.body.classList.contains('light-mode');
+    // BUG ĐÃ SỬA: trước đây try/catch/finally chỉ bọc từ đoạn đo/chụp trở đi - toàn bộ phần tạo
+    // bản sao/chỉnh style phía trên nằm NGOÀI vùng bảo vệ. Lỡ có gì ném lỗi ở đó (dù hiếm) thì
+    // "_isCapturingTimetable = true" và "is-capturing" phía trên sẽ kẹt mãi mãi, khoá chết nút
+    // "Chụp TKB" cho tới khi tải lại trang. Chuyển "try" lên ngay đây để bọc TOÀN BỘ phần còn lại
+    // của hàm - lỗi ở bất kỳ đâu cũng đều được "finally" dọn dẹp/khôi phục trạng thái nút đúng cách.
+    let stage;
+    try {
+        // Bề ngang khung đang hiển thị THẬT trên màn hình người dùng - dùng làm mốc "vừa khung" để
+        // tính scale, vì bản sao khi tách ra ngoài màn hình sẽ không còn khung nào giới hạn nữa.
+        const targetWidth = wrapper.clientWidth;
+        const isLight = document.body.classList.contains('light-mode');
 
-    // Vùng chứa tạm ngoài màn hình - gắn trực tiếp vào <body>, KHÔNG nằm trong
-    // .tab-pane.active/.main-glass-dashboard (2 khối overflow:hidden + height cố định gây lỗi
-    // cắt hình ở bản trước), nên không bị bất kỳ khung cha nào của trang thật giới hạn kích thước.
-    const stage = document.createElement('div');
-    // FIX BUG "CHỤP TRÊN ĐIỆN THOẠI XONG LÀ MÁY TỰ RESTART": bản trước đẩy khối chứa bản sao ra
-    // "left: -99999px" để giấu khỏi màn hình. Vấn đề là trên nhiều trình duyệt mobile,
-    // "position: fixed" đặt ở toạ độ âm cực lớn như vậy VẪN khiến document.documentElement bị
-    // tính là có scrollWidth cỡ ~100000px (dù mắt thường không thấy gì, không cuộn tới được).
-    // html2canvas(-pro) mặc định KHÔNG được báo trước windowWidth/windowHeight sẽ tự lấy đúng
-    // scrollWidth/scrollHeight đó để dựng 1 iframe ẩn render toàn trang rồi mới cắt phần cần chụp
-    // ra - nghĩa là nó cố cấp phát 1 canvas nội bộ rộng cỡ 100000px, nhân thêm với scale (tối đa
-    // x2 cho nét) -> yêu cầu cấp phát bộ nhớ khổng lồ, đủ để làm crash hẳn trình duyệt, thậm chí
-    // kéo sập luôn cả máy trên điện thoại yếu RAM (khớp đúng hiện tượng "chụp/zoom xong tự
-    // restart máy"). Trên máy tính bàn RAM dư dả nên không lộ ra khi tự test.
-    // Sửa: đổi cách giấu bản sao - dùng "opacity:0" + "pointer-events:none" ngay tại toạ độ
-    // (0,0) bình thường thay vì đẩy ra toạ độ âm khổng lồ - không còn gì để làm phình scrollWidth
-    // của trang nữa, html2canvas quay lại tự đo kích thước hợp lý như bình thường (đã thử ép
-    // thẳng windowWidth/windowHeight cho html2canvas nhưng nó khiến html2canvas layout lại theo
-    // "khung nhìn ảo" đó và cắt mất phần bên phải dù bản sao vẫn đủ chỗ - nên bỏ hướng đó).
-    stage.style.cssText = 'position:fixed; left:0; top:0; opacity:0; z-index:-1; pointer-events:none;';
+        // Vùng chứa tạm ngoài màn hình - gắn trực tiếp vào <body>, KHÔNG nằm trong
+        // .tab-pane.active/.main-glass-dashboard (2 khối overflow:hidden + height cố định gây lỗi
+        // cắt hình ở bản trước), nên không bị bất kỳ khung cha nào của trang thật giới hạn kích thước.
+        stage = document.createElement('div');
+        // FIX BUG "CHỤP TRÊN ĐIỆN THOẠI XONG LÀ MÁY TỰ RESTART": từng đẩy khối chứa bản sao ra
+        // "left: -99999px" để giấu khỏi màn hình. Vấn đề là trên nhiều trình duyệt mobile,
+        // "position: fixed" đặt ở toạ độ âm cực lớn như vậy VẪN khiến document.documentElement bị
+        // tính là có scrollWidth cỡ ~100000px (dù mắt thường không thấy gì, không cuộn tới được).
+        // html2canvas(-pro) mặc định KHÔNG được báo trước windowWidth/windowHeight sẽ tự lấy đúng
+        // scrollWidth/scrollHeight đó để dựng 1 iframe ẩn render toàn trang -> cố cấp phát 1 canvas
+        // nội bộ rộng cỡ 100000px, nhân thêm với scale (tối đa x2 cho nét) -> yêu cầu cấp phát bộ
+        // nhớ khổng lồ, đủ để crash hẳn trình duyệt, thậm chí kéo sập luôn máy trên điện thoại yếu RAM
+        // (khớp đúng hiện tượng "chụp/zoom xong tự restart máy" trên iPhone 11 Pro Max, Safari). Trên
+        // máy tính bàn RAM dư dả nên không lộ ra khi tự test - ĐÃ THỬ ép thẳng windowWidth/windowHeight
+        // cho html2canvas nhưng lại làm nó cắt mất phần bên phải nên bỏ hướng đó, chỉ còn cách dưới:
+        // giấu bản sao bằng "opacity:0" ngay tại toạ độ (0,0) bình thường thay vì đẩy ra toạ độ âm
+        // khổng lồ - không còn gì để làm phình scrollWidth của trang nữa.
+        stage.style.cssText = 'position:fixed; left:0; top:0; opacity:0; z-index:-1; pointer-events:none;';
 
-    const clone = wrapper.cloneNode(true);
-    // Gỡ id trên bản sao (và mọi phần tử con có id bên trong) để tránh trùng id với trang thật
-    // trong lúc bản sao còn tồn tại trong DOM (getElementById luôn ưu tiên phần tử THẬT xuất hiện
-    // trước trong tài liệu nên không lỗi chức năng gì, nhưng tránh trùng id vẫn sạch hơn).
-    clone.removeAttribute('id');
-    clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
-    // .sticky-glass-bar chỉ là thanh nền trang trí (position:sticky, đồng bộ theo cuộn thật của
-    // trang) - tách khỏi trang thật thì không còn gì để "sticky" theo nữa, dễ hiện sai vị trí
-    // trong ảnh chụp. Bỏ hẳn khỏi bản sao, không ảnh hưởng gì đến nội dung TKB thật sự.
-    clone.querySelector('.sticky-glass-bar')?.remove();
+        const clone = wrapper.cloneNode(true);
+        // Gỡ id trên bản sao (và mọi phần tử con có id bên trong) để tránh trùng id với trang thật
+        // trong lúc bản sao còn tồn tại trong DOM (getElementById luôn ưu tiên phần tử THẬT xuất hiện
+        // trước trong tài liệu nên không lỗi chức năng gì, nhưng tránh trùng id vẫn sạch hơn).
+        clone.removeAttribute('id');
+        clone.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+        // .sticky-glass-bar chỉ là thanh nền trang trí (position:sticky, đồng bộ theo cuộn thật của
+        // trang) - tách khỏi trang thật thì không còn gì để "sticky" theo nữa, dễ hiện sai vị trí
+        // trong ảnh chụp. Bỏ hẳn khỏi bản sao, không ảnh hưởng gì đến nội dung TKB thật sự.
+        clone.querySelector('.sticky-glass-bar')?.remove();
 
-    // Gỡ hẳn giới hạn cuộn/kích thước kế thừa từ .timetable-wrapper để bảng được phép giãn ra
-    // đúng kích thước thật của nó, không còn gì để cắt bớt nữa.
-    clone.style.overflow = 'visible';
-    clone.style.maxHeight = 'none';
-    clone.style.height = 'auto';
-    clone.style.width = `${targetWidth}px`;
-    // html2canvas không vẽ được backdrop-filter -> đổi qua nền gradient tối/sáng đặc, gần tông
-    // với các khối kính khác trong app (đỡ bẹt hơn hẳn so với 1 màu phẳng đơn sắc).
-    clone.style.backdropFilter = 'none';
-    clone.style.webkitBackdropFilter = 'none';
-    clone.style.background = isLight
+        // Gỡ hẳn giới hạn cuộn/kích thước kế thừa từ .timetable-wrapper để bảng được phép giãn ra
+        // đúng kích thước thật của nó, không còn gì để cắt bớt nữa.
+        clone.style.overflow = 'visible';
+        clone.style.maxHeight = 'none';
+        clone.style.height = 'auto';
+        clone.style.width = `${targetWidth}px`;
+        // html2canvas không vẽ được backdrop-filter -> đổi qua nền gradient tối/sáng đặc, gần tông
+        // với các khối kính khác trong app (đỡ bẹt hơn hẳn so với 1 màu phẳng đơn sắc).
+        clone.style.backdropFilter = 'none';
+        clone.style.webkitBackdropFilter = 'none';
+        clone.style.background = isLight
         ? 'linear-gradient(160deg, #f4f7fb 0%, #e3e9f2 100%)'
         : 'linear-gradient(160deg, #1b2334 0%, #0a0d16 100%)';
 
-    // THEO YÊU CẦU: bỏ hẳn hiệu ứng "kính mờ" (glass) khi chụp, chuyển thẻ môn học sang MÀU ĐẶC
-    // (solid) - dùng luôn 2 màu riêng của từng môn (--c1/--c2, vốn chỉ dùng cho thanh màu bên
-    // trái) làm nền gradient đặc cho cả thẻ, thay vì lớp trắng mờ 5-25% + backdrop-filter cũ.
-    // Không chỉ đẹp hơn hẳn (mỗi môn 1 màu rõ ràng, dễ phân biệt) mà còn né HẲN mọi rủi ro
-    // render sai liên quan tới backdrop-filter/độ trong suốt của html2canvas (gốc rễ nhiều bug
-    // đã gặp ở các bản trước) vì giờ không còn phần tử nào cần render trong suốt/mờ nữa.
-    clone.querySelectorAll('.subject-card-td').forEach((td) => {
+        // THEO YÊU CẦU: bỏ hẳn hiệu ứng "kính mờ" (glass) khi chụp, chuyển thẻ môn học sang MÀU ĐẶC
+        // (solid) - dùng luôn 2 màu riêng của từng môn (--c1/--c2, vốn chỉ dùng cho thanh màu bên
+        // trái) làm nền gradient đặc cho cả thẻ, thay vì lớp trắng mờ 5-25% + backdrop-filter cũ.
+        // Không chỉ đẹp hơn hẳn (mỗi môn 1 màu rõ ràng, dễ phân biệt) mà còn né HẲN mọi rủi ro
+        // render sai liên quan tới backdrop-filter/độ trong suốt của html2canvas (gốc rễ nhiều bug
+        // đã gặp ở các bản trước) vì giờ không còn phần tử nào cần render trong suốt/mờ nữa.
+        clone.querySelectorAll('.subject-card-td').forEach((td) => {
         td.style.background = 'linear-gradient(135deg, var(--c1, #6366f1), var(--c2, #8b5cf6))';
         td.style.border = 'none';
         td.style.boxShadow = 'none';
         td.style.backdropFilter = 'none';
         td.style.webkitBackdropFilter = 'none';
-    });
-    // Cái "khung giờ" nhỏ (07:00 -> 09:50) bên trong thẻ vẫn còn kiểu chip kính (nền đen mờ 25%
-    // + viền sáng mờ + ánh sáng hắt inset) - cùng 1 kiểu "glass" y hệt thẻ lớn, chỉ là thu nhỏ,
-    // nên khi đặt trên nền màu rực của thẻ (sau khi đổi solid ở trên) nhìn càng lộ rõ vệt xám bẩn.
-    // Đổi luôn qua màu đặc (không viền, không đổ bóng) cho đồng bộ 100% với thẻ lớn.
-    clone.querySelectorAll('.subject-card-td .time-text').forEach((el) => {
+        });
+        // Cái "khung giờ" nhỏ (07:00 -> 09:50) bên trong thẻ vẫn còn kiểu chip kính (nền đen mờ 25%
+        // + viền sáng mờ + ánh sáng hắt inset) - cùng 1 kiểu "glass" y hệt thẻ lớn, chỉ là thu nhỏ,
+        // nên khi đặt trên nền màu rực của thẻ (sau khi đổi solid ở trên) nhìn càng lộ rõ vệt xám bẩn.
+        // Đổi luôn qua màu đặc (không viền, không đổ bóng) cho đồng bộ 100% với thẻ lớn.
+        clone.querySelectorAll('.subject-card-td .time-text').forEach((el) => {
         el.style.background = 'rgba(0, 0, 0, 0.55)';
         el.style.border = 'none';
         el.style.boxShadow = 'none';
-    });
-    // Quét thêm 1 lượt TOÀN BỘ phần tử còn lại trong bản sao: phần tử nào còn dính
-    // backdrop-filter (theo computed style, phòng trường hợp có chỗ mình chưa biết tới) đều bị
-    // tắt hẳn - đảm bảo tuyệt đối không còn "gì kính" sót lại trong ảnh chụp.
-    clone.querySelectorAll('*').forEach((el) => {
+        });
+
+        stage.appendChild(clone);
+        document.body.appendChild(stage);
+
+        // BUG ĐÃ SỬA: vòng quét "tắt nốt backdrop-filter còn sót" này trước đây chạy TRƯỚC khi
+        // stage/clone được gắn vào <body> (tức lúc clone vẫn là 1 node "detached", chưa thuộc cây tài
+        // liệu) - getComputedStyle() trên 1 node detached không đọc đúng theo cascade CSS thật của
+        // trang (thường trả về giá trị mặc định/rỗng), nên bất kể phần tử nào có backdrop-filter từ
+        // stylesheet cũng KHÔNG bị phát hiện - đoạn code chạy nhưng chưa từng thật sự bắt được gì,
+        // trái ngược hẳn với những gì comment ở trên hứa hẹn. Chuyển xuống ĐÂY, sau khi đã
+        // appendChild vào <body> thật, để getComputedStyle đọc đúng giá trị đã áp dụng.
+        clone.querySelectorAll('*').forEach((el) => {
         const cs = getComputedStyle(el);
         if (cs.backdropFilter && cs.backdropFilter !== 'none') {
             el.style.backdropFilter = 'none';
             el.style.webkitBackdropFilter = 'none';
         }
-    });
+        });
 
-    stage.appendChild(clone);
-    document.body.appendChild(stage);
-
-    try {
         await _waitTwoFrames();
 
         // Đo kích thước THẬT (chưa scale) của bảng bên trong bản sao - lấy trực tiếp từ chính
@@ -188,18 +199,17 @@ window.captureFullTimetable = async function () {
         await _waitTwoFrames();
 
         // Kích thước THẬT SỰ cần chụp (đã tính cả phần "thu nhỏ vừa khung" ở trên nếu có) - chỉ
-        // dùng để TÍNH renderScale an toàn bên dưới, KHÔNG truyền thẳng làm windowWidth/
-        // windowHeight cho html2canvas (đã thử - làm nó tự layout lại theo "khung nhìn ảo" kích
-        // thước đó và cắt mất phần bên phải, dù bản sao vẫn đủ chỗ). Việc phình scrollWidth do
-        // "left: -99999px" cũ đã được xử lý tận gốc ở bước tạo "stage" phía trên rồi.
+        // dùng để TÍNH renderScale an toàn bên dưới.
         const captureWidth = clone.offsetWidth;
         const captureHeight = clone.offsetHeight;
 
-        // An toàn thêm 1 lớp: nhiều trình duyệt di động (đặc biệt Safari iOS) có giới hạn CỨNG cỡ
-        // ~4096px cho 1 chiều canvas - vượt qua là crash/canvas trắng chứ không lỗi rõ ràng. Tự
-        // giảm bớt hệ số nét (renderScale, mặc định vẫn nhân theo devicePixelRatio để ảnh nét) nếu
-        // kích thước cuối cùng có nguy cơ vượt mốc này, thay vì luôn cố nhân tối đa x2 bất kể máy
-        // yếu hay bảng to cỡ nào.
+        // An toàn thêm 1 lớp NGOÀI việc sửa vụ scrollWidth phình to ở trên: nhiều trình duyệt di
+        // động (đặc biệt Safari iOS) có giới hạn CỨNG cỡ ~4096px cho 1 chiều canvas - vượt qua là
+        // crash/canvas trắng chứ không lỗi rõ ràng. Tự giảm bớt hệ số nét (renderScale, mặc định
+        // vẫn nhân theo devicePixelRatio để ảnh nét) nếu kích thước cuối cùng có nguy cơ vượt mốc
+        // này, thay vì luôn cố nhân tối đa x2 bất kể máy yếu hay bảng có to cỡ nào (iPhone Pro/Pro
+        // Max devicePixelRatio=3, vốn sẽ bị ép về 2 do Math.min bên dưới, nhưng vẫn cần thêm trần
+        // tuyệt đối này phòng khi bảng tự nó đã to sẵn).
         const MAX_CANVAS_DIMENSION = 4096;
         let renderScale = Math.min(window.devicePixelRatio || 1, 2);
         const longestSide = Math.max(captureWidth, captureHeight) * renderScale;
@@ -211,11 +221,7 @@ window.captureFullTimetable = async function () {
             backgroundColor: isLight ? '#eef2f7' : '#0b0f1a',
             scale: renderScale, // ảnh nét nhưng có trần an toàn, xem giải thích ở trên
             useCORS: true,
-            // Tạm bật logging (thay vì false như trước) để nếu html2canvas-pro âm thầm bỏ qua
-            // 1 khai báo CSS nào đó nó không hiểu được (khác hẳn kiểu ném lỗi cứng như vụ
-            // color-mix() trước đây), cảnh báo đó sẽ lộ ra ở Console - cần để soi tiếp bug
-            // "thẻ môn học mất hết nền/viền/bo góc" đang gặp trên dữ liệu thật.
-            logging: true,
+            logging: false,
         });
 
         const now = new Date();
@@ -231,8 +237,9 @@ window.captureFullTimetable = async function () {
         showAlert('Đã có lỗi xảy ra khi chụp thời khóa biểu. Vui lòng thử lại.', 'Lỗi chụp ảnh');
     } finally {
         // Dọn hẳn bản sao khỏi DOM - trang thật chưa từng bị đụng vào nên không cần khôi phục gì
-        // cả, khác hẳn cách làm (rủi ro) của bản trước.
-        stage.remove();
+        // cả, khác hẳn cách làm (rủi ro) của bản trước. Dùng "?." vì "stage" có thể vẫn chưa được
+        // gán (undefined) nếu lỗi xảy ra ngay từ những dòng đầu try, trước khi kịp tạo nó.
+        stage?.remove();
         if (btn) btn.classList.remove('is-capturing');
         if (btnText) btnText.textContent = 'Chụp TKB';
         _isCapturingTimetable = false;
@@ -246,20 +253,42 @@ let _pendingCaptureFilename = null;
 function _openCapturePreview(dataUrl) {
     const overlay = document.getElementById('capture-preview-overlay');
     const img = document.getElementById('capture-preview-img');
+    const closeX = document.getElementById('capture-preview-close-x');
     if (!overlay || !img) return;
     img.src = dataUrl;
     overlay.classList.remove('hidden');
+    closeX?.classList.remove('hidden');
+    // FIX BUG "ZOOM XONG KẸT LUÔN, KHÔNG THOÁT RA ĐƯỢC": .capture-preview-scroll vốn tự cuộn
+    // được nếu ảnh cao hơn khung, NHƯNG trang chưa từng chặn pinch-zoom CỦA CẢ TRANG (viewport
+    // meta gốc không có maximum-scale/user-scalable) - nên 2 ngón tay zoom ảnh vô tình zoom LUÔN
+    // CẢ TRANG bằng zoom gốc của Safari, đẩy 2 nút "Huỷ"/"Tải ảnh về" ra ngoài vùng nhìn thấy mà
+    // không cách nào bấm lại được (phải zoom out thủ công mới thoát). Khoá tạm zoom toàn trang
+    // trong lúc modal này đang mở (đổi lại viewport meta), trả lại y nguyên lúc đóng modal - không
+    // đụng gì tới hành vi zoom của các trang/màn hình khác trong app.
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (viewportMeta && !viewportMeta.dataset.captureOriginalContent) {
+        viewportMeta.dataset.captureOriginalContent = viewportMeta.getAttribute('content') || '';
+        viewportMeta.setAttribute('content', viewportMeta.dataset.captureOriginalContent + ', maximum-scale=1, user-scalable=no');
+    }
 }
 
 function _closeCapturePreview() {
     const overlay = document.getElementById('capture-preview-overlay');
     const img = document.getElementById('capture-preview-img');
+    const closeX = document.getElementById('capture-preview-close-x');
     if (overlay) overlay.classList.add('hidden');
+    closeX?.classList.add('hidden');
     // Gỡ luôn src sau khi đóng để trình duyệt giải phóng data URL (có thể khá nặng vì là ảnh
     // full độ phân giải) khỏi bộ nhớ, không giữ lại trong <img> khi modal đã ẩn.
     if (img) img.src = '';
     _pendingCaptureDataUrl = null;
     _pendingCaptureFilename = null;
+    // Trả lại đúng viewport meta gốc - cho zoom lại bình thường ở các màn hình khác của app.
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (viewportMeta && viewportMeta.dataset.captureOriginalContent !== undefined) {
+        viewportMeta.setAttribute('content', viewportMeta.dataset.captureOriginalContent);
+        delete viewportMeta.dataset.captureOriginalContent;
+    }
 }
 
 // Huỷ xem trước - KHÔNG lưu gì cả, chỉ đóng modal và xoá ảnh tạm.
