@@ -24,6 +24,8 @@
 //      set stage.style.cssText bên dưới, đó từng là nguyên nhân crash máy trên mobile) rồi gắn
 //      THẲNG vào <body> - tức ở NGOÀI mọi khung cha có overflow:hidden/height cố định của trang
 //      thật, nên không còn gì bị cắt nữa dù bảng cao/rộng bao nhiêu.
+//   (CẬP NHẬT: bước thu nhỏ bằng transform: scale() ở mục 2 dưới đây đã BỎ vì làm ảnh mờ - giờ bản sao
+//   được giãn ra đúng bề rộng tự nhiên của bảng rồi chụp với scale x2, xem chú thích trong hàm.)
 //   2. Trên bản sao: gỡ hẳn overflow/height, đo kích thước THẬT (chưa cắt) của bảng, rồi tính hệ
 //      số scale = bề ngang khung đang hiển thị / bề ngang thật của bảng (luôn <= 1) và áp
 //      transform: scale() - đúng kiểu "Fit to width" khi in trang web - để mọi cột/tiết đều lọt
@@ -151,10 +153,24 @@ window.captureFullTimetable = async function () {
         // nên khi đặt trên nền màu rực của thẻ (sau khi đổi solid ở trên) nhìn càng lộ rõ vệt xám bẩn.
         // Đổi luôn qua màu đặc (không viền, không đổ bóng) cho đồng bộ 100% với thẻ lớn.
         clone.querySelectorAll('.subject-card-td .time-text').forEach((el) => {
-        el.style.background = 'rgba(0, 0, 0, 0.55)';
+        el.style.background = 'rgba(0, 0, 0, 0.45)';
         el.style.border = 'none';
         el.style.boxShadow = 'none';
+        // FIX BUG "KHÔNG THẤY THỜI GIAN": ở light-mode, CSS gốc đặt chữ .time-text màu TỐI (#334155)
+        // vì nền chip ở đó là đen mờ 6% (gần như trong suốt). Ở đây ta lại ép chip thành nền ĐEN ĐẶC
+        // 45% -> chữ tối trên nền tối = vô hình (đúng ảnh lỗi). Ép chữ TRẮNG cho khớp nền chip mới.
+        el.style.color = '#fff';
+        el.style.textShadow = 'none';
         });
+        // Cùng lý do: nền thẻ giờ là gradient màu ĐẶC rực (cả ở light-mode), nên chữ tối của light-mode
+        // (#0f172a/#334155) trên tím/đỏ/xanh đậm khó đọc. Thống nhất chữ trắng + bóng nhẹ cho mọi thẻ.
+        clone.querySelectorAll('.subject-card-td h4, .subject-card-td .course-code, .subject-card-td .info-text').forEach((el) => {
+        el.style.color = '#fff';
+        el.style.textShadow = '0 1px 3px rgba(0, 0, 0, 0.45)';
+        });
+        // mask-image (thủ thuật chống lòi góc bo của trang thật) không cần cho ảnh chụp, tắt cho nhẹ.
+        clone.style.webkitMaskImage = 'none';
+        clone.style.maskImage = 'none';
 
         stage.appendChild(clone);
         document.body.appendChild(stage);
@@ -176,47 +192,33 @@ window.captureFullTimetable = async function () {
 
         await _waitTwoFrames();
 
-        // Đo kích thước THẬT (chưa scale) của bảng bên trong bản sao - lấy trực tiếp từ chính
-        // thẻ <table> (đáng tin hơn scrollWidth của div bọc ngoài, vốn có thể không nhất quán
-        // giữa các trình duyệt khi overflow:visible).
+        // Đo kích thước THẬT của bảng bên trong bản sao (lúc này clone còn hẹp bằng khung màn hình,
+        // bảng tự giãn rộng hơn -> scrollWidth = bề rộng tự nhiên, ví dụ ~1100px trên điện thoại).
         const tableEl = clone.querySelector('.timetable-table');
-        const tableContainerClone = tableEl ? tableEl.parentElement : clone;
-        const naturalWidth = tableEl ? tableEl.scrollWidth : tableContainerClone.scrollWidth;
+        const naturalWidth = Math.max(
+            tableEl ? tableEl.scrollWidth : 0,
+            targetWidth
+        );
 
-        // Chỉ thu nhỏ, không phóng to nếu bảng vốn đã vừa khung (scale tối đa = 1).
-        const scale = naturalWidth > 0 ? Math.min(targetWidth / naturalWidth, 1) : 1;
-
-        if (scale < 1) {
-            tableContainerClone.style.transformOrigin = 'top left';
-            tableContainerClone.style.transform = `scale(${scale})`;
-            tableContainerClone.style.width = `${naturalWidth}px`;
-            // Bù lại khoảng trống do scale để layout của clone (height: auto) tính đúng chiều
-            // cao còn lại sau khi thu nhỏ, không để hụt/dư khoảng trắng phía dưới ảnh.
-            const naturalHeight = tableEl ? tableEl.scrollHeight : tableContainerClone.scrollHeight;
-            clone.style.height = `${Math.ceil(naturalHeight * scale) + 24}px`;
-        }
+        // FIX BUG "ẢNH RẤT MỜ + CHỮ BÉ TÍ + CẮT MẤT CHỦ NHẬT": bản cũ dùng transform: scale() để thu cả
+        // bảng ~1100px xuống vừa bề ngang điện thoại (~390px, tức scale ~0.35) RỒI mới chụp với
+        // scale x2 -> mật độ điểm ảnh thật chỉ còn ~0.7 lần kích thước gốc => mờ, chữ bé không đọc
+        // nổi (giờ học nhìn như vệt). Giờ KHÔNG thu nhỏ nữa: giãn thẳng bản sao ra đúng bề rộng tự
+        // nhiên của bảng (+ padding 2 bên của wrapper) rồi để html2canvas nhân scale x2 => ảnh ~2300px
+        // ngang, nét gấp nhiều lần và đủ cả 8 cột. Người xem ảnh tự zoom trong thư viện ảnh nếu cần.
+        clone.style.width = `${naturalWidth + 44}px`;
+        clone.style.height = 'auto';
 
         await _waitTwoFrames();
 
-        // Kích thước THẬT SỰ cần chụp (đã tính cả phần "thu nhỏ vừa khung" ở trên nếu có) - chỉ
-        // dùng để TÍNH renderScale an toàn bên dưới.
         const captureWidth = clone.offsetWidth;
         const captureHeight = clone.offsetHeight;
 
-        // An toàn thêm 1 lớp NGOÀI việc sửa vụ scrollWidth phình to ở trên: nhiều trình duyệt di
-        // động (đặc biệt Safari iOS) có giới hạn CỨNG cỡ ~4096px cho 1 chiều canvas - vượt qua là
-        // crash/canvas trắng chứ không lỗi rõ ràng. Tự giảm bớt hệ số nét (renderScale, mặc định
-        // vẫn nhân theo devicePixelRatio để ảnh nét) nếu kích thước cuối cùng có nguy cơ vượt mốc
-        // này, thay vì luôn cố nhân tối đa x2 bất kể máy yếu hay bảng có to cỡ nào (iPhone Pro/Pro
-        // Max devicePixelRatio=3, vốn sẽ bị ép về 2 do Math.min bên dưới, nhưng vẫn cần thêm trần
-        // tuyệt đối này phòng khi bảng tự nó đã to sẵn).
+        // Trần an toàn cho canvas (Safari iOS: ~4096 px/chiều và ~16.7 triệu px diện tích; vượt là
+        // crash/canvas trắng). Luôn ưu tiên x2 cho nét (không phụ thuộc devicePixelRatio của máy).
         const MAX_CANVAS_DIMENSION = 4096;
-        // FIX BUG "CHỤP XONG ZOOM VÀI GIÂY LÀ ĐỨNG MÁY + RESTART": ngoài trần 1 chiều, iOS còn giới hạn
-        // TỔNG DIỆN TÍCH canvas (~16.7 triệu px/canvas, và tổng bộ nhớ canvas toàn trang cũng có trần).
-        // Trần theo chiều 4096 vẫn cho phép 4096x4096 = đúng mốc đó. Đặt thêm trần diện tích thấp hơn
-        // hẳn (6 triệu px, dư sức nét cho ảnh TKB) để không bao giờ chạm sát giới hạn của Safari.
-        const MAX_CANVAS_AREA = 6000000;
-        let renderScale = Math.min(window.devicePixelRatio || 1, 2);
+        const MAX_CANVAS_AREA = 8000000;
+        let renderScale = 2;
         const longestSide = Math.max(captureWidth, captureHeight) * renderScale;
         if (longestSide > MAX_CANVAS_DIMENSION) {
             renderScale = MAX_CANVAS_DIMENSION / Math.max(captureWidth, captureHeight);
