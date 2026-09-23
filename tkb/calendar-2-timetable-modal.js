@@ -21,6 +21,19 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// GIẬT/LAG KHI KÉO NGANG TRÊN MOBILE: updateStickyTint() dùng document.elementFromPoint() để
+// "dò" màu thẻ môn đang nằm dưới thanh sticky/cột Tiết — mỗi lần gọi là 1 lần hit-test buộc
+// trình duyệt tính lại layout, và trước đây hàm này chạy lại ở MỌI frame lúc kéo (rAF chỉ gộp
+// nhiều sự kiện 'scroll' trong CÙNG 1 frame lại, chứ không giới hạn số frame/giây) -> khi kéo
+// nhanh liên tục, main thread bị dội hàng chục lần hit-test/giây, gây giật khung hình thấy rõ
+// trên máy yếu. Thêm mốc thời gian tối thiểu giữa 2 lần chạy thật sự (~90ms ~ 11 lần/giây) —
+// vẫn đủ mượt để mắt thấy màu bám theo cuộn (nhất là đã có transition 0.45s làm mềm), nhưng
+// giảm hẳn số lần hit-test. Vẫn đảm bảo có 1 lần chạy CUỐI CÙNG sau khi ngừng kéo (không bị bỏ
+// sót vị trí dừng) nhờ set thêm timeout riêng.
+const STICKY_TINT_MIN_INTERVAL_MS = 90;
+let _lastTintRunAt = 0;
+let _tintTrailingTimer = null;
+
 function updateStickyTint() {
     const wrapper = document.getElementById('timetable-wrapper');
     const bar = document.getElementById('sticky-header-bg');
@@ -50,7 +63,7 @@ function updateStickyTint() {
                 const cx = Math.min(Math.max(r.left + r.width / 2, wrapRect.left + 1), wrapRect.right - 1);
                 const el = (sampleY >= wrapRect.top && sampleY <= wrapRect.bottom) ? document.elementFromPoint(cx, sampleY) : null;
                 const cardTd = el ? el.closest('.subject-card-td') : null;
-                const c1 = cardTd ? getComputedStyle(cardTd).getPropertyValue('--c1') : '';
+                const c1 = cardTd ? (cardTd.dataset.c1 || getComputedStyle(cardTd).getPropertyValue('--c1')) : '';
                 const pct = ((cx - wrapRect.left) / wrapRect.width) * 100;
                 return `${hexToRgba(c1, 0.1)} ${pct.toFixed(1)}%`;
             });
@@ -65,7 +78,7 @@ function updateStickyTint() {
             const y = Math.min(Math.max(r.top + r.height / 2, wrapRect.top + 1), wrapRect.bottom - 1);
             const el = document.elementFromPoint(x, y);
             const cardTd = el ? el.closest('.subject-card-td') : null;
-            const c1 = cardTd ? getComputedStyle(cardTd).getPropertyValue('--c1') : '';
+            const c1 = cardTd ? (cardTd.dataset.c1 || getComputedStyle(cardTd).getPropertyValue('--c1')) : '';
             cell.style.setProperty('--auto-tint-cell', cardTd ? hexToRgba(c1, 0.1) : 'transparent');
         });
     } finally {
@@ -76,7 +89,20 @@ function updateStickyTint() {
 let _tintRaf = null;
 function requestTintUpdate() {
     if (_tintRaf) return;
-    _tintRaf = requestAnimationFrame(() => { _tintRaf = null; updateStickyTint(); });
+    _tintRaf = requestAnimationFrame(() => {
+        _tintRaf = null;
+        const now = performance.now();
+        if (now - _lastTintRunAt < STICKY_TINT_MIN_INTERVAL_MS) {
+            // Chưa đủ giãn cách -> bỏ qua lần này, nhưng vẫn hẹn chạy bù 1 lần khi kéo dừng lại
+            // (clearTimeout/setTimeout lại mỗi lần vào đây), để không bao giờ bị "kẹt" ở màu cũ
+            // ngay tại vị trí dừng cuộn.
+            clearTimeout(_tintTrailingTimer);
+            _tintTrailingTimer = setTimeout(() => { _lastTintRunAt = performance.now(); updateStickyTint(); }, STICKY_TINT_MIN_INTERVAL_MS);
+            return;
+        }
+        _lastTintRunAt = now;
+        updateStickyTint();
+    });
 }
 
 
@@ -237,7 +263,7 @@ function renderTimetable() {
                 
                 window.globalSubjectColors[baseName] = c1;
                 
-                const customColorStyle = `style="--c1: ${c1}; --c2: ${c2};"`;
+                const customColorStyle = `style="--c1: ${c1}; --c2: ${c2};" data-c1="${escapeHtml(c1)}"`;
                 const rawName = sub.name.split('(')[0].trim();
                 // FIX: ngưỡng cũ là 70 -> môn như "Phân tích thiết kế hướng đối tượng" + phòng + GV
                 // (~46 ký tự) KHÔNG BAO GIỜ được xếp vào .large dù tên đã khá dài. Hạ ngưỡng xuống 45

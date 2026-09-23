@@ -423,7 +423,7 @@ body.has-custom-bg .tkb-content h1 { color: #ffffff; text-shadow: 0 10px 30px rg
 body.has-custom-bg .tkb-content { text-shadow: 0 4px 20px rgba(0,0,0,0.6); }
 body.has-custom-bg .tkb-content p { color: rgba(255,255,255,0.85); }
 body.has-custom-bg .tkb-details span { color: #ffffff; }
-body.has-custom-bg .tkb-next-line { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); }
+body.has-custom-bg .tkb-next-line { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.75); }
 body.has-custom-bg .tkb-next-line b { color: #ffffff; }
 /* Pill "SẮP KHAI GIẢNG" và huy hiệu trạng thái luôn tự mang nền riêng (đen mờ) nên chữ
    luôn phải sáng đi kèm — không phụ thuộc light-mode nữa khi đang có ảnh nền. */
@@ -436,7 +436,7 @@ body.has-custom-bg.bg-photo-light .tkb-content h1 { color: #1f2328; text-shadow:
 body.has-custom-bg.bg-photo-light .tkb-content { text-shadow: 0 2px 10px rgba(255,255,255,0.6); }
 body.has-custom-bg.bg-photo-light .tkb-content p { color: rgba(31,35,40,0.75); }
 body.has-custom-bg.bg-photo-light .tkb-details span { color: #1f2328; }
-body.has-custom-bg.bg-photo-light .tkb-next-line { background: rgba(255,255,255,0.6); border-color: rgba(0,0,0,0.1); }
+body.has-custom-bg.bg-photo-light .tkb-next-line { background: rgba(255,255,255,0.6); border-color: rgba(0,0,0,0.1); color: rgba(31,35,40,0.75); }
 body.has-custom-bg.bg-photo-light .tkb-next-line b { color: #1f2328; }
 body.has-custom-bg.bg-photo-light .badge-status { background: rgba(255,255,255,0.85); border-color: rgba(0,0,0,0.1); color: #1f2328; }
 
