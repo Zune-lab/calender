@@ -10,12 +10,13 @@
 // FIX: Dùng path TƯƠNG ĐỐI (không có dấu / ở đầu) và tự tính theo self.registration.scope,
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
-const CACHE_NAME = 'sgu-workspace-v7'; // BUMP v7: APP_SHELL_RELATIVE thiếu 'tkb/calendar-6-export-capture.js'
-// (file này calendar.html luôn load nhưng chưa từng được liệt kê để cache) -> lần đầu mở offline
-// (chưa từng cache) sẽ thiếu mất script xuất/chụp lịch. Thêm vào danh sách + bump version để SW
-// install lại, cache đủ file mới ngay từ bây giờ.
+const CACHE_NAME = 'sgu-workspace-v8'; // BUMP v8: gộp supabaseUrl/supabaseKey của index.js,
+// profile.js, tkb/calendar-1-core.js về 1 file chung 'supabase-config.js' (load trước mọi
+// script khác) -> thêm file mới này vào app shell để cache offline, đồng thời bump version
+// để SW install lại và không phục vụ nhầm bản index.js/profile.js/calendar-1-core.js cũ
+// (vẫn còn khai báo supabaseUrl/supabaseKey riêng, đã bị xoá) từ cache trước đó.
 const APP_SHELL_RELATIVE = [
-    'index.html', 'index.css', 'index.js', 'shared.js', 'bg-sync.js',
+    'index.html', 'index.css', 'index.js', 'supabase-config.js', 'shared.js', 'bg-sync.js',
     'profile/profile.html', 'profile/profile.css', 'profile/profile.js',
     'tkb/calendar.html',
     'tkb/calendar-1-base.css', 'tkb/calendar-2-notes-glass-lightmode.css', 'tkb/calendar-3-desktop-settings-dialog.css',

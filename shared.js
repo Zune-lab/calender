@@ -20,6 +20,29 @@ function escapeHtml(str) {
 }
 
 // ---------------------------------------------------------
+// RETRY CÓ BACKOFF CHO CÁC LỆNH GỌI SUPABASE — dùng chung cho index.js (Dashboard),
+// tkb/calendar-1-core.js và calendar-3-personalization.js.
+// Lý do cần: Supabase thỉnh thoảng có những đợt hạ tầng chập chờn ngắn (vài chục giây tới vài
+// phút) khiến PostgREST timeout nội bộ và trả lỗi 500/520 cho các request GET — trình duyệt lại
+// hiển thị nhầm thành "blocked by CORS policy" (vì response lỗi không kèm header CORS), dễ khiến
+// tưởng nhầm là lỗi cấu hình CORS/RLS trong khi thực chất chỉ là lỗi tạm thời phía server.
+// -> Thử lại query vài lần với độ trễ tăng dần trước khi chấp nhận thua và trả lỗi ra ngoài.
+// CHỈ dùng cho SELECT (đọc, không có tác dụng phụ) — không dùng cho insert/update/delete vì gọi
+// lại nhiều lần một lệnh ghi/xoá có thể gây trùng lặp dữ liệu.
+// ---------------------------------------------------------
+async function withRetry(queryFn, { retries = 2, baseDelayMs = 700 } = {}) {
+    let lastResult;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        lastResult = await queryFn();
+        if (!lastResult.error) return lastResult;
+        if (attempt < retries) {
+            await new Promise((r) => setTimeout(r, baseDelayMs * (attempt + 1)));
+        }
+    }
+    return lastResult; // đã thử hết số lần cho phép, vẫn lỗi -> trả kết quả lỗi cuối cùng
+}
+
+// ---------------------------------------------------------
 // Parse chuỗi ngày thi (exam_date) về Date object.
 // Chấp nhận: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, DD/MM/YY (năm 2 số -> +2000).
 // Xác định thành phần NĂM bằng ĐỘ DÀI chuỗi (4 số), không dựa vào vị trí trong chuỗi,

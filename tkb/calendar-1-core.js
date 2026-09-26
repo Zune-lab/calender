@@ -7,8 +7,8 @@
 // calendar-1-core.js -> calendar-2-timetable-modal.js -> calendar-3-personalization.js
 // -> calendar-4-planner-notify.js -> calendar-5-planner-ui.js
 
-const supabaseUrl = 'https://oyumvhldhmjmahohavsp.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dW12aGxkaG1qbWFob2hhdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDU0MTEsImV4cCI6MjA5Nzc4MTQxMX0.Wl_SANDz_-FQUaFQwcKXVFVz1Oo1YJNJ-0yMWF_aM1c';
+// SUPABASE_URL / SUPABASE_KEY giờ nằm ở supabase-config.js (load trước file này trong
+// calendar.html), không khai báo riêng ở đây nữa — sửa 1 chỗ là mọi trang đổi theo.
 // Không gọi window.supabase.createClient() ngay ở top-level nữa — nếu CDN Supabase load lỗi/chậm
 // (mạng yếu, bị chặn), việc này sẽ ném lỗi ngay lúc parse file và crash toàn bộ calendar.js trước
 // khi bất kỳ dòng nào khác kịp chạy. Dời việc khởi tạo có kiểm tra vào bên trong DOMContentLoaded
@@ -87,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('[TKB] Không tải được thư viện Supabase (CDN).');
         return;
     }
-    sbClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     sbClient.auth.getSession().then(({ data: { session } }) => { handleSession(session); });
     sbClient.auth.onAuthStateChange((_event, session) => { handleSession(session); });
@@ -337,9 +337,13 @@ function handleSession(session) {
         document.getElementById('main-app').style.opacity = '1';
         document.getElementById('main-app').style.pointerEvents = 'auto';
         
-        sbClient.from('user_settings').select('semester_start_date').eq('user_id', currentUser.id).single()
+        withRetry(() => sbClient.from('user_settings').select('semester_start_date').eq('user_id', currentUser.id).single())
         .then(async ({data, error}) => { 
-            if(data && data.semester_start_date) {
+            if (error) {
+                // Không chặn cả trang chỉ vì lỗi mốc ngày bắt đầu kỳ học — dùng tạm giá trị mặc định
+                // (semesterStartDate khai báo sẵn ở đầu file) và vẫn tiếp tục tải TKB/Lịch thi bên dưới.
+                console.error('Lỗi tải cài đặt học kỳ:', error);
+            } else if (data && data.semester_start_date) {
                 semesterStartDate = new Date(data.semester_start_date + 'T00:00:00');
             }
             await loadTimetable(); 
@@ -857,8 +861,17 @@ window.openModalById = function(id) {
 // các thao tác đó gọi renderTimetable() (không fetch mạng) thay vì gọi lại hàm này.
 async function loadTimetable() {
     if (!currentUser) return;
-    const { data: subjects, error } = await sbClient.from('subjects').select('*').eq('user_id', currentUser.id);
-    if (error) return console.error('Lỗi tải TKB:', error);
+    const { data: subjects, error } = await withRetry(() =>
+        sbClient.from('subjects').select('*').eq('user_id', currentUser.id)
+    );
+    if (error) {
+        console.error('Lỗi tải TKB:', error);
+        window.showAlert && window.showAlert(
+            "Không thể tải Thời Khóa Biểu do máy chủ đang tạm thời gián đoạn. Vui lòng thử tải lại trang sau ít phút.",
+            "Lỗi kết nối"
+        );
+        return;
+    }
 
     allLoadedSubjects = subjects || [];
     renderTimetable();

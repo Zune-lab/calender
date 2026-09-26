@@ -1,6 +1,5 @@
-// THAY MÃ SUPABASE CỦA BẠN VÀO ĐÂY (giữ đồng bộ với index.js và tkb/calendar.js):
-const supabaseUrl = 'https://oyumvhldhmjmahohavsp.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dW12aGxkaG1qbWFob2hhdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDU0MTEsImV4cCI6MjA5Nzc4MTQxMX0.Wl_SANDz_-FQUaFQwcKXVFVz1Oo1YJNJ-0yMWF_aM1c';
+// SUPABASE_URL / SUPABASE_KEY giờ nằm ở supabase-config.js (load trước file này trong
+// profile.html), không khai báo riêng ở đây nữa — sửa 1 chỗ là mọi trang đổi theo.
 
 let base64Image = null;
 
@@ -179,7 +178,7 @@ async function bootProfile() {
         return;
     }
 
-    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     window._sbClient = supabase; // để saveProfile() dùng lại, tránh tạo client 2 lần
 
     let session;

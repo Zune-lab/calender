@@ -543,8 +543,17 @@ document.getElementById('excel-exam-file').addEventListener('change', async func
 
 window.loadExams = async function() {
     if (!currentUser) return;
-    const { data, error } = await sbClient.from('exams').select('*').eq('user_id', currentUser.id);
-    if (error) return console.error('Lỗi tải Lịch Thi:', error);
+    const { data, error } = await withRetry(() =>
+        sbClient.from('exams').select('*').eq('user_id', currentUser.id)
+    );
+    if (error) {
+        console.error('Lỗi tải Lịch Thi:', error);
+        window.showAlert && window.showAlert(
+            "Không thể tải Lịch Thi do máy chủ đang tạm thời gián đoạn. Vui lòng thử tải lại trang sau ít phút.",
+            "Lỗi kết nối"
+        );
+        return;
+    }
     let exams = data;
 
     // FIX: tự động XÓA HẲN các môn thi đã thi xong quá 14 ngày (2 tuần) khỏi bảng exams,

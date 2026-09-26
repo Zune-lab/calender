@@ -1,6 +1,5 @@
-// DÁN MÃ SUPABASE CỦA BẠN VÀO 2 DÒNG DƯỚI ĐÂY:
-const dashUrl = 'https://oyumvhldhmjmahohavsp.supabase.co';
-const dashKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dW12aGxkaG1qbWFob2hhdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDU0MTEsImV4cCI6MjA5Nzc4MTQxMX0.Wl_SANDz_-FQUaFQwcKXVFVz1Oo1YJNJ-0yMWF_aM1c';
+// SUPABASE_URL / SUPABASE_KEY giờ nằm ở supabase-config.js (load trước file này trong
+// index.html), không khai báo riêng ở đây nữa — sửa 1 chỗ là mọi trang đổi theo.
 
 // Không tạo client ngay ở đây nữa — nếu CDN Supabase load lỗi/chậm (mạng yếu, bị chặn), gọi thẳng
 // window.supabase.createClient() ở top-level sẽ ném lỗi ngay lúc parse file và làm crash toàn bộ
@@ -235,7 +234,7 @@ async function initDashboard() {
         document.getElementById('mini-tkb-time').innerText = "Không tải được Supabase (CDN). Kiểm tra kết nối mạng rồi tải lại trang.";
         return;
     }
-    dashClient = window.supabase.createClient(dashUrl, dashKey);
+    dashClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // FIX "LOADER TREO VÔ THỜI HẠN NẾU MẤT MẠNG/API LỖI GIỮA CHỪNG": trước đây chỉ có bước kiểm
     // tra CDN Supabase ở trên là được bọc chống lỗi — getSession() và Promise.all() bên dưới hoàn
@@ -260,20 +259,21 @@ async function initDashboard() {
         renderProfilePill(session.user, meta);
 
         try {
-            const { data: settingsData } = await dashClient
-                .from('user_settings')
-                .select('semester_start_date')
-                .eq('user_id', userId)
-                .single();
+            const { data: settingsData } = await withRetry(() =>
+                dashClient.from('user_settings').select('semester_start_date').eq('user_id', userId).single()
+            );
             if (settingsData && settingsData.semester_start_date) {
                 semesterStartDate = new Date(settingsData.semester_start_date + 'T00:00:00');
             }
         } catch (e) {}
 
+        // Bọc withRetry() cho từng lời gọi: Supabase thỉnh thoảng có đợt hạ tầng chập chờn ngắn
+        // khiến GET bị timeout/500-520 (xem shared.js -> withRetry để biết chi tiết) — tự thử lại
+        // vài lần thay vì để cả Dashboard trắng dữ liệu chỉ vì 1 request thoáng qua bị lỗi.
         const [subjectsRes, examsRes, detailsRes] = await Promise.all([
-            dashClient.from('subjects').select('*').eq('user_id', userId),
-            dashClient.from('exams').select('*').eq('user_id', userId),
-            dashClient.from('subject_details').select('*').eq('user_id', userId).eq('status', 'upcoming')
+            withRetry(() => dashClient.from('subjects').select('*').eq('user_id', userId)),
+            withRetry(() => dashClient.from('exams').select('*').eq('user_id', userId)),
+            withRetry(() => dashClient.from('subject_details').select('*').eq('user_id', userId).eq('status', 'upcoming'))
         ]);
 
         dashSubjects = subjectsRes.data || [];
