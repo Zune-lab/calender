@@ -323,9 +323,18 @@
 
                 <div class="planner-scroll-area" style="flex: 1; min-height: 0; padding: 0 25px 25px; display: flex; flex-direction: column;">
                     <div class="planner-wrapper" id="planner-wrapper">
-                        <div class="planner-week-header" id="planner-week-header">
-                            <div class="planner-header-spacer"></div>
-                            <!-- 7 ô Thứ 2 -> Chủ Nhật render bởi JS -->
+                        <div class="planner-sticky-head">
+                            <div class="planner-week-header" id="planner-week-header">
+                                <div class="planner-header-spacer"></div>
+                                <!-- 7 ô Thứ 2 -> Chủ Nhật render bởi JS -->
+                            </div>
+                            <!-- Dải "cả ngày" kiểu Google Calendar: Ghi chú/Công việc có đặt Hạn
+                                 (subject_details.due_date) rơi vào tuần đang xem, hiện thành thẻ nhỏ
+                                 ở đúng cột ngày — xem renderPlannerAllDay() trong calendar-5-planner-ui.js -->
+                            <div class="planner-allday-row is-empty" id="planner-allday-row">
+                                <div class="planner-header-spacer"></div>
+                                <!-- 7 cột "cả ngày" render bởi JS -->
+                            </div>
                         </div>
                         <div class="planner-grid-body">
                             <div class="planner-hours-col" id="planner-hours-col"></div>
@@ -701,7 +710,6 @@
         <li style="--i: 7; --clr: #ff0000"><a href="404-error-face.html"><i class="fab fa-youtube"></i></a></li>
     </div>
 
-    <script src="../supabase-config.js"></script>
     <script src="../shared.js"></script>
     <script src="../bg-sync.js"></script>
     <!-- calendar.js đã được chia thành 5 file nhỏ hơn (mỗi file < 1000 dòng) để tiện bảo hành.

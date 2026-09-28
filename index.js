@@ -1,5 +1,6 @@
-// SUPABASE_URL / SUPABASE_KEY giờ nằm ở supabase-config.js (load trước file này trong
-// index.html), không khai báo riêng ở đây nữa — sửa 1 chỗ là mọi trang đổi theo.
+// DÁN MÃ SUPABASE CỦA BẠN VÀO 2 DÒNG DƯỚI ĐÂY:
+const dashUrl = 'https://oyumvhldhmjmahohavsp.supabase.co';
+const dashKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dW12aGxkaG1qbWFob2hhdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDU0MTEsImV4cCI6MjA5Nzc4MTQxMX0.Wl_SANDz_-FQUaFQwcKXVFVz1Oo1YJNJ-0yMWF_aM1c';
 
 // Không tạo client ngay ở đây nữa — nếu CDN Supabase load lỗi/chậm (mạng yếu, bị chặn), gọi thẳng
 // window.supabase.createClient() ở top-level sẽ ném lỗi ngay lúc parse file và làm crash toàn bộ
@@ -234,7 +235,7 @@ async function initDashboard() {
         document.getElementById('mini-tkb-time').innerText = "Không tải được Supabase (CDN). Kiểm tra kết nối mạng rồi tải lại trang.";
         return;
     }
-    dashClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    dashClient = window.supabase.createClient(dashUrl, dashKey);
 
     // FIX "LOADER TREO VÔ THỜI HẠN NẾU MẤT MẠNG/API LỖI GIỮA CHỪNG": trước đây chỉ có bước kiểm
     // tra CDN Supabase ở trên là được bọc chống lỗi — getSession() và Promise.all() bên dưới hoàn
@@ -545,6 +546,36 @@ window.switchWidget = function(idx, btn) {
     }
     const box = document.getElementById('widget-dynamic-content');
     if(!box) return;
+
+    // TAB 3 "SẮP TỚI HẠN": gộp chung Bài Tập + Ghi Chú có đặt Hạn (due_date) thành 1 danh sách
+    // DUY NHẤT, sắp theo hạn gần nhất lên đầu — kiểu "Agenda view" của Google Calendar. Khác 2 tab
+    // kia, danh sách này KHÔNG lọc theo môn đang hiển thị ở Hero (heroSubjectId): mục đích là luôn
+    // thấy được việc nào sắp tới hạn nhất trên toàn bộ workspace, bất kể Hero đang hiện môn nào.
+    if (idx === 2) {
+        const merged = [...(window.allTasks || []), ...(window.allNotes || [])]
+            .filter(d => d.due_date)
+            .sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+        if (!merged.length) {
+            box.innerHTML = `<div class="empty-state"><i class="fas fa-calendar-check"></i> Không có việc/ghi chú nào sắp tới hạn.</div>`;
+            return;
+        }
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const priorityDot = { high: '#ff4d4f', normal: '#ffb020', low: '#8b96a5' };
+        box.innerHTML = merged.slice(0, 5).map(item => {
+            const daysUntil = Math.round((new Date(item.due_date + 'T00:00:00') - new Date(todayStr + 'T00:00:00')) / 86400000);
+            const dueLabel = daysUntil < 0 ? `Trễ ${-daysUntil} ngày` : (daysUntil === 0 ? 'Hôm nay' : `Còn ${daysUntil} ngày`);
+            const typeLabel = item.type === 'task' ? 'Bài tập' : 'Ghi chú';
+            const dotColor = priorityDot[item.priority] || priorityDot.normal;
+            return `
+            <div class="list-item" onclick="window.goToTab('timetable')">
+                <div class="list-icon" style="color:${dotColor};"><i class="fas fa-circle" style="font-size:8px;"></i></div>
+                <div class="list-text"><h4>${item.content ? escapeHtml(item.content) : "Trống"}</h4><p>${typeLabel} · ${dueLabel}</p></div>
+            </div>`;
+        }).join('');
+        return;
+    }
 
     const rawData = idx === 0 ? (window.allTasks || []) : (window.allNotes || []);
     // FIX: CHỈ hiện đúng bài tập/ghi chú của MÔN đang hiển thị ở Hero phía trên (so theo

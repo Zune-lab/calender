@@ -304,11 +304,42 @@ body.light-mode .planner-wrapper { background: rgba(255, 255, 255, 0.5) !importa
 body.light-mode .planner-wrapper::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); }
 body.light-mode .planner-wrapper::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.3); }
 
+/* Bọc chung header ngày + dải "cả ngày" trong 1 khối sticky DUY NHẤT (top:0) -> cả 2 dính
+   liền nhau thành 1 khối khi cuộn dọc, thay vì mỗi cái tự sticky top:0 riêng sẽ đè lên nhau. */
+.planner-sticky-head { position: sticky; top: 0; z-index: 50; }
+
 .planner-week-header {
-    display: flex; min-width: fit-content; position: sticky; top: 0; z-index: 50;
+    display: flex; min-width: fit-content;
     background: transparent;
 }
 .planner-header-spacer { width: 58px; flex-shrink: 0; }
+
+/* ========================================================
+   DẢI "CẢ NGÀY" (ALL-DAY) — kiểu Google Calendar: Ghi chú/Công việc sắp tới Hạn
+   (subject_details.due_date) rơi vào tuần đang xem, hiện thành thẻ nhỏ ở đúng cột ngày,
+   ngay trên lưới giờ. Dùng lại đúng layout flex spacer(58px) + 7 cột như .planner-week-header
+   để luôn thẳng hàng theo cột ngày.
+   ======================================================== */
+.planner-allday-row { display: flex; min-width: fit-content; padding: 2px 0 8px; }
+.planner-allday-row.is-empty { display: none; } /* tuần không có Hạn nào -> ẩn hẳn, đỡ chiếm chỗ */
+.planner-allday-col {
+    flex: 1 1 0; min-width: 120px; padding: 0 5px;
+    display: flex; flex-direction: column; gap: 3px;
+}
+.planner-allday-chip {
+    display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0;
+    background: color-mix(in srgb, var(--chip-color) 20%, rgba(255,255,255,0.04));
+    border: 1px solid color-mix(in srgb, var(--chip-color) 50%, transparent);
+    color: var(--text-main); border-radius: 8px; padding: 4px 8px 4px 6px;
+    font-size: 0.72rem; font-weight: 600; text-align: left; cursor: pointer;
+    overflow: hidden; white-space: nowrap;
+}
+.planner-allday-chip:hover { background: color-mix(in srgb, var(--chip-color) 34%, rgba(255,255,255,0.04)); }
+.planner-allday-chip .allday-chip-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--chip-color); flex-shrink: 0;
+}
+.planner-allday-chip .allday-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.light-mode .planner-allday-chip { color: #1a1a1a; }
 .planner-day-header {
     flex: 1 1 0; min-width: 120px; text-align: center; padding: 16px 6px 12px;
     font-size: 0.8rem; font-weight: 700; color: var(--text-muted);

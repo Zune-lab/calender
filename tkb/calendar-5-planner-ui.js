@@ -28,6 +28,27 @@ function initDayPlanner() {
         header.insertAdjacentHTML('beforeend', headerHtml);
         tracksWrap.innerHTML = tracksHtml;
 
+        // 7 cột "cả ngày" (xem renderPlannerAllDay() — hiện Ghi chú/Công việc sắp tới Hạn)
+        const alldayRow = document.getElementById('planner-allday-row');
+        if (alldayRow) {
+            let alldayHtml = '';
+            for (let i = 0; i < 7; i++) {
+                alldayHtml += `<div class="planner-allday-col" id="planner-allday-${i}"></div>`;
+            }
+            alldayRow.insertAdjacentHTML('beforeend', alldayHtml);
+            // Bấm vào 1 thẻ "cả ngày" bất kỳ -> tick Hoàn thành (dùng lại đúng markTaskDone()
+            // đã có ở calendar-2-timetable-modal.js), rồi tải lại dải này để thẻ biến mất ngay.
+            alldayRow.addEventListener('click', async (e) => {
+                const chip = e.target.closest('.planner-allday-chip');
+                if (!chip || chip.disabled) return;
+                const id = parseInt(chip.dataset.id, 10);
+                if (!id) return;
+                chip.disabled = true;
+                await window.markTaskDone(id);
+                loadPlannerBlocks();
+            });
+        }
+
         tracksWrap.addEventListener('pointerdown', onPlannerTracksPointerDown);
 
         buildPlannerColorSwatches();
@@ -154,6 +175,49 @@ async function loadPlannerBlocks() {
     }
     renderPlannerBlocks();
     renderPlannerNowLine();
+
+    // DẢI "CẢ NGÀY" (kiểu Google Calendar): Ghi chú/Công việc (subject_details) có đặt Hạn
+    // rơi vào đúng tuần đang xem — query riêng vì đây là bảng khác, không có start_min/end_min.
+    const { data: dueItems, error: dueErr } = await sbClient.from('subject_details')
+        .select('id, content, type, due_date, priority')
+        .eq('user_id', currentUser.id)
+        .eq('status', 'upcoming')
+        .gte('due_date', startStr)
+        .lte('due_date', endStr);
+
+    plannerAllDayByDate = {};
+    dates.forEach(d => { plannerAllDayByDate[plannerFmtDateInput(d)] = []; });
+    if (dueErr) {
+        console.error('[Planner] Lỗi tải Ghi chú/Công việc sắp tới Hạn:', dueErr.message);
+    } else {
+        (dueItems || []).forEach(item => {
+            if (!plannerAllDayByDate[item.due_date]) plannerAllDayByDate[item.due_date] = [];
+            plannerAllDayByDate[item.due_date].push(item);
+        });
+    }
+    renderPlannerAllDay();
+}
+
+let plannerAllDayByDate = {}; // { 'YYYY-MM-DD': [ {id, content, type, due_date, priority} ] }
+
+function renderPlannerAllDay() {
+    const dates = plannerWeekDates();
+    let hasAny = false;
+    dates.forEach((d, i) => {
+        const col = document.getElementById(`planner-allday-${i}`);
+        if (!col) return;
+        const items = plannerAllDayByDate[plannerFmtDateInput(d)] || [];
+        if (items.length) hasAny = true;
+        col.innerHTML = items.map(item => {
+            const info = getPriorityInfo(item.priority);
+            const label = item.type === 'task' ? 'Công việc' : 'Ghi chú';
+            const safeContent = escapeHtml(item.content || '(không có nội dung)');
+            return `<button type="button" class="planner-allday-chip" style="--chip-color:${info.color}" data-id="${item.id}" title="${label}: ${safeContent} — bấm để đánh dấu Hoàn thành">` +
+                `<span class="allday-chip-dot"></span><span class="allday-chip-text">${safeContent}</span></button>`;
+        }).join('');
+    });
+    const row = document.getElementById('planner-allday-row');
+    if (row) row.classList.toggle('is-empty', !hasAny);
 }
 
 function renderPlannerNowLine() {
