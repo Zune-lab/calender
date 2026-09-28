@@ -1,6 +1,4 @@
-// DÁN MÃ SUPABASE CỦA BẠN VÀO 2 DÒNG DƯỚI ĐÂY:
-const dashUrl = 'https://oyumvhldhmjmahohavsp.supabase.co';
-const dashKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dW12aGxkaG1qbWFob2hhdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDU0MTEsImV4cCI6MjA5Nzc4MTQxMX0.Wl_SANDz_-FQUaFQwcKXVFVz1Oo1YJNJ-0yMWF_aM1c';
+// SUPABASE_URL / SUPABASE_KEY nằm ở supabase-config.js (nạp trước file này trong index.html).
 
 // Không tạo client ngay ở đây nữa — nếu CDN Supabase load lỗi/chậm (mạng yếu, bị chặn), gọi thẳng
 // window.supabase.createClient() ở top-level sẽ ném lỗi ngay lúc parse file và làm crash toàn bộ
@@ -235,7 +233,7 @@ async function initDashboard() {
         document.getElementById('mini-tkb-time').innerText = "Không tải được Supabase (CDN). Kiểm tra kết nối mạng rồi tải lại trang.";
         return;
     }
-    dashClient = window.supabase.createClient(dashUrl, dashKey);
+    dashClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // FIX "LOADER TREO VÔ THỜI HẠN NẾU MẤT MẠNG/API LỖI GIỮA CHỪNG": trước đây chỉ có bước kiểm
     // tra CDN Supabase ở trên là được bọc chống lỗi — getSession() và Promise.all() bên dưới hoàn
