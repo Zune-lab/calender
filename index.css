@@ -509,3 +509,86 @@ body.has-custom-bg.bg-photo-light .badge-status { background: rgba(255,255,255,0
 @media (max-width: 380px) {
     .stat-divider { margin: 0 12px; }
 }
+
+/* =========================================================================
+   HERO REFRESH — chỉnh thứ bậc thông tin (nạp CUỐI file nên thắng các rule cũ cùng độ đặc hiệu)
+   1) Giờ học là phần lớn thứ 2 (sau tiêu đề) + chip đếm ngược
+   2) Thống kê: số nằm trên nhãn, 3 ô đều nhau
+   3) Scrim mềm sau vùng chữ + nhãn thanh icon dễ đọc hơn
+========================================================================= */
+
+/* --- 6a. Scrim mềm phía sau chữ (không có cạnh cứng; tắt khi đã có ảnh nền riêng/light mode) --- */
+.character-tkb-mini::before {
+    content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(ellipse 85% 100% at 15% 50%, rgba(8, 9, 12, 0.5) 0%, rgba(8, 9, 12, 0.25) 55%, transparent 100%);
+}
+body.light-mode .character-tkb-mini::before,
+body.has-custom-bg .character-tkb-mini::before { display: none; }
+
+/* --- 1. Dòng giờ: [NHÃN NGÀY] [GIỜ LỚN] [chip đếm ngược] --- */
+.tkb-content p.hero-time-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+    margin-bottom: 18px; color: var(--text-main);
+}
+.hero-day {
+    font-size: 0.78rem; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--accent); padding: 5px 11px; border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    text-shadow: none; white-space: nowrap;
+}
+.hero-hours {
+    font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.3rem); font-weight: 800; line-height: 1;
+    letter-spacing: -0.01em; font-variant-numeric: tabular-nums; white-space: nowrap;
+    color: var(--text-main);
+}
+.hero-countdown {
+    font-size: 0.82rem; font-weight: 700; padding: 6px 13px; border-radius: 30px; white-space: nowrap;
+    background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.18);
+    color: var(--text-main); text-shadow: none; backdrop-filter: blur(10px);
+}
+.hero-countdown.live,
+.hero-countdown.soon {
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+    border-color: var(--accent);
+}
+.hero-countdown.soon { animation: pulse 1.5s infinite; }
+body.light-mode .hero-countdown { background: rgba(0, 0, 0, 0.06); border-color: rgba(0, 0, 0, 0.12); }
+body.light-mode .hero-countdown.live,
+body.light-mode .hero-countdown.soon { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); }
+body.has-custom-bg .hero-hours { color: #fff; }
+body.has-custom-bg .hero-countdown { color: #fff; }
+body.has-custom-bg.bg-photo-light .hero-hours,
+body.has-custom-bg.bg-photo-light .hero-countdown { color: #1f2328; }
+
+/* --- 5. Thống kê: 3 ô, số trên nhãn --- */
+.stat-body.stat-grid {
+    display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    padding: 0; align-items: stretch; overflow: visible;
+}
+.stat-tile {
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 8px;
+    padding: 12px 14px; border-radius: 16px; min-width: 0;
+    background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.stat-tile h2 {
+    font-size: clamp(1.8rem, 1.3rem + 1.6vw, 3rem); font-weight: 800; line-height: 1;
+    color: var(--text-main); text-shadow: none;
+}
+.stat-tile:first-child h2 { color: var(--accent); }
+.stat-tile p { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.8px; line-height: 1.25; color: var(--text-muted); }
+body.light-mode .stat-tile { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.08); }
+
+/* --- 6b. Thanh icon bên phải: nhãn rõ hơn, nút Thoát tách xa nhóm điều hướng --- */
+.icon-label { color: rgba(255, 255, 255, 0.75); }
+body.light-mode .icon-label { color: var(--text-muted); }
+.logout-btn { margin-top: clamp(10px, 3vh, 34px); }
+
+/* --- Mobile: khôi phục các giá trị riêng của mobile (rule gốc ở trên nằm TRƯỚC khối này) --- */
+@media (max-width: 850px) {
+    .tkb-content p.hero-time-row { margin-bottom: 16px; }
+    .stat-tile { padding: 10px 12px; }
+    .logout-btn { margin-top: 0; }
+}
+@media (max-width: 380px) {
+    .stat-tile p { font-size: 0.6rem; }
+}

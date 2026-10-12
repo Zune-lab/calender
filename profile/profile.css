@@ -93,11 +93,13 @@ body {
 /* Bỏ hàng "bento-save" riêng ở cuối lưới — nút Lưu giờ nằm ngay trong card Thông Tin Cơ Bản,
    ngay dưới "Ngày tham gia" -> lưới bento gọn lại còn 2 hàng, đẹp và cân đối hơn. */
 .profile-shell { width: 100%; max-width: 1080px; margin: 0 auto; padding: 10px 6% 80px; position: relative; z-index: 1; }
-.bento-grid { display: grid; grid-template-columns: 1fr 1.6fr; grid-template-rows: auto auto; gap: 24px; }
+.bento-grid { display: grid; grid-template-columns: 1fr 1.6fr; grid-template-rows: auto; gap: 24px; align-items: stretch; }
 
-.bento-avatar { grid-column: 1 / 2; grid-row: 1 / 2; align-items: center; text-align: center; }
-.bento-privacy { grid-column: 1 / 2; grid-row: 2 / 3; justify-content: center; }
-.bento-info { grid-column: 2 / 3; grid-row: 1 / 3; }
+/* Thẻ Quyền riêng tư đã gộp vào thẻ Thông tin -> chỉ còn 2 thẻ, không còn khoảng trống chết
+   giữa "Ngày tham gia" và nút Lưu. Hai thẻ cao bằng nhau (stretch); thẻ ảnh được lấp bằng tên/email
+   xem trước + nút Đăng xuất ở đáy nên không còn khoảng trống chết. */
+.bento-avatar { grid-column: 1 / 2; grid-row: 1 / 2; align-items: center; text-align: center; height: auto; }
+.bento-info { grid-column: 2 / 3; grid-row: 1 / 2; height: auto; }
 
 /* ---------- THẺ KÍNH (đồng bộ .widget-box của index.css) ---------- */
 .profile-card {
@@ -206,6 +208,15 @@ input[type="file"] { display: none; }
 .save-status { font-size: 0.85rem; color: var(--text-muted); }
 .save-status.ok { color: #4ade80; }
 .save-status.err { color: var(--accent); }
+.avatar-name { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.3px; margin: 4px 0 2px; max-width: 100%; overflow-wrap: anywhere; }
+.avatar-sub { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 18px; max-width: 100%; overflow-wrap: anywhere; }
+.account-actions { margin-top: auto; padding-top: 22px; width: 100%; }
+.btn-logout { width: 100%; justify-content: center; padding: 12px 18px; }
+.save-status.dirty { color: #fbbf24; font-weight: 600; }
+
+/* Phân nhóm trong thẻ Thông tin: đường kẻ + tiêu đề phụ cho "Quyền riêng tư" */
+.form-divider { height: 1px; background: var(--panel-border); margin: 6px 0 22px; }
+.card-label-sub { margin-bottom: 14px; color: var(--text-muted); }
 
 /* =========================================
    LIGHT MODE — y hệt index.css để đồng bộ toàn hệ thống
@@ -233,13 +244,13 @@ body.light-mode .slider { background: rgba(0,0,0,0.12); }
 
 @media (max-width: 850px) {
     .bento-grid { grid-template-columns: 1fr; }
-    .bento-avatar, .bento-privacy { grid-column: 1 / -1; grid-row: auto; }
+    .bento-avatar, .bento-info { grid-column: 1 / -1; grid-row: auto; }
 
     /* Đổi chỗ "LƯU THAY ĐỔI" và "Ẩn Email công khai" trên mobile: tách .bento-info ra khỏi
        hộp card của chính nó (display:contents) để 2 phần con — .info-fields (tên/email/ngày
        tham gia) và .info-save-row (nút Lưu) — trở thành item độc lập ngay trong .bento-grid,
        tự xếp lại thứ tự bằng "order" mà KHÔNG đụng gì tới bố cục desktop (chỉ trong media query
-       này). Thứ tự mới: Avatar -> Thông tin -> Quyền riêng tư (Ẩn Email) -> Nút Lưu. */
+       này). Thứ tự: Avatar -> Thông tin (gồm Quyền riêng tư) -> Nút Lưu. */
     .bento-info { display: contents; }
     .bento-avatar { order: 1; }
     .info-fields {
@@ -248,9 +259,8 @@ body.light-mode .slider { background: rgba(0,0,0,0.12); }
         border: 1px solid var(--panel-border); border-radius: 24px;
         padding: 30px; box-shadow: 0 15px 40px rgba(0,0,0,0.4);
     }
-    .bento-privacy { order: 3; }
     .info-save-row {
-        order: 4;
+        order: 3;
         margin-top: 0; border-top: none;
         background: var(--panel-bg); backdrop-filter: blur(20px);
         border: 1px solid var(--panel-border); border-radius: 24px;

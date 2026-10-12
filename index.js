@@ -349,25 +349,129 @@ function findTodayExam(examsData, now) {
     }) || null;
 }
 
+// ==========================================
+// HERO: GIỜ HỌC LỚN + ĐẾM NGƯỢC (cập nhật mỗi 30s, tự render lại khi tới mốc)
+// ==========================================
+let heroTickTimer = null;
+let heroLastArgs = null;
+
+function fmtHeroDuration(mins) {
+    mins = Math.max(0, Math.ceil(mins));
+    if (mins < 60) return `${mins} phút`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return m ? `${h}g ${m}p` : `${h}g`;
+}
+
+// "07:00 -> 09:50" => "07:00 – 09:50" (không để mũi tên làm xuống dòng)
+function fmtHeroHours(raw) {
+    return String(raw || '').replace(/\s*(?:->|→|=>)\s*/, ' – ').trim();
+}
+
+function stopHeroTick() {
+    if (heroTickTimer) { clearInterval(heroTickTimer); heroTickTimer = null; }
+}
+
+// Trả hero về dạng chữ thường (các trạng thái "trống lịch", "kỳ học kết thúc"... tự gán innerText)
+function resetHeroTimeRow() {
+    stopHeroTick();
+    const p = document.getElementById('mini-tkb-time');
+    if (p) p.classList.remove('hero-time-row');
+}
+
+// Dựng dòng: [NHÃN NGÀY] [GIỜ LỚN] [chip đếm ngược] — dùng textContent nên an toàn với dữ liệu từ DB
+function setHeroTime(dayLabel, hoursText, chip) {
+    const p = document.getElementById('mini-tkb-time');
+    if (!p) return;
+    p.textContent = '';
+    p.classList.add('hero-time-row');
+    const day = document.createElement('span');
+    day.className = 'hero-day';
+    day.textContent = dayLabel;
+    p.appendChild(day);
+    if (hoursText) {
+        const hrs = document.createElement('span');
+        hrs.className = 'hero-hours';
+        hrs.textContent = fmtHeroHours(hoursText);
+        p.appendChild(hrs);
+    }
+    if (chip && chip.text) {
+        const c = document.createElement('span');
+        c.id = 'hero-countdown';
+        c.className = 'hero-countdown' + (chip.kind ? ' ' + chip.kind : '');
+        c.textContent = chip.text;
+        p.appendChild(c);
+    }
+}
+
+// buildChip(now) -> {text, kind} | null. Khi trả null (tới mốc) => render lại hero để chuyển trạng thái.
+function startHeroTick(buildChip) {
+    stopHeroTick();
+    heroTickTimer = setInterval(() => {
+        const el = document.getElementById('hero-countdown');
+        const chip = el ? buildChip(new Date()) : null;
+        if (!chip) {
+            stopHeroTick();
+            if (heroLastArgs) {
+                const before = heroSubjectId;
+                renderHero(new Date(), heroLastArgs.weekIndex, heroLastArgs.examsData);
+                if (heroSubjectId !== before) switchWidget(0, document.querySelector('.widget-tabs button.active'));
+            }
+            return;
+        }
+        el.textContent = chip.text;
+        el.className = 'hero-countdown' + (chip.kind ? ' ' + chip.kind : '');
+    }, 30000);
+}
+
+function classCountdownChip(status, range, d) {
+    const cur = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+    if (status === 'ongoing') {
+        const left = range.endMin - cur;
+        return left > 0 ? { text: `Kết thúc sau ${fmtHeroDuration(left)}`, kind: 'live' } : null;
+    }
+    if (status === 'today') {
+        const until = range.startMin - cur;
+        return until > 0 ? { text: `Bắt đầu sau ${fmtHeroDuration(until)}`, kind: until <= 15 ? 'soon' : '' } : null;
+    }
+    return null;
+}
+
+// Nhãn ngày: HÔM NAY / NGÀY MAI / THỨ X (· TUẦN N nếu không phải tuần này)
+function heroDayLabel(sessionDay, curDay, status, sessionWeek, weekIndex) {
+    if (status === 'ongoing' || status === 'today') return 'HÔM NAY';
+    const dayName = sessionDay === 8 ? 'CHỦ NHẬT' : 'THỨ ' + sessionDay;
+    const sameWeek = sessionWeek === weekIndex;
+    const tomorrow = (sameWeek && sessionDay === curDay + 1) ||
+                     (sessionWeek === weekIndex + 1 && curDay === 8 && sessionDay === 2);
+    if (tomorrow) return 'NGÀY MAI';
+    return sameWeek ? dayName : `${dayName} · TUẦN ${sessionWeek + 1}`;
+}
+
 function renderExamDayHero(exam, now) {
     const rawName = (exam.subject_name || 'Môn thi').trim();
 
     // Tính còn bao nhiêu phút tới giờ thi để quyết định mức độ khẩn cấp hiển thị
     let minutesUntilExam = null;
+    let examStart = null;
     const timeMatch = String(exam.exam_time || '').match(/(\d{1,2}):(\d{2})/);
     if (timeMatch) {
         const examDateTime = new Date(now);
         examDateTime.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]), 0, 0);
         minutesUntilExam = (examDateTime - now) / 60000;
+        examStart = examDateTime;
     }
 
     const isUrgent = minutesUntilExam !== null && minutesUntilExam > 0 && minutesUntilExam <= 30;
     const isPast = minutesUntilExam !== null && minutesUntilExam <= 0;
 
     document.getElementById('mini-tkb-name').innerText = rawName;
-    document.getElementById('mini-tkb-time').innerText = isPast
-        ? `ĐÃ THI XONG  •  ${exam.exam_time || ''}`
-        : `HÔM NAY  •  ${exam.exam_time || ''}`;
+    const examChipFor = (d) => {
+        if (!examStart) return null;
+        const m = (examStart - d) / 60000;
+        return m > 0 ? { text: `Thi sau ${fmtHeroDuration(m)}`, kind: m <= 30 ? 'soon' : '' } : null;
+    };
+    setHeroTime(isPast ? 'ĐÃ THI XONG' : 'HÔM NAY', exam.exam_time || '', isPast ? null : examChipFor(now));
+    if (!isPast && examStart) startHeroTick(examChipFor);
     document.getElementById('mini-tkb-room').innerText = exam.room || "N/A";
     document.getElementById('mini-tkb-gv').innerText = exam.course_code || "—";
     document.getElementById('val-bg-text').innerText = exam.course_code || "THI";
@@ -388,6 +492,8 @@ function renderHero(now, weekIndex, examsData) {
     const nextLineEl = document.getElementById('tkb-next-line');
     const nextTextEl = document.getElementById('tkb-next-text');
     if (nextLineEl) nextLineEl.style.display = 'none'; // mặc định ẩn, chỉ bật khi có dữ liệu thật
+    heroLastArgs = { weekIndex, examsData };
+    resetHeroTimeRow(); // dừng đếm ngược cũ + bỏ kiểu "giờ lớn" cho các trạng thái chỉ có chữ
 
     // Reset nhãn về mặc định "Giảng viên:" trước, tránh dính chữ "Mã MH:" từ lần render lịch thi trước đó
     const gvLabelReset = document.getElementById('mini-tkb-gv-label');
@@ -423,6 +529,7 @@ function renderHero(now, weekIndex, examsData) {
     let upcoming = null;
     let status = 'future'; // 'ongoing' (đang học) | 'today' (chưa tới giờ, học hôm nay) | 'future' (ngày khác)
     let nextAfter = null;  // buổi học kế tiếp, để hiển thị khi lớp hiện tại kết thúc
+    let upcomingWeek = weekIndex; // tuần (0-indexed) của buổi học đang hiển thị
 
     if (weekIndex >= 0) {
         const activeToday = dashSubjects
@@ -457,6 +564,7 @@ function renderHero(now, weekIndex, examsData) {
             const found = findNearestFutureSession(weekIndex, curDay);
             if (found) {
                 upcoming = found.sub;
+                upcomingWeek = found.w;
                 status = 'future';
             }
         }
@@ -503,7 +611,14 @@ function renderHero(now, weekIndex, examsData) {
 
     const rawName = (upcoming.name || 'Môn Ẩn').split('-')[0].split('(')[0].trim();
     document.getElementById('mini-tkb-name').innerText = rawName;
-    document.getElementById('mini-tkb-time').innerText = `${upcoming.day === curDay ? "HÔM NAY" : (upcoming.day === 8 ? "CHỦ NHẬT" : "THỨ " + upcoming.day)}  •  ${upcoming.exact_time || upcoming.time_slot || ''}`;
+    const classRange = parsePeriodRange(upcoming);
+    const classChipFor = (d) => classRange ? classCountdownChip(status, classRange, d) : null;
+    setHeroTime(
+        heroDayLabel(upcoming.day, curDay, status, upcomingWeek, weekIndex),
+        upcoming.exact_time || upcoming.time_slot || '',
+        classChipFor(now)
+    );
+    if (status === 'ongoing' || status === 'today') startHeroTick(classChipFor);
     document.getElementById('mini-tkb-room').innerText = upcoming.room || "N/A";
     document.getElementById('mini-tkb-gv').innerText = upcoming.lecturer || "N/A";
     document.getElementById('val-bg-text').innerText = upcoming.course_code || "SGU";

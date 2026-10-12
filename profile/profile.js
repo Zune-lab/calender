@@ -222,6 +222,7 @@ async function bootProfile() {
         if (meta.full_name) {
             document.getElementById('display-name').value = meta.full_name;
         }
+        updateIdentityPreview();
         document.getElementById('hide-email-toggle').checked = !!meta.hide_email;
     } catch (err) {
         showFatalError("Lỗi khi hiển thị dữ liệu hồ sơ: " + err.message);
@@ -231,6 +232,41 @@ async function bootProfile() {
 // ==========================================
 // 4. AVATAR UPLOAD (nén ảnh về webp 150x150)
 // ==========================================
+// Theo dõi thay đổi chưa lưu: ảnh đại diện chỉ được lưu khi bấm "LƯU THAY ĐỔI" nên phải báo rõ,
+// tránh người dùng đổi ảnh xong rời trang tưởng đã áp dụng.
+let profileDirty = false;
+function markProfileDirty() {
+    profileDirty = true;
+    const statusEl = document.getElementById('save-status');
+    if (statusEl) {
+        statusEl.textContent = 'Có thay đổi chưa lưu';
+        statusEl.className = 'save-status dirty';
+    }
+}
+// Xem trước tên/email ở thẻ ảnh đại diện (cập nhật theo lúc gõ + theo công tắc ẩn email)
+function updateIdentityPreview() {
+    const nameEl = document.getElementById('avatar-name-preview');
+    const mailEl = document.getElementById('avatar-email-preview');
+    const typed = document.getElementById('display-name').value.trim();
+    const email = (document.getElementById('user-email-2') || {}).innerText || '';
+    const hidden = document.getElementById('hide-email-toggle').checked;
+    if (nameEl) nameEl.textContent = typed || 'Chưa đặt tên';
+    if (mailEl) mailEl.textContent = hidden ? 'Email đang được ẩn với người khác' : (email === '—' ? '' : email);
+}
+document.getElementById('display-name').addEventListener('input', () => { markProfileDirty(); updateIdentityPreview(); });
+document.getElementById('hide-email-toggle').addEventListener('change', () => { markProfileDirty(); updateIdentityPreview(); });
+
+window.logoutFromProfile = async function() {
+    const msg = profileDirty ? 'Bạn có thay đổi chưa lưu. Vẫn đăng xuất?' : 'Đăng xuất khỏi tài khoản?';
+    if (!confirm(msg)) return;
+    profileDirty = false; // bỏ cảnh báo beforeunload vì người dùng đã chủ động xác nhận
+    try { if (window._sbClient) await window._sbClient.auth.signOut(); } catch (e) {}
+    window.location.href = '../tkb/calendar.html';
+};
+window.addEventListener('beforeunload', (e) => {
+    if (profileDirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
 document.getElementById('file-input').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -249,6 +285,7 @@ document.getElementById('file-input').addEventListener('change', function(e) {
             base64Image = canvas.toDataURL('image/webp', 0.6);
             document.getElementById('avatar-container').innerHTML = `<img src="${base64Image}">`;
             document.getElementById('remove-avatar-btn').style.display = 'inline-flex';
+            markProfileDirty();
         };
         img.src = event.target.result;
     };
@@ -260,6 +297,7 @@ window.removeAvatar = function() {
     document.getElementById('avatar-container').innerHTML = `<i class="fas fa-user-astronaut"></i>`;
     document.getElementById('remove-avatar-btn').style.display = 'none';
     document.getElementById('file-input').value = '';
+    markProfileDirty();
 };
 
 // ==========================================
@@ -296,6 +334,7 @@ window.saveProfile = async function() {
     } else {
         statusEl.textContent = "Đã lưu hồ sơ thành công!";
         statusEl.className = 'save-status ok';
+        profileDirty = false;
     }
 
     btn.disabled = false;
