@@ -10,7 +10,7 @@
 // FIX: Dùng path TƯƠNG ĐỐI (không có dấu / ở đầu) và tự tính theo self.registration.scope,
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
-const CACHE_NAME = 'sgu-workspace-v8'; // BUMP v8: gộp supabaseUrl/supabaseKey của index.js,
+const CACHE_NAME = 'sgu-workspace-v9'; // BUMP v8: gộp supabaseUrl/supabaseKey của index.js,
 // profile.js, tkb/calendar-1-core.js về 1 file chung 'supabase-config.js' (load trước mọi
 // script khác) -> thêm file mới này vào app shell để cache offline, đồng thời bump version
 // để SW install lại và không phục vụ nhầm bản index.js/profile.js/calendar-1-core.js cũ
@@ -20,68 +20,62 @@ const APP_SHELL_RELATIVE = [
     'profile/profile.html', 'profile/profile.css', 'profile/profile.js',
     'tkb/calendar.html',
     'tkb/calendar-1-base.css', 'tkb/calendar-2-notes-glass-lightmode.css', 'tkb/calendar-3-desktop-settings-dialog.css',
+    'tkb/calendar-4-planner-overview.css', 'tkb/calendar-7-layout-refresh.css',
     'tkb/calendar-1-core.js', 'tkb/calendar-2-timetable-modal.js', 'tkb/calendar-3-personalization.js',
-    'tkb/calendar-4-planner-notify.js', 'tkb/calendar-5-planner-ui.js', 'tkb/calendar-6-export-capture.js',
+    'tkb/calendar-4-planner-notify.js', 'tkb/calendar-5-planner-ui.js', 'tkb/calendar-5b-planner-overview.js',
+    'tkb/calendar-6-export-capture.js',
     'manifest.json', 'icon-192.png', 'icon-512.png',
 ];
+
+// FIX BUG "SỬA/XÓA CODE XONG RELOAD LOCAL VẪN THẤY BẢN CŨ": khi chạy local (Live Server...),
+// SW cũ trả file từ cache trước rồi mới tải bản mới ngầm -> phải reload 2 lần mới thấy thay đổi
+// (hoặc không bao giờ thấy nếu file đã bị xóa khỏi ổ đĩa mà cache vẫn còn). Ở local, SW không
+// can thiệp request và không giữ cache nào.
+const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '[::1]'].includes(self.location.hostname);
 
 function scopedUrl(relativePath) {
     return new URL(relativePath, self.registration.scope).href;
 }
 
 self.addEventListener('install', (event) => {
+    self.skipWaiting(); // kích hoạt SW mới ngay, không cần đợi user đóng hết tab cũ
+    if (IS_LOCAL_DEV) return;
     const appShell = APP_SHELL_RELATIVE.map(scopedUrl);
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then((cache) => cache.addAll(appShell))
             .catch((e) => console.warn('[SW] Cache app shell lỗi (không sao, sẽ thử lại lần request sau):', e.message))
     );
-    self.skipWaiting(); // kích hoạt SW mới ngay, không cần đợi user đóng hết tab cũ
 });
 
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((names) =>
-            Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+            Promise.all(names.filter((n) => IS_LOCAL_DEV || n !== CACHE_NAME).map((n) => caches.delete(n)))
         ).then(() => self.clients.claim()) // chiếm quyền kiểm soát các tab đang mở ngay lập tức
     );
 });
 
-// Chiến lược: network-first cho HTML (luôn ưu tiên bản mới nhất khi có mạng), fallback về cache
-// khi mất mạng. Với file tĩnh khác (css/js/icon) thì cache-first cho nhanh.
+// Chiến lược: NETWORK-FIRST cho mọi file cùng origin (HTML/CSS/JS/icon), fallback về cache khi
+// mất mạng. Dùng cache:'no-cache' để luôn hỏi lại server (304 nếu không đổi -> vẫn nhẹ) thay vì
+// bị HTTP cache của GitHub Pages (max-age 10 phút) trả bản cũ. Nhờ vậy push code xong chỉ cần
+// reload 1 lần là thấy bản mới; mở offline vẫn dùng được nhờ cache.
 self.addEventListener('fetch', (event) => {
     const req = event.request;
+    if (IS_LOCAL_DEV) return; // local: để trình duyệt tự xử lý, không cache
     if (req.method !== 'GET' || !req.url.startsWith(self.location.origin)) return; // bỏ qua request tới Supabase/CDN ngoài
 
     const isHTML = req.headers.get('accept')?.includes('text/html');
 
-    if (isHTML) {
-        event.respondWith(
-            fetch(req).then((res) => {
+    event.respondWith(
+        fetch(req, { cache: 'no-cache' }).then((res) => {
+            if (res.ok) {
                 const clone = res.clone();
                 caches.open(CACHE_NAME).then((c) => c.put(req, clone));
-                return res;
-            }).catch(() => caches.match(req).then((c) => c || caches.match(scopedUrl('index.html'))))
-        );
-    } else {
-        // FIX BUG "PUSH GITHUB XONG VẪN THẤY BẢN CŨ": trước đây là cache-first THUẦN TÚY —
-        // hễ cache đã có bản nào thì trả thẳng bản đó, KHÔNG BAO GIỜ hỏi lại mạng nữa, nên
-        // index.js/index.css/calendar.js/calendar.css mới push lên GitHub Pages bị kẹt cứng
-        // sau bản cache đầu tiên (trong khi Live Server là origin khác, cache riêng, luôn mới).
-        // Giờ đổi sang stale-while-revalidate: vẫn trả cache ngay cho nhanh (giữ trải nghiệm
-        // mở nhanh/offline), NHƯNG luôn âm thầm gọi mạng song song để lấy bản mới nhất và ghi
-        // đè lại cache -> lần mở SAU sẽ tự động là bản mới, không cần bump CACHE_NAME tay nữa.
-        event.respondWith(
-            caches.match(req).then((cached) => {
-                const networkFetch = fetch(req).then((res) => {
-                    const clone = res.clone();
-                    caches.open(CACHE_NAME).then((c) => c.put(req, clone));
-                    return res;
-                }).catch(() => cached); // mất mạng thật sự thì mới rơi về cache
-                return cached || networkFetch;
-            })
-        );
-    }
+            }
+            return res;
+        }).catch(() => caches.match(req).then((c) => c || (isHTML ? caches.match(scopedUrl('index.html')) : undefined)))
+    );
 });
 
 // Nhận push message từ server (planner-push-cron Edge Function bắn qua Web Push)

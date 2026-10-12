@@ -282,7 +282,7 @@ function renderTimetable() {
                         <p class="info-text">GV: ${escapeHtml(sub.lecturer || 'N/A')}</p>
                         <p class="info-text time-text">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                            ${escapeHtml(sub.exact_time ? sub.exact_time : `Tiết ${t}-${t + slot.duration - 1}`)}
+                            ${escapeHtml((sub.exact_time ? sub.exact_time : `Tiết ${t}-${t + slot.duration - 1}`).replace(/\s*->\s*/, ' – '))}
                         </p>
                     </td>
                 `;

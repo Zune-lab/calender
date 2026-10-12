@@ -97,3 +97,29 @@ body.light-mode .empty-td.today-col {
         -webkit-backdrop-filter: none !important;
     }
 }
+
+/* Giờ học: pill tối nhỏ gọn, 1 dòng, tách hẳn khỏi các dòng thông tin.
+   - width:fit-content + overflow:hidden -> nền luôn bọc đúng chữ, không bao giờ tràn ra ngoài nền
+   - margin-left âm = bù đúng padding ngang của pill -> chữ vẫn thẳng hàng với các dòng trên,
+     còn nền pill được "thò" nhẹ ra lề để không bị chật. */
+.subject-card-td .time-text,
+.subject-card-td.large .time-text {
+    display: block;
+    width: fit-content;
+    max-width: calc(100% + 12px);
+    margin: clamp(6px, 1cqw, 10px) 0 0 -6px;
+    padding: 3px 6px;
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    box-shadow: none;
+    text-shadow: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    font-size: clamp(0.5rem, 1cqw, 0.66rem);
+}
+.subject-card-td .time-text svg { display: none; }
