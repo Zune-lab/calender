@@ -1,0 +1,116 @@
+/* =========================================================
+   calendar-4-planner-overview.css
+   Chế độ xem "Tổng quan" gọn của Kế Hoạch Ngày (lưới 5 tuần + thẻ tiến độ năm).
+   JS: calendar-5b-planner-overview.js
+   ========================================================= */
+
+/* ---------- Nút chuyển chế độ Lưới giờ / Tổng quan ---------- */
+.planner-view-switch {
+    display: inline-flex; align-items: center; gap: 2px; padding: 4px; border-radius: 14px;
+}
+.planner-view-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border: none; border-radius: 10px; cursor: pointer;
+    background: transparent; color: var(--text-muted);
+    font-size: 0.78rem; font-weight: 600; font-family: inherit;
+    transition: background var(--duration-fast, 0.2s) ease, color var(--duration-fast, 0.2s) ease;
+}
+.planner-view-btn:hover { color: var(--text-main); }
+.planner-view-btn.active { background: rgba(255, 255, 255, 0.12); color: var(--text-main); }
+body.light-mode .planner-view-btn.active { background: rgba(255, 255, 255, 0.9); color: #1e293b; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+@media (max-width: 560px) { .planner-view-btn span { display: none; } .planner-view-btn { padding: 7px 11px; } }
+
+/* ---------- Khung tổng quan ---------- */
+.planner-overview {
+    flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+    flex-direction: column; gap: 14px; padding-bottom: 4px;
+    scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+body.light-mode .planner-overview { scrollbar-color: rgba(0, 0, 0, 0.2) transparent; }
+
+.pov-year-card, .pov-grid-card {
+    border-radius: 24px; padding: 16px 18px;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(25px) saturate(130%); -webkit-backdrop-filter: blur(25px) saturate(130%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 0 25px rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+body.light-mode .pov-year-card, body.light-mode .pov-grid-card {
+    background: rgba(255, 255, 255, 0.6); border-color: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+/* ---------- Thẻ tiến độ năm ---------- */
+.pov-year-top { display: flex; align-items: baseline; justify-content: space-between; }
+.pov-year-num, .pov-year-pct { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; color: var(--text-main); }
+.pov-year-bar { height: 7px; border-radius: 99px; margin: 10px 0 8px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.pov-year-bar-fill {
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent));
+    transition: width 0.6s var(--ease-standard, ease);
+}
+body.light-mode .pov-year-bar { background: rgba(15, 23, 42, 0.1); }
+body.light-mode .pov-year-num, body.light-mode .pov-year-pct { color: #1e293b; }
+.pov-year-bottom { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-muted); }
+
+/* ---------- Lưới 5 tuần ---------- */
+.pov-dow-row, .pov-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.pov-dow {
+    text-align: center; font-size: 0.7rem; font-weight: 600; color: var(--text-muted);
+    padding: 0 0 8px; letter-spacing: 0.3px;
+}
+.pov-week { padding: 6px 0 10px; }
+.pov-week + .pov-week { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+body.light-mode .pov-week + .pov-week { border-top-color: rgba(15, 23, 42, 0.07); }
+
+.pov-day { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; min-height: 96px; }
+
+.pov-daynum {
+    align-self: center; min-width: 26px; height: 26px; padding: 0 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; border-radius: 99px; background: transparent; cursor: pointer;
+    font-family: inherit; font-size: 0.86rem; font-weight: 600; color: var(--text-main);
+    margin-bottom: 2px; transition: background var(--duration-fast, 0.2s) ease;
+}
+.pov-daynum small { font-size: 0.62rem; font-weight: 500; opacity: 0.6; margin-left: 1px; }
+.pov-daynum:hover { background: rgba(255, 255, 255, 0.1); }
+body.light-mode .pov-daynum { color: #1e293b; }
+body.light-mode .pov-daynum:hover { background: rgba(15, 23, 42, 0.07); }
+.pov-day.is-today .pov-daynum { background: #fff; color: #111; font-weight: 700; }
+body.light-mode .pov-day.is-today .pov-daynum { background: #1e293b; color: #fff; }
+
+.pov-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pov-chip {
+    display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0;
+    padding: 3px 5px 3px 4px; border: none; border-radius: 6px; cursor: pointer;
+    font-family: inherit; font-size: 0.66rem; font-weight: 600; text-align: left; line-height: 1.25;
+    color: var(--text-main); overflow: hidden; white-space: nowrap;
+    background: color-mix(in srgb, var(--c) 22%, rgba(255, 255, 255, 0.04));
+    box-shadow: inset 2px 0 0 var(--c);
+    transition: background var(--duration-fast, 0.2s) ease, opacity var(--duration-fast, 0.2s) ease;
+}
+.pov-chip:hover { background: color-mix(in srgb, var(--c) 36%, rgba(255, 255, 255, 0.04)); }
+.pov-chip:disabled { opacity: 0.5; cursor: default; }
+.pov-chip .pov-ico { font-size: 0.68rem; flex-shrink: 0; margin-left: 2px; color: var(--c); }
+.pov-chip.is-done { opacity: 0.6; }
+.pov-chip.is-done .pov-chip-text { text-decoration: line-through; text-decoration-thickness: 1px; }
+.pov-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+body.light-mode .pov-chip { color: #1a1a1a; background: color-mix(in srgb, var(--c) 24%, rgba(255, 255, 255, 0.7)); }
+
+.pov-more {
+    align-self: flex-end; border: none; background: transparent; cursor: pointer;
+    font-family: inherit; font-size: 0.64rem; font-weight: 600; color: var(--text-muted);
+    padding: 0 3px; line-height: 1;
+}
+.pov-more:hover { color: var(--text-main); }
+
+/* ---------- Màn hình hẹp ---------- */
+@media (max-width: 720px) {
+    .pov-year-card, .pov-grid-card { padding: 12px 10px; border-radius: 20px; }
+    .pov-year-num, .pov-year-pct { font-size: 1.25rem; }
+    .pov-chip { font-size: 0.6rem; padding: 2px 3px; gap: 2px; border-radius: 5px; }
+    .pov-chip .pov-ico { font-size: 0.6rem; margin-left: 1px; }
+    .pov-day { min-height: 84px; }
+    .pov-dow-row, .pov-week { gap: 3px; }
+}

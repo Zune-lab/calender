@@ -74,6 +74,7 @@ function initDayPlanner() {
 
     updatePlannerWeekHeader();
     updatePlannerWeekLabel();
+    if (typeof initPlannerViewMode === 'function') initPlannerViewMode();
 }
 
 function buildPlannerColorSwatches() {
@@ -149,6 +150,12 @@ async function loadPlannerBlocks() {
         .then(({ error: cleanupErr }) => {
             if (cleanupErr) console.warn('[Planner] Lỗi tự xóa việc đã xong quá hạn:', cleanupErr.message);
         });
+
+    // Chế độ "Tổng quan" (calendar-5b-planner-overview.js) tự tải lưới 5 tuần của nó.
+    if (typeof plannerViewMode !== 'undefined' && plannerViewMode === 'overview') {
+        loadPlannerOverview();
+        return;
+    }
 
     const dates = plannerWeekDates();
     const startStr = plannerFmtDateInput(dates[0]);

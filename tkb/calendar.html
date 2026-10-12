@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="calendar-1-base.css">
     <link rel="stylesheet" href="calendar-2-notes-glass-lightmode.css">
     <link rel="stylesheet" href="calendar-3-desktop-settings-dialog.css">
+    <link rel="stylesheet" href="calendar-4-planner-overview.css">
     <link rel="manifest" href="../manifest.json">
     <meta name="theme-color" content="#08090c">
     <link rel="icon" href="../icon-192.png">
@@ -304,6 +305,15 @@
                             </div>
                         </div>
 
+                        <div class="planner-view-switch glass-panel-3d" style="flex-shrink: 0;">
+                            <button type="button" class="planner-view-btn" data-mode="grid" onclick="setPlannerViewMode('grid')" title="Lưới giờ theo tuần">
+                                <i class="fas fa-table-cells-large"></i><span>Lưới giờ</span>
+                            </button>
+                            <button type="button" class="planner-view-btn" data-mode="overview" onclick="setPlannerViewMode('overview')" title="Tổng quan gọn nhiều tuần">
+                                <i class="fas fa-calendar-days"></i><span>Tổng quan</span>
+                            </button>
+                        </div>
+
                         <div class="day-selector-wrapper glass-panel-3d compact" style="flex-shrink: 0;">
                             <button id="prev-week-planner-btn" class="day-nav-btn" onclick="changePlannerWeek(-1)" title="Tuần trước" type="button">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -322,6 +332,14 @@
                 </div>
 
                 <div class="planner-scroll-area" style="flex: 1; min-height: 0; padding: 0 25px 25px; display: flex; flex-direction: column;">
+                    <!-- Chế độ "Tổng quan" gọn (render bởi calendar-5b-planner-overview.js) -->
+                    <div class="planner-overview" id="planner-overview" style="display: none;">
+                        <div class="pov-year-card" id="planner-year-card"></div>
+                        <div class="pov-grid-card">
+                            <div id="planner-overview-grid"></div>
+                        </div>
+                    </div>
+
                     <div class="planner-wrapper" id="planner-wrapper">
                         <div class="planner-sticky-head">
                             <div class="planner-week-header" id="planner-week-header">
@@ -722,6 +740,7 @@
     <script src="calendar-3-personalization.js"></script>
     <script src="calendar-4-planner-notify.js"></script>
     <script src="calendar-5-planner-ui.js"></script>
+    <script src="calendar-5b-planner-overview.js"></script>
     <script src="calendar-6-export-capture.js"></script>
 </body>
 </html>
