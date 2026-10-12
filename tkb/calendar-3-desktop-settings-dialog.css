@@ -275,9 +275,8 @@ body.bg-is-light .center-title span {
        KHÔNG đi theo khi cuộn. Chuyển hẳn nhóm rule cuộn ngang + dính cột Tiết vào đúng breakpoint
        ≤1180px để áp dụng cho mọi kích thước máy cần cuộn ngang, không riêng gì điện thoại nhỏ. */
     .timetable-table { width: auto; min-width: 100%; table-layout: auto; border-spacing: 6px; }
-    .timetable-table th:not(:first-child):not(:last-child) { width: auto; min-width: 118px; }
+    .timetable-table th:not(:first-child) { width: auto; min-width: 118px; }
     .timetable-table th:first-child { width: 38px !important; }
-    .timetable-table th:last-child { width: 48px !important; }
     /* Bảng có thể rộng hơn khung nhìn (8 cột x 118px+) -> cần cuộn ngang thật */
     .timetable-wrapper { overflow-x: auto; }
 

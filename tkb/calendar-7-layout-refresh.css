@@ -1,0 +1,99 @@
+/* ===== calendar-7-layout-refresh.css =====
+   Nạp CUỐI CÙNG (sau calendar-4-planner-overview.css) nên các rule ở đây thắng khi cùng độ đặc hiệu.
+   Mục tiêu: nhường chỗ cho lưới TKB (nội dung là trung tâm), bớt lớp kính lồng nhau,
+   gọn header, thẻ môn học dễ đọc. Chỉ đụng tới desktop (>=1181px) + vài tinh chỉnh dùng chung
+   cho cột "Tiết" mới (đã gộp giờ vào, bỏ cột "Giờ" bên phải). */
+
+/* ---------- Dùng chung mọi kích thước ---------- */
+
+/* Cột "Tiết N" + giờ bắt đầu (thay cho cột "Giờ" cũ) */
+.timetable-table th:first-child { width: clamp(54px, 5.2cqw, 76px) !important; }
+.timetable-table td.grid-time {
+    display: table-cell;
+    line-height: 1.2;
+    font-size: clamp(0.58rem, 1.05cqw, 0.78rem);
+}
+.timetable-table td.grid-time .tiet-n { display: block; font-weight: 700; }
+.timetable-table td.grid-time .tiet-time {
+    display: block;
+    margin-top: 2px;
+    font-weight: 500;
+    font-size: 0.92em;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.78;
+}
+
+/* Tăng tương phản cho ngày/tiết (trước đây gần chìm vào nền tím) */
+.date-sub { color: rgba(255, 255, 255, 0.82); }
+.timetable-table td.grid-time { color: rgba(255, 255, 255, 0.95); }
+
+/* Ô trống: bỏ viền nét đứt (60+ ô nét đứt tạo cảm giác "lưới rỗng"), chỉ còn nền rất mờ */
+.empty-td,
+body.light-mode .empty-td {
+    border: 0;
+    background: rgba(255, 255, 255, 0.035);
+    border-radius: 12px;
+}
+body.light-mode .empty-td { background: rgba(0, 0, 0, 0.025); }
+
+/* Tô nhẹ cả CỘT của hôm nay (trước đây chỉ có gạch chân nhỏ dưới tên Thứ) */
+.empty-td.today-col,
+body.light-mode .empty-td.today-col {
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* Hàng tiết thấp lại để thấy được nhiều tiết hơn mà không phải cuộn (là mức TỐI THIỂU: thẻ môn
+   nhiều dòng vẫn tự cao theo nội dung) */
+.timetable-table tbody tr { height: clamp(54px, 6.4vh, 70px); }
+
+/* Thẻ môn học: giữ nguyên thiết kế gốc (đủ tên môn, có chip giờ) — không rút gọn nội dung. */
+
+/* ---------- Mobile / tablet (<=1180px): cột Tiết cần rộng hơn 38px cũ để chứa cả giờ ---------- */
+@media (max-width: 1180px) {
+    .timetable-table th:first-child { width: 54px !important; }
+}
+
+/* ---------- Desktop (>=1181px) ---------- */
+@media (min-width: 1181px) {
+
+    /* 1) Trả lại chỗ cho khung chính: dock đã nằm bên PHẢI nên không cần chừa 132px bên trái nữa;
+          giảm padding trên/dưới; khung cao hơn. */
+    .desktop-environment { padding: 24px 150px 24px 44px; }
+    .main-glass-dashboard {
+        width: 100%;
+        height: calc(100vh - 48px);
+        padding: 18px 26px 20px;
+        gap: 12px;
+        border-radius: 36px;
+    }
+
+    /* 2) Header gọn một hàng ~56px: đồng hồ + ngày cùng hàng, tiêu đề nhỏ lại, nút/avatar nhỏ lại */
+    .dashboard-topbar { min-height: 56px; gap: 14px; }
+    .clock-widget { padding-left: 8px; display: flex; align-items: baseline; gap: 14px; }
+    .clock-widget h1 { font-size: clamp(1.7rem, 1.1rem + 1vw, 2.2rem); }
+    .clock-widget p { margin: 0; font-size: 0.9rem; }
+    .center-title span { margin-bottom: 2px; font-size: 0.66rem; letter-spacing: 0.14em; }
+    .center-title h2 { font-size: clamp(1.25rem, 0.9rem + 0.8vw, 1.6rem); }
+    .import-btn { min-height: 40px; padding: 0 16px; font-size: 0.9rem; }
+    .custom-avatar-img { width: 40px; height: 40px; }
+
+    /* 3) Bớt lớp kính lồng nhau: thanh chọn tuần + khung lưới không còn là 2 tấm kính riêng bên trong
+          tấm kính chính — chỉ còn tấm kính ngoài + các thẻ môn. */
+    .desktop-environment .timetable-controls {
+        background: none !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        padding: 0 4px !important;
+        margin-bottom: 8px;
+    }
+    .desktop-environment .timetable-wrapper,
+    body.light-mode .desktop-environment .timetable-wrapper {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+}

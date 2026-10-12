@@ -376,7 +376,7 @@ body.light-mode .timetable-table th { text-shadow: none; }
    chiếm nhiều chỗ như trước -> ép nhỏ lại tối đa để nhường phần lớn bề rộng bảng cho 7 cột
    Thứ 2 → Chủ Nhật (nơi thật sự cần chỗ hiển thị tên môn/phòng/GV). */
 .timetable-table th:first-child { width: clamp(34px, 4.2cqw, 42px) !important; } 
-.timetable-table th:last-child { width: clamp(42px, 5.2cqw, 52px) !important; } 
+/* (đã bỏ cột "Giờ" bên phải: giờ bắt đầu nay nằm ngay trong ô "Tiết N" ở cột trái) */
 
 /* FIX: 2 chữ tiêu đề "Tiết" (đầu hàng) và "Giờ" (cuối hàng) không cần dính theo khi cuộn dọc
    nữa (chỉ hàng Thứ 2 -> Chủ Nhật cần dính để biết đang xem ngày nào). LƯU Ý: đã thử tách
@@ -387,14 +387,12 @@ body.light-mode .timetable-table th { text-shadow: none; }
    dần biến mất ngay khi vừa bắt đầu cuộn (dùng lại đúng class .scrolled đã có sẵn, được JS
    gắn vào #sticky-header-bg mỗi khi wrapper.scrollTop > 2), còn hàng Thứ vẫn hiện rõ, dính
    bình thường, không đụng gì tới cấu trúc sticky vốn có -> không còn vỡ viền. */
-.sticky-glass-bar.scrolled ~ #timetable-table-container .timetable-table th:first-child,
-.sticky-glass-bar.scrolled ~ #timetable-table-container .timetable-table th:last-child {
+.sticky-glass-bar.scrolled ~ #timetable-table-container .timetable-table th:first-child {
     opacity: 0;
     transition: opacity 0.1s ease-out;
     pointer-events: none;
 }
-.timetable-table th:first-child,
-.timetable-table th:last-child {
+.timetable-table th:first-child {
     transition: opacity 0.1s ease-out;
 }
 

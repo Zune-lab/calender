@@ -209,7 +209,11 @@ function updateDesktopClock() {
 
     const now = new Date();
     timeEl.innerText = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    dateEl.innerText = now.toLocaleDateString('en-US', { weekday: 'long', month: '2-digit', day: '2-digit' }).replace(',', '');
+    // Hiển thị tiếng Việt, đúng thứ tự ngày/tháng: "Thứ Hai, 12/10"
+    const VN_WEEKDAYS = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    dateEl.innerText = `${VN_WEEKDAYS[now.getDay()]}, ${dd}/${mm}`;
 }
 
 // =========================================

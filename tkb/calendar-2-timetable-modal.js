@@ -225,6 +225,7 @@ function renderTimetable() {
 
     let tableHtml = `<table class="timetable-table"><thead><tr>`;
     tableHtml += `<th>Tiết</th>`;
+    let todayCol = -1; // cột (2..8) của hôm nay trong tuần đang xem, -1 nếu tuần này không chứa hôm nay
     
     for(let d = 2; d <= 8; d++) {
         const currentDate = new Date(currentWeekMonday);
@@ -234,9 +235,10 @@ function renderTimetable() {
         
         const dayName = d === 8 ? 'Chủ Nhật' : `Thứ ${d}`;
         const isToday = currentDate.getTime() === realToday.getTime();
+        if (isToday) todayCol = d;
         tableHtml += `<th class="${isToday ? 'current-day-th' : ''}" data-day-col="${d}">${dayName}<br><span class="date-sub">${dateStr}</span></th>`;
     }
-    tableHtml += `<th>Giờ</th></tr></thead><tbody>`;
+    tableHtml += `</tr></thead><tbody>`;
 
     const timeMap = { 1:"07:00", 2:"07:50", 3:"09:00", 4:"09:50", 5:"10:40", 6:"13:00", 7:"13:50", 8:"15:00", 9:"15:50", 10:"16:40", 11:"17:40", 12:"18:30", 13:"19:20", 14:"20:10" };
     const gradientColors = [ ['#FF3366', '#FF9933'], ['#00C9FF', '#92FE9D'], ['#9d4edd', '#E100FF'], ['#11998e', '#38ef7d'], ['#FDBB2D', '#22C1C3'] ];
@@ -247,7 +249,7 @@ function renderTimetable() {
     const savedSubjectColors = getSavedSubjectColors();
 
     for (let t = 1; t <= 14; t++) {
-        tableHtml += `<tr><td class="grid-time">Tiết ${t}</td>`;
+        tableHtml += `<tr><td class="grid-time"><span class="tiet-n">Tiết ${t}</span><span class="tiet-time">${timeMap[t]}</span></td>`;
 
         for (let d = 2; d <= 8; d++) {
             const slot = matrix[t][d];
@@ -285,10 +287,10 @@ function renderTimetable() {
                     </td>
                 `;
             } else if (slot.status === 'empty') {
-                tableHtml += `<td class="empty-td"></td>`;
+                tableHtml += `<td class="empty-td${d === todayCol ? ' today-col' : ''}"></td>`;
             }
         }
-        tableHtml += `<td class="grid-time time-col"><strong>${timeMap[t]}</strong></td></tr>`;
+        tableHtml += `</tr>`;
     }
 
     tableHtml += `</tbody></table>`;
