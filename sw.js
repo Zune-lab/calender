@@ -10,7 +10,7 @@
 // FIX: Dùng path TƯƠNG ĐỐI (không có dấu / ở đầu) và tự tính theo self.registration.scope,
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
-const CACHE_NAME = 'sgu-workspace-v9'; // BUMP v8: gộp supabaseUrl/supabaseKey của index.js,
+const CACHE_NAME = 'sgu-workspace-v11'; // BUMP v8: gộp supabaseUrl/supabaseKey của index.js,
 // profile.js, tkb/calendar-1-core.js về 1 file chung 'supabase-config.js' (load trước mọi
 // script khác) -> thêm file mới này vào app shell để cache offline, đồng thời bump version
 // để SW install lại và không phục vụ nhầm bản index.js/profile.js/calendar-1-core.js cũ

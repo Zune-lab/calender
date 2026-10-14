@@ -306,6 +306,16 @@
                             </div>
                         </div>
 
+                        <!-- Thêm nhanh: mở popup sẵn giờ HIỆN TẠI, không cần cuộn/canh ngón tay trên lưới -->
+                        <div class="planner-quick-actions" style="display: flex; gap: 8px; flex-shrink: 0;">
+                            <button type="button" class="glass-btn small planner-quick-add-btn" onclick="openPlannerQuickAdd()" title="Thêm việc bắt đầu từ bây giờ">
+                                <i class="fas fa-plus"></i><span>Thêm việc</span>
+                            </button>
+                            <button type="button" class="glass-btn small planner-now-btn" onclick="goToPlannerNow()" title="Cuộn tới giờ hiện tại">
+                                <i class="fas fa-crosshairs"></i><span>Bây giờ</span>
+                            </button>
+                        </div>
+
                         <div class="planner-view-switch glass-panel-3d" style="flex-shrink: 0;">
                             <button type="button" class="planner-view-btn" data-mode="grid" onclick="setPlannerViewMode('grid')" title="Lưới giờ theo tuần">
                                 <i class="fas fa-table-cells-large"></i><span>Lưới giờ</span>
@@ -371,11 +381,18 @@
                 <!-- Popover đặt tên / chỉnh sửa khối việc -->
                 <div id="planner-editor" class="planner-editor hidden">
                     <div class="planner-editor-inner glass-panel-3d">
-                        <div class="planner-editor-daylabel" id="planner-editor-daylabel">Thứ 2, 28/07</div>
+                        <input type="date" id="planner-editor-date" class="planner-editor-time-input planner-editor-date-input">
                         <div class="planner-editor-time-row">
                             <input type="time" id="planner-editor-start" class="planner-editor-time-input" step="300">
                             <span class="planner-editor-time-sep">–</span>
                             <input type="time" id="planner-editor-end" class="planner-editor-time-input" step="300">
+                        </div>
+                        <!-- Chọn nhanh độ dài: giờ kết thúc = giờ bắt đầu + N phút -->
+                        <div class="planner-editor-dur-row" id="planner-editor-dur">
+                            <button type="button" data-min="30">30p</button>
+                            <button type="button" data-min="60">1 giờ</button>
+                            <button type="button" data-min="90">1,5 giờ</button>
+                            <button type="button" data-min="120">2 giờ</button>
                         </div>
                         <input type="text" id="planner-editor-title" class="planner-editor-input" placeholder="Việc cần làm..." maxlength="60" autocomplete="off">
                         <div class="planner-editor-colors" id="planner-editor-colors"></div>

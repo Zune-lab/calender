@@ -380,6 +380,13 @@ body.light-mode .planner-day-header { text-shadow: none; }
 }
 .planner-day-col:first-child { border-left: none; }
 .planner-day-col.is-today-col { background-color: rgba(255, 70, 85, 0.05); }
+/* Ngày đã qua: tô mờ nhẹ + con trỏ cấm; khối việc (render sau ::before) vẫn nằm trên và thao tác bình thường */
+.planner-day-col.is-past-col { cursor: not-allowed; }
+.planner-day-col.is-past-col::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.16); pointer-events: none; }
+.planner-day-col.is-past-col .planner-block { cursor: pointer; }
+body.light-mode .planner-day-col.is-past-col::before { background: rgba(0,0,0,0.05); }
+.planner-editor-date-input.is-invalid { border-color: #ff5858 !important; animation: plannerShake 0.3s; }
+@keyframes plannerShake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
 .planner-empty-hint {
     position: sticky; top: 35%; z-index: 2; margin: 0 auto; width: fit-content; max-width: 300px;
@@ -491,6 +498,21 @@ body.light-mode .planner-day-header { text-shadow: none; }
 }
 .planner-editor-time-input:focus { border-color: var(--accent); }
 .planner-editor-time-sep { color: var(--text-muted); font-weight: 700; flex-shrink: 0; }
+.planner-editor-date-input { width: 100%; flex: none; }
+.planner-editor-dur-row { display: flex; gap: 6px; }
+.planner-editor-dur-row button {
+    flex: 1; min-width: 0; padding: 7px 4px; border-radius: 10px; cursor: pointer;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text-muted); font-size: 0.74rem; font-weight: 700; white-space: nowrap;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.planner-editor-dur-row button:hover { background: rgba(255,255,255,0.12); color: var(--text-main); }
+.planner-editor-dur-row button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.planner-quick-actions .glass-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.planner-quick-add-btn { background: var(--accent) !important; color: #fff !important; border-color: transparent !important; }
+@media (max-width: 850px) {
+    .planner-quick-actions .glass-btn { padding: 9px 14px; font-size: 0.82rem; } /* to hơn chút cho dễ chạm */
+}
 .planner-editor-input {
     width: 100%; padding: 10px 14px; border-radius: 10px; box-sizing: border-box;
     background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
@@ -522,6 +544,8 @@ body.light-mode .planner-day-col { background-image:
         repeating-linear-gradient(to bottom, rgba(0,0,0,0.035) 0px, rgba(0,0,0,0.035) 1px, transparent 1px, transparent 32px); }
 body.light-mode .planner-day-col.is-today-col { background-color: rgba(255, 70, 85, 0.06); }
 body.light-mode .planner-editor-input { background: rgba(255,255,255,0.7); border-color: rgba(0,0,0,0.08); color: #1e293b; }
+body.light-mode .planner-editor-dur-row button { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.08); color: #475569; }
+body.light-mode .planner-editor-dur-row button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 body.light-mode .planner-editor-time-input { background: rgba(255,255,255,0.7); border-color: rgba(0,0,0,0.08); color: #1e293b; color-scheme: light; }
 body.light-mode .planner-empty-hint { color: #64748b; }
 

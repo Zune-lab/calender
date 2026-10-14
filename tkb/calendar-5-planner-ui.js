@@ -3,6 +3,12 @@
 // khai báo ở đó, ví dụ PLANNER_HOUR_PX, plannerFmtDateInput...).
 // Nội dung: dựng lưới tuần Kế Hoạch Ngày, kéo-thả tạo/sửa/xoá khối việc, popup sửa việc.
 
+// ---- Không cho thêm/dời việc về NGÀY ĐÃ QUA (so chuỗi YYYY-MM-DD là đủ, vì cùng định dạng) ----
+// Việc đã có ở ngày cũ vẫn sửa/tick/xóa bình thường; chỉ chặn TẠO MỚI và DỜI SANG ngày cũ khác.
+function plannerIsPastDate(dateStr) {
+    return !!dateStr && dateStr < plannerFmtDateInput(new Date());
+}
+
 function initDayPlanner() {
     const header = document.getElementById('planner-week-header');
     const hoursCol = document.getElementById('planner-hours-col');
@@ -53,6 +59,20 @@ function initDayPlanner() {
 
         buildPlannerColorSwatches();
 
+        // Chọn nhanh độ dài: giờ kết thúc = giờ bắt đầu + N phút (không cần gõ/canh giờ kết thúc)
+        const durWrap = document.getElementById('planner-editor-dur');
+        if (durWrap) {
+            durWrap.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-min]');
+                if (!btn) return;
+                const st = plannerParseHM(document.getElementById('planner-editor-start').value);
+                if (st === null) return;
+                const end = Math.min(1440, st + parseInt(btn.dataset.min, 10));
+                document.getElementById('planner-editor-end').value = plannerFmtHM(end);
+                durWrap.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+            });
+        }
+
         const saveBtn = document.getElementById('planner-editor-save');
         const delBtn = document.getElementById('planner-editor-delete');
         const titleInput = document.getElementById('planner-editor-title');
@@ -72,9 +92,72 @@ function initDayPlanner() {
         plannerNowTimer = setInterval(renderPlannerNowLine, 60000);
     }
 
+    plannerNeedScrollNow = true; // vừa mở tab -> lần vẽ lưới tới sẽ tự cuộn tới giờ hiện tại
     updatePlannerWeekHeader();
     updatePlannerWeekLabel();
     if (typeof initPlannerViewMode === 'function') initPlannerViewMode();
+}
+
+// ---- Tự cuộn lưới tới giờ hiện tại + thêm nhanh (đỡ phải cuộn/canh ngón tay trên điện thoại) ----
+let plannerNeedScrollNow = false;
+
+// Cuộn lưới sao cho mốc `min` (phút trong ngày) nằm cách mép trên vùng nhìn thấy ~1,5 giờ.
+// opts.ifHidden: chỉ cuộn khi mốc đó đang nằm NGOÀI vùng nhìn thấy (dùng sau khi lưu việc mới).
+function plannerScrollToMinute(min, opts) {
+    opts = opts || {};
+    const wrapper = document.getElementById('planner-wrapper');
+    const body = wrapper ? wrapper.querySelector('.planner-grid-body') : null;
+    if (!wrapper || !body || !wrapper.clientHeight) return;
+    const head = wrapper.querySelector('.planner-sticky-head');
+    const headH = head ? head.offsetHeight : 0;
+    const bodyTop = body.getBoundingClientRect().top - wrapper.getBoundingClientRect().top + wrapper.scrollTop;
+    const y = bodyTop + (min / 60) * PLANNER_HOUR_PX;          // vị trí mốc trong nội dung cuộn
+    const visTop = wrapper.scrollTop + headH;                    // mép trên vùng nhìn thấy (dưới header dính)
+    const visBottom = wrapper.scrollTop + wrapper.clientHeight;
+    if (opts.ifHidden && y >= visTop && y + PLANNER_HOUR_PX * 0.5 <= visBottom) return;
+    wrapper.scrollTo({ top: Math.max(0, y - headH - PLANNER_HOUR_PX * 1.5), behavior: opts.smooth ? 'smooth' : 'auto' });
+}
+
+// Gọi sau khi lưới đã vẽ: tuần hiện tại -> cuộn tới "bây giờ"; tuần khác -> cuộn tới 07:00.
+function plannerApplyInitialScroll(smooth) {
+    if (!plannerNeedScrollNow) return;
+    plannerNeedScrollNow = false;
+    requestAnimationFrame(() => {
+        const isThisWeek = plannerIsSameDate(plannerGetMonday(new Date()), plannerWeekStart);
+        const now = new Date();
+        plannerScrollToMinute(isThisWeek ? now.getHours() * 60 + now.getMinutes() : 7 * 60, { smooth });
+    });
+}
+
+window.goToPlannerNow = function () {
+    plannerNeedScrollNow = true;
+    if (!plannerIsSameDate(plannerGetMonday(new Date()), plannerWeekStart)) {
+        window.goToPlannerThisWeek(); // đang ở tuần khác -> về tuần này (tự cuộn sau khi tải xong)
+        return;
+    }
+    plannerApplyInitialScroll(true);
+};
+
+// Nút "+ Thêm việc": mở popup giữa màn hình, sẵn HÔM NAY + giờ hiện tại (làm tròn lên 5 phút), dài 1 giờ.
+window.openPlannerQuickAdd = function () {
+    const now = new Date();
+    let start = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
+    start = Math.min(start, 1440 - PLANNER_MIN_DURATION);
+    const end = Math.min(1440, start + 60);
+    const dateStr = plannerFmtDateInput(now);
+    const existingCount = (plannerBlocksByDate[dateStr] || []).length;
+    openPlannerEditor({
+        id: null, dateStr, title: '', start_min: start, end_min: end,
+        color: PLANNER_COLORS[existingCount % PLANNER_COLORS.length], centered: true
+    });
+};
+
+// Chuyển lưới sang tuần chứa `dateStr` rồi tải lại (dùng khi việc vừa lưu/dời nằm ngoài tuần đang xem)
+async function plannerShowWeekOf(dateStr) {
+    plannerWeekStart = plannerGetMonday(new Date(dateStr + 'T00:00:00'));
+    updatePlannerWeekHeader();
+    updatePlannerWeekLabel();
+    await loadPlannerBlocks();
 }
 
 function buildPlannerColorSwatches() {
@@ -103,6 +186,7 @@ function updatePlannerWeekHeader() {
         cell.classList.toggle('is-today', isToday);
         col.classList.toggle('is-today-col', isToday);
         col.dataset.date = plannerFmtDateInput(d);
+        col.classList.toggle('is-past-col', plannerIsPastDate(col.dataset.date));
     });
 }
 
@@ -127,6 +211,7 @@ window.changePlannerWeek = function(delta) {
 };
 
 window.goToPlannerThisWeek = function() {
+    plannerNeedScrollNow = true;
     plannerWeekStart = plannerGetMonday(new Date());
     updatePlannerWeekHeader();
     updatePlannerWeekLabel();
@@ -182,6 +267,7 @@ async function loadPlannerBlocks() {
     }
     renderPlannerBlocks();
     renderPlannerNowLine();
+    plannerApplyInitialScroll(false);
 
     // DẢI "CẢ NGÀY" (kiểu Google Calendar): Ghi chú/Công việc (subject_details) có đặt Hạn
     // rơi vào đúng tuần đang xem — query riêng vì đây là bảng khác, không có start_min/end_min.
@@ -476,6 +562,7 @@ function onPlannerTracksPointerDown(e) {
     if (e.button !== undefined && e.button !== 0) return;
     const col = e.target.closest('.planner-day-col');
     if (!col) return;
+    if (plannerIsPastDate(col.dataset.date)) return; // ngày đã qua: không tạo việc mới
     e.preventDefault();
 
     const rect = col.getBoundingClientRect();
@@ -566,7 +653,8 @@ function plannerRecalcBlockDrag(clientX, clientY) {
             if (!c) continue;
             const r = c.getBoundingClientRect();
             if (clientX >= r.left && clientX < r.right) {
-                if (c.dataset.date !== plannerDrag.currentDateStr) {
+                const blockedPast = plannerIsPastDate(c.dataset.date) && c.dataset.date !== plannerDrag.dateStr;
+                if (!blockedPast && c.dataset.date !== plannerDrag.currentDateStr) {
                     const prevCol = plannerDrag.currentCol;
                     const prevDateStr = plannerDrag.currentDateStr;
                     c.appendChild(plannerDrag.el);
@@ -666,14 +754,19 @@ function openPlannerEditor(block, e) {
     const editor = document.getElementById('planner-editor');
     const inner = editor.querySelector('.planner-editor-inner');
     const titleInput = document.getElementById('planner-editor-title');
-    const dayLabelEl = document.getElementById('planner-editor-daylabel');
+    const dateInput = document.getElementById('planner-editor-date');
     const startInput = document.getElementById('planner-editor-start');
     const endInput = document.getElementById('planner-editor-end');
     const deleteBtn = document.getElementById('planner-editor-delete');
     const colorsWrap = document.getElementById('planner-editor-colors');
 
-    const dObj = new Date(block.dateStr + 'T00:00:00');
-    dayLabelEl.innerText = `${PLANNER_DAY_NAMES[dObj.getDay()]}, ${String(dObj.getDate()).padStart(2, '0')}/${String(dObj.getMonth() + 1).padStart(2, '0')}`;
+    if (dateInput) {
+        dateInput.value = block.dateStr;
+        // Việc đã có nằm ở ngày cũ: bỏ min để còn hiển thị được ngày gốc (kiểm tra lại lúc Lưu)
+        if (block.id && plannerIsPastDate(block.dateStr)) dateInput.removeAttribute('min');
+        else dateInput.min = plannerFmtDateInput(new Date());
+    }
+    document.querySelectorAll('#planner-editor-dur button').forEach(b => b.classList.remove('active'));
     startInput.value = plannerFmtHM(block.start_min);
     endInput.value = plannerFmtHM(block.end_min);
     titleInput.value = block.title || '';
@@ -746,6 +839,10 @@ function openPlannerEditor(block, e) {
 
     // Vẫn giữ kẹp làm lưới an toàn cuối cùng, phòng khi khung chứa quá nhỏ (mobile hẹp) khiến
     // popup không đủ chỗ ở cả 2 phía.
+    if (block.centered) { // mở từ nút "+ Thêm việc": không có điểm bấm -> căn giữa khung nhìn
+        x = (cRect.width - popW) / 2;
+        y = (cRect.height - popH) / 2;
+    }
     x = Math.max(pad, Math.min(cRect.width - popW - pad, x));
     y = Math.max(pad, Math.min(cRect.height - popH - pad, y));
     inner.style.left = x + 'px';
@@ -790,6 +887,21 @@ async function savePlannerEditor() {
     const color = activeSwatch ? activeSwatch.dataset.color : plannerEditingDraft.color;
     const priority = activePriorityBtn ? activePriorityBtn.dataset.priority : (plannerEditingDraft.priority || 'normal');
     const draft = plannerEditingDraft;
+    const dateInput = document.getElementById('planner-editor-date');
+    const newDate = (dateInput && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.value)) ? dateInput.value : draft.dateStr;
+    const dateChanged = newDate !== draft.dateStr;
+
+    if (dateChanged && plannerIsPastDate(newDate)) {
+        // Ngày cũ -> trả ô ngày về giá trị hợp lệ, nháy đỏ, GIỮ popup mở để người dùng chọn lại
+        const safeDate = draft.id ? draft.dateStr : plannerFmtDateInput(new Date());
+        if (dateInput) {
+            dateInput.value = safeDate;
+            dateInput.classList.add('is-invalid');
+            setTimeout(() => dateInput.classList.remove('is-invalid'), 900);
+            dateInput.title = 'Không thể chuyển việc về ngày đã qua';
+        }
+        return;
+    }
 
     // Đọc giờ người dùng tự gõ — nếu bỏ trống hoặc sai thì giữ nguyên giờ cũ của khối
     let start = plannerParseHM(startInput.value);
@@ -807,19 +919,33 @@ async function savePlannerEditor() {
     if (draft.id) {
         const local = (plannerBlocksByDate[draft.dateStr] || []).find(b => b.id === draft.id);
         if (local) { local.title = title; local.color = color; local.start_min = start; local.end_min = end; local.priority = priority; }
+        if (dateChanged && local) { // đổi sang ngày khác -> dời khối sang mảng của ngày mới (nếu ngày đó đang hiện)
+            plannerBlocksByDate[draft.dateStr] = (plannerBlocksByDate[draft.dateStr] || []).filter(b => b.id !== draft.id);
+            if (plannerBlocksByDate[newDate]) plannerBlocksByDate[newDate].push(local);
+        }
         renderPlannerBlocks();
-        const { error } = await sbClient.from('daily_plans').update({ title, color, start_min: start, end_min: end, priority, push_notified: false }).eq('id', draft.id).eq('user_id', currentUser.id);
+        const updatePayload = { title, color, start_min: start, end_min: end, priority, push_notified: false };
+        if (dateChanged) updatePayload.plan_date = newDate;
+        const { error } = await sbClient.from('daily_plans').update(updatePayload).eq('id', draft.id).eq('user_id', currentUser.id);
         if (error) console.error('[Planner] Lỗi lưu việc:', error.message);
         plannerClearNotifiedFor(draft.dateStr, draft.id); // giờ vừa đổi -> cho phép báo lại nếu lọt khung 5 phút
+        if (dateChanged && !plannerBlocksByDate[newDate]) await plannerShowWeekOf(newDate); // ngày mới ngoài tuần đang xem -> nhảy tới đó
     } else {
         const { data, error } = await sbClient.from('daily_plans').insert([{
-            user_id: currentUser.id, plan_date: draft.dateStr, title,
+            user_id: currentUser.id, plan_date: newDate, title,
             start_min: start, end_min: end, color, priority
         }]).select().single();
         if (error) { console.error('[Planner] Lỗi tạo việc mới:', error.message); return; }
-        if (!plannerBlocksByDate[draft.dateStr]) plannerBlocksByDate[draft.dateStr] = [];
-        plannerBlocksByDate[draft.dateStr].push({ id: data.id, title: data.title, start_min: data.start_min, end_min: data.end_min, color: data.color, priority: data.priority || 'normal', is_done: !!data.is_done });
-        renderPlannerBlocks();
+        if (!plannerBlocksByDate[newDate]) {
+            // Ngày được chọn nằm ngoài tuần đang xem -> chuyển tới đúng tuần đó để thấy việc vừa tạo
+            plannerNeedScrollNow = false;
+            await plannerShowWeekOf(newDate);
+            plannerScrollToMinute(start, { smooth: false });
+        } else {
+            plannerBlocksByDate[newDate].push({ id: data.id, title: data.title, start_min: data.start_min, end_min: data.end_min, color: data.color, priority: data.priority || 'normal', is_done: !!data.is_done });
+            renderPlannerBlocks();
+            plannerScrollToMinute(start, { ifHidden: true, smooth: true });
+        }
     }
     checkUpcomingPlannerNotifications(); // báo ngay nếu việc vừa lưu đã lọt sẵn khung nhắc 5 phút
 }
