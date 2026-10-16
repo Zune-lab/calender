@@ -14,6 +14,13 @@ let currentUserId = null;
 // ghi chú của môn khác (vd "làm code theo HƯỚNG ĐỐI TƯỢNG") — rất dễ gây hiểu lầm. reset về
 // null mỗi lần renderHero() chạy lại, chỉ gán khi thực sự có 1 môn học cụ thể đang hiển thị.
 let heroSubjectId = null;
+// Khi nhiều buổi cùng môn được gộp thành 1 khối ở Hero, mỗi buổi là 1 dòng subjects riêng (id khác
+// nhau) -> widget Bài tập/Ghi chú phải lọc theo TẤT CẢ id của khối, không chỉ id đầu tiên.
+let heroSubjectIds = [];
+function setHeroSubjects(subs) {
+    heroSubjectIds = (subs || []).map(s => s.id);
+    heroSubjectId = heroSubjectIds.length ? heroSubjectIds[0] : null;
+}
 
 // escapeHtml(), parseVNExamDate() và toàn bộ logic màu accent (ACCENT_POOL,
 // hashStringToIndex, resolveAccentForUser...) giờ nằm ở shared.js
@@ -35,6 +42,163 @@ function parsePeriodRange(sub) {
     const endMin = PERIOD_END_MINS[endP];
     if (startMin === undefined || endMin === undefined) return null;
     return { startMin, endMin };
+}
+
+// ==========================================
+// GIỜ RA CHƠI + GỘP BUỔI HỌC LIỀN NHAU
+// Giờ ra chơi KHÔNG hardcode: tự suy ra từ khoảng trống giữa 2 tiết liên tiếp trong lưới giờ ở trên
+// (vd tiết 2 hết 08:40, tiết 3 bắt đầu 09:00 -> ra chơi 08:40–09:00; tiết 7 hết 14:40, tiết 8 bắt
+// đầu 15:00 -> ra chơi 14:40–15:00). Đổi lưới giờ là giờ ra chơi tự đổi theo.
+// Khoảng trống dài hơn MERGE_MAX_BREAK_MIN (nghỉ trưa 11:30–13:00) không tính là ra chơi và không
+// gộp 2 buổi học qua nó.
+// ==========================================
+const MERGE_MAX_BREAK_MIN = 30;
+
+function computeGridGaps() {
+    const nums = Object.keys(PERIOD_START_MINS).map(Number).sort((a, b) => a - b);
+    const gaps = [];
+    for (let i = 0; i < nums.length - 1; i++) {
+        const breakStart = PERIOD_END_MINS[nums[i]];      // hết tiết trước
+        const breakEnd = PERIOD_START_MINS[nums[i + 1]];  // vào tiết sau
+        if (breakEnd > breakStart) {
+            gaps.push({ startMin: breakStart, endMin: breakEnd, len: breakEnd - breakStart,
+                        long: breakEnd - breakStart > MERGE_MAX_BREAK_MIN });
+        }
+    }
+    return gaps;
+}
+const GRID_GAPS = computeGridGaps();
+const GRID_BREAKS = GRID_GAPS.filter(g => !g.long);      // ra chơi (nằm trong 1 khối học)
+const GRID_LONG_BREAKS = GRID_GAPS.filter(g => g.long);  // nghỉ trưa (11:30–13:00 với lưới hiện tại)
+
+function fmtClock(mins) {
+    return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+}
+
+function baseSubjectName(sub) {
+    return String(sub.name || 'Môn Ẩn').split('-')[0].split('(')[0].trim();
+}
+
+// Các buổi học của 1 ngày cụ thể (tuần weekIndex 0-indexed, thứ day theo quy ước 2..8), đã sắp theo giờ
+function daySessions(week, day) {
+    return dashSubjects
+        .filter(sub => {
+            if (sub.day !== day) return false;
+            if (!sub.weeks || sub.weeks.length <= week) return false;
+            const char = sub.weeks.charAt(week);
+            return char !== '-' && char !== ' ';
+        })
+        .map(sub => ({ sub, range: parsePeriodRange(sub) }))
+        .filter(x => x.range)
+        .sort((a, b) => a.range.startMin - b.range.startMin);
+}
+
+function uniqueJoin(values, sep) {
+    const seen = [];
+    values.forEach(v => { const t = String(v || '').trim(); if (t && !seen.includes(t)) seen.push(t); });
+    return seen.join(sep);
+}
+
+// Gộp các buổi CÙNG MÔN nằm liền nhau (kể cả chồng tiết, vd 1–3 rồi 3–5) thành 1 khối duy nhất.
+// Trả về [{ subs, sub, name, startMin, endMin, hoursText, breaks }]
+function buildBlocks(sessions) {
+    const blocks = [];
+    sessions.forEach(({ sub, range }) => {
+        // Tìm khối gần nhất CÙNG MÔN (không chỉ khối cuối, phòng khi 2 môn khác nhau bị nhập chồng giờ)
+        const key = baseSubjectName(sub).toLowerCase();
+        const last = [...blocks].reverse().find(b => b.key === key);
+        if (last && range.startMin - last.endMin <= MERGE_MAX_BREAK_MIN) {
+            last.subs.push(sub);
+            last.endMin = Math.max(last.endMin, range.endMin);
+        } else {
+            blocks.push({ key: baseSubjectName(sub).toLowerCase(), subs: [sub], startMin: range.startMin, endMin: range.endMin });
+        }
+    });
+    return blocks.map(finalizeBlock);
+}
+
+function finalizeBlock(b) {
+    const merged = b.subs.length > 1;
+    return {
+        subs: b.subs,
+        sub: b.subs[0],
+        name: baseSubjectName(b.subs[0]),
+        startMin: b.startMin,
+        endMin: b.endMin,
+        // 1 buổi đơn giữ nguyên chuỗi giờ gốc; nhiều buổi gộp thì dựng lại từ lưới giờ
+        hoursText: merged || !(b.subs[0].exact_time || b.subs[0].time_slot)
+            ? `${fmtClock(b.startMin)} -> ${fmtClock(b.endMin)}`
+            : (b.subs[0].exact_time || b.subs[0].time_slot),
+        room: uniqueJoin(b.subs.map(s => s.room), ' / '),
+        lecturer: uniqueJoin(b.subs.map(s => s.lecturer), ' / '),
+        breaks: GRID_BREAKS.filter(br => br.startMin >= b.startMin && br.endMin <= b.endMin)
+    };
+}
+
+// Khối (đã gộp) chứa buổi học `sub` vào tuần/ngày chỉ định; không tìm được thì trả về khối đơn
+function blockForSession(sub, week, day) {
+    const found = buildBlocks(daySessions(week, day)).find(b => b.subs.includes(sub));
+    if (found) return found;
+    const range = parsePeriodRange(sub);
+    return finalizeBlock({
+        subs: [sub],
+        startMin: range ? range.startMin : 0,
+        endMin: range ? range.endMin : 0
+    });
+}
+
+// Các chip "Ra chơi" / "Nghỉ trưa" cho khối đang hiển thị.
+// - Ra chơi: những khoảng nghỉ nằm TRONG khối (vd 14:40–15:00 với khối 13:00–17:30).
+// - Nghỉ trưa: chỉ khi trong ngày CÓ buổi kết thúc đúng lúc bắt đầu nghỉ trưa (sáng học tới tiết 5, hết 11:30)
+//   VÀ có buổi bắt đầu đúng lúc hết nghỉ trưa (chiều có tiết 6, vào 13:00). Hiện ở khối buổi sáng, hoặc ở
+//   khối buổi chiều khi nó CHƯA bắt đầu (đang trong buổi sáng / đang nghỉ trưa).
+function heroBreakChips(block, dayBlocks, status) {
+    if (status === 'future') return []; // chip ra chơi chỉ có nghĩa trong ngày hôm nay
+    const chips = block.breaks.map(b => ({ label: 'Ra chơi', icon: 'fa-mug-hot', startMin: b.startMin, endMin: b.endMin }));
+    GRID_LONG_BREAKS.forEach(lunch => {
+        const hasBefore = dayBlocks.some(x => x.endMin === lunch.startMin);
+        const hasAfter = dayBlocks.some(x => x.startMin === lunch.endMin);
+        if (!hasBefore || !hasAfter) return;
+        const onMorning = block.endMin === lunch.startMin;
+        const onAfternoon = block.startMin === lunch.endMin && status === 'today';
+        if (onMorning || onAfternoon) chips.push({ label: 'Nghỉ trưa', icon: 'fa-utensils', startMin: lunch.startMin, endMin: lunch.endMin });
+    });
+    return chips.sort((a, b) => a.startMin - b.startMin);
+}
+
+// Chip chỉ hiện khi SẮP tới giờ nghỉ (trong HERO_BREAK_LEAD_MIN phút trước) hoặc đang nghỉ; nghỉ xong là ẩn.
+// Nhờ vậy lúc mới vào học không bị chip ra chơi/nghỉ trưa chiếm chỗ khi còn rất lâu mới tới giờ.
+const HERO_BREAK_LEAD_MIN = 30;
+let heroBreakList = [];
+
+function setHeroBreaks(chips) {
+    heroBreakList = chips || [];
+    paintHeroBreaks(new Date());
+}
+
+function paintHeroBreaks(d) {
+    const box = document.getElementById('hero-breaks');
+    if (!box) return;
+    const cur = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+    box.textContent = '';
+    heroBreakList
+        .filter(c => cur < c.endMin && cur >= c.startMin - HERO_BREAK_LEAD_MIN)
+        .forEach(c => {
+            const now = cur >= c.startMin; // đang trong giờ nghỉ
+            const el = document.createElement('span');
+            el.className = 'hero-break' + (now ? ' now' : '');
+            const icon = document.createElement('i');
+            icon.className = 'fas ' + (c.icon || 'fa-mug-hot');
+            const name = document.createElement('span');
+            name.className = 'hb-name';
+            name.textContent = now ? (c.label === 'Ra chơi' ? 'Đang ra chơi' : 'Đang nghỉ trưa') : c.label;
+            const time = document.createElement('b');
+            time.textContent = `${fmtClock(c.startMin)} – ${fmtClock(c.endMin)}`;
+            const rel = document.createElement('em');
+            rel.textContent = now ? `còn ${fmtHeroDuration(c.endMin - cur)}` : `sau ${fmtHeroDuration(c.startMin - cur)}`;
+            el.append(icon, name, time, rel);
+            box.appendChild(el);
+        });
 }
 
 // Tìm buổi học gần nhất trong tương lai, bắt đầu tìm SAU (afterWeek, afterDay) — dùng cho
@@ -376,6 +540,7 @@ function resetHeroTimeRow() {
     stopHeroTick();
     const p = document.getElementById('mini-tkb-time');
     if (p) p.classList.remove('hero-time-row');
+    setHeroBreaks([]);
 }
 
 // Dựng dòng: [NHÃN NGÀY] [GIỜ LỚN] [chip đếm ngược] — dùng textContent nên an toàn với dữ liệu từ DB
@@ -407,6 +572,7 @@ function setHeroTime(dayLabel, hoursText, chip) {
 function startHeroTick(buildChip) {
     stopHeroTick();
     heroTickTimer = setInterval(() => {
+        paintHeroBreaks(new Date());
         const el = document.getElementById('hero-countdown');
         const chip = el ? buildChip(new Date()) : null;
         if (!chip) {
@@ -427,7 +593,8 @@ function classCountdownChip(status, range, d) {
     const cur = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
     if (status === 'ongoing') {
         const left = range.endMin - cur;
-        return left > 0 ? { text: `Kết thúc sau ${fmtHeroDuration(left)}`, kind: 'live' } : null;
+        if (left <= 0) return null;
+        return { text: `Kết thúc sau ${fmtHeroDuration(left)}`, kind: 'live' };
     }
     if (status === 'today') {
         const until = range.startMin - cur;
@@ -503,13 +670,13 @@ function renderHero(now, weekIndex, examsData) {
     // bất kể lịch học bình thường còn hay đã hết (thi quan trọng hơn lớp học thường)
     const todayExam = findTodayExam(examsData, now);
     if (todayExam) {
-        heroSubjectId = null; // ngày thi không gắn với 1 "subject_details.subject_id" cụ thể
+        setHeroSubjects([]); // ngày thi không gắn với 1 "subject_details.subject_id" cụ thể
         renderExamDayHero(todayExam, now);
         return;
     }
 
     if (!dashSubjects.length) {
-        heroSubjectId = null;
+        setHeroSubjects([]);
         document.getElementById('mini-tkb-name').innerText = "TRỐNG LỊCH HỌC";
         document.getElementById('mini-tkb-time').innerText = "Click icon TKB bên phải để tải dữ liệu";
         document.getElementById('val-bg-text').innerText = "SGU";
@@ -526,53 +693,57 @@ function renderHero(now, weekIndex, examsData) {
     const curDay = now.getDay() === 0 ? 8 : now.getDay() + 1;
     const curMins = now.getHours() * 60 + now.getMinutes();
 
-    let upcoming = null;
+    let upcoming = null;   // buổi học đầu tiên của khối đang hiển thị
+    let block = null;      // khối đã gộp các buổi cùng môn liền nhau (giờ, ra chơi, phòng, GV)
     let status = 'future'; // 'ongoing' (đang học) | 'today' (chưa tới giờ, học hôm nay) | 'future' (ngày khác)
-    let nextAfter = null;  // buổi học kế tiếp, để hiển thị khi lớp hiện tại kết thúc
+    let dayBlocks = [];    // các khối của ngày đang hiển thị (để biết có nghỉ trưa không)
+    let nextAfter = null;  // khối học kế tiếp { block, day }, để hiển thị khi lớp hiện tại kết thúc
     let upcomingWeek = weekIndex; // tuần (0-indexed) của buổi học đang hiển thị
 
+    // Khối học kế tiếp ở ngày/tuần khác (đã gộp), hoặc null
+    const nextFutureAfter = () => {
+        const f = findNearestFutureSession(weekIndex, curDay);
+        return f ? { block: blockForSession(f.sub, f.w, f.day), day: f.day } : null;
+    };
+
     if (weekIndex >= 0) {
-        const activeToday = dashSubjects
-            .filter(sub => {
-                if (sub.day !== curDay) return false;
-                if (!sub.weeks || sub.weeks.length <= weekIndex) return false;
-                const char = sub.weeks.charAt(weekIndex);
-                return char !== '-' && char !== ' ';
-            })
-            .map(sub => ({ sub, range: parsePeriodRange(sub) }))
-            .filter(x => x.range)
-            .sort((a, b) => a.range.startMin - b.range.startMin);
+        // Gộp các tiết cùng môn nằm liền nhau (vd C# 13:00–15:50 rồi 15:50–17:30 -> 13:00–17:30)
+        const activeToday = buildBlocks(daySessions(weekIndex, curDay));
+        dayBlocks = activeToday;
 
         // 1. Có lớp nào ĐANG diễn ra đúng lúc này không? (so theo giờ thật, không chỉ theo ngày)
-        const ongoingIdx = activeToday.findIndex(x => curMins >= x.range.startMin && curMins <= x.range.endMin);
+        // Giờ ra chơi nằm trong khối nên vẫn tính là đang học, không nhảy sang "lớp tiếp theo".
+        const ongoingIdx = activeToday.findIndex(x => curMins >= x.startMin && curMins <= x.endMin);
         if (ongoingIdx !== -1) {
-            upcoming = activeToday[ongoingIdx].sub;
+            block = activeToday[ongoingIdx];
             status = 'ongoing';
             const nextToday = activeToday[ongoingIdx + 1];
-            nextAfter = nextToday ? { sub: nextToday.sub, day: curDay } : findNearestFutureSession(weekIndex, curDay);
+            nextAfter = nextToday ? { block: nextToday, day: curDay } : nextFutureAfter();
         } else {
             // 2. Chưa tới giờ nhưng vẫn còn lớp hôm nay phía trước
-            const todayUpcoming = activeToday.find(x => x.range.startMin > curMins);
+            const todayUpcoming = activeToday.find(x => x.startMin > curMins);
             if (todayUpcoming) {
-                upcoming = todayUpcoming.sub;
+                block = todayUpcoming;
                 status = 'today';
             }
         }
 
         // 3. Hôm nay hết lịch (hoặc chưa có lịch hôm nay) -> tìm buổi gần nhất trong tương lai
-        if (!upcoming) {
+        if (!block) {
             const found = findNearestFutureSession(weekIndex, curDay);
             if (found) {
-                upcoming = found.sub;
+                dayBlocks = buildBlocks(daySessions(found.w, found.day));
+                block = dayBlocks.find(b => b.subs.includes(found.sub)) || blockForSession(found.sub, found.w, found.day);
                 upcomingWeek = found.w;
                 status = 'future';
             }
         }
+        upcoming = block ? block.sub : null;
     }
 
     // ĐÃ SỬA: Khi lịch học kết thúc, background cũng sẽ random thay vì chỉ là màu Đỏ mặc định
     if (!upcoming) {
-        heroSubjectId = null;
+        setHeroSubjects([]);
         if (weekIndex < 0) {
             // weekIndex = -1 nghĩa là semesterStartDate còn nằm trong TƯƠNG LAI -> kỳ CHƯA bắt đầu,
             // không phải đã kết thúc. Tách nhánh riêng để không hiển thị nhầm "KỲ HỌC KẾT THÚC".
@@ -607,20 +778,22 @@ function renderHero(now, weekIndex, examsData) {
 
     // FIX: lưu lại đúng id môn học đang hiển thị ở Hero, để widget BÀI TẬP/GHI CHÚ bên dưới lọc
     // đúng theo môn này (xem switchWidget) thay vì gộp chung ghi chú của mọi môn học lại.
-    heroSubjectId = upcoming.id;
+    setHeroSubjects(block.subs);
 
-    const rawName = (upcoming.name || 'Môn Ẩn').split('-')[0].split('(')[0].trim();
+    const rawName = block.name;
     document.getElementById('mini-tkb-name').innerText = rawName;
-    const classRange = parsePeriodRange(upcoming);
+    // block có startMin/endMin/breaks -> dùng thẳng làm "range" cho chip đếm ngược (tính tới hết CẢ khối gộp)
+    const classRange = block.endMin > block.startMin ? block : null;
     const classChipFor = (d) => classRange ? classCountdownChip(status, classRange, d) : null;
     setHeroTime(
         heroDayLabel(upcoming.day, curDay, status, upcomingWeek, weekIndex),
-        upcoming.exact_time || upcoming.time_slot || '',
+        block.hoursText,
         classChipFor(now)
     );
+    setHeroBreaks(heroBreakChips(block, dayBlocks, status));
     if (status === 'ongoing' || status === 'today') startHeroTick(classChipFor);
-    document.getElementById('mini-tkb-room').innerText = upcoming.room || "N/A";
-    document.getElementById('mini-tkb-gv').innerText = upcoming.lecturer || "N/A";
+    document.getElementById('mini-tkb-room').innerText = block.room || "N/A";
+    document.getElementById('mini-tkb-gv').innerText = block.lecturer || "N/A";
     document.getElementById('val-bg-text').innerText = upcoming.course_code || "SGU";
     document.getElementById('hero-status').innerText =
         status === 'ongoing' ? "ĐANG DIỄN RA" :
@@ -628,9 +801,8 @@ function renderHero(now, weekIndex, examsData) {
 
     // Hiển thị "lớp kế tiếp" khi lớp hiện tại đang diễn ra, để dù hết tiết sớm vẫn biết tiết sau là gì
     if (status === 'ongoing' && nextAfter && nextLineEl && nextTextEl) {
-        const nextRawName = (nextAfter.sub.name || 'Môn Ẩn').split('-')[0].split('(')[0].trim();
         const dayLabel = nextAfter.day === curDay ? "hôm nay" : (nextAfter.day === 8 ? "Chủ Nhật" : "Thứ " + nextAfter.day);
-        nextTextEl.innerText = `${nextRawName} • ${dayLabel}, ${nextAfter.sub.exact_time || nextAfter.sub.time_slot || ''}`;
+        nextTextEl.innerText = `${nextAfter.block.name} • ${dayLabel}, ${nextAfter.block.hoursText}`;
         nextLineEl.style.display = 'flex';
     }
 
@@ -695,11 +867,11 @@ window.switchWidget = function(idx, btn) {
     // subject_details.subject_id), thay vì gộp ghi chú của TẤT CẢ môn học lại — trước đây hero
     // đang hiện "Cầu Lông 1" mà widget dưới lại lòi ra ghi chú của môn hoàn toàn khác, gây hiểu
     // lầm là ghi chú đó thuộc về môn đang hiển thị.
-    const data = heroSubjectId ? rawData.filter(d => d.subject_id === heroSubjectId) : [];
+    const data = heroSubjectIds.length ? rawData.filter(d => heroSubjectIds.includes(d.subject_id)) : [];
     const icon = idx === 0 ? 'fa-tasks' : 'fa-pen';
 
     if (!data.length) {
-        const emptyMsg = !heroSubjectId
+        const emptyMsg = !heroSubjectIds.length
             ? "Không có môn học cụ thể đang hiển thị."
             : (idx === 0 ? "Xong hết bài tập môn này!" : "Chưa có ghi chú nào cho môn này.");
         box.innerHTML = `<div class="empty-state"><i class="fas ${idx === 0 ? 'fa-check-circle' : 'fa-sticky-note'}"></i> ${emptyMsg}</div>`;

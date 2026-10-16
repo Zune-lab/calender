@@ -44,9 +44,14 @@
 
         <div class="character-tkb-mini" onclick="navigateWithFade('tkb/calendar.html')">
             <div class="tkb-content">
-                <div class="badge-status">
-                    <span class="dot"></span>
-                    <span id="hero-status">ĐANG KHỞI ĐỘNG...</span>
+                <div class="hero-top-row">
+                    <div class="badge-status">
+                        <span class="dot"></span>
+                        <span id="hero-status">ĐANG KHỞI ĐỘNG...</span>
+                    </div>
+                    <!-- Chip giờ ra chơi / nghỉ trưa: nằm CÙNG HÀNG với badge trạng thái (còn thừa chỗ ngang)
+                         để không làm dòng giờ bị xuống hàng và đẩy các khối bên dưới xuống. -->
+                    <div class="hero-breaks" id="hero-breaks"></div>
                 </div>
                 <h1 id="mini-tkb-name">ĐANG TẢI</h1>
                 <p id="mini-tkb-time">Vui lòng đợi đồng bộ dữ liệu hệ thống</p>

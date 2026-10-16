@@ -592,3 +592,97 @@ body.light-mode .icon-label { color: var(--text-muted); }
 @media (max-width: 380px) {
     .stat-tile p { font-size: 0.6rem; }
 }
+
+/* Hàng trên cùng: [badge trạng thái] [chip ra chơi / nghỉ trưa] — cùng 1 hàng, không xuống dòng,
+   nên có thêm chip cũng KHÔNG làm tăng chiều cao thẻ hero (các khối bên dưới đứng yên). */
+.hero-top-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; min-width: 0; flex-wrap: nowrap; }
+.hero-top-row .badge-status { margin-bottom: 0; flex: 0 0 auto; }
+.hero-breaks { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; overflow: hidden; }
+.hero-breaks:empty { display: none; }
+.hero-break {
+    display: inline-flex; align-items: center; gap: 7px; flex: 0 1 auto; min-width: 0;
+    padding: 5px 12px 5px 10px; border-radius: 30px; white-space: nowrap; overflow: hidden;
+    font-size: 0.78rem; font-weight: 600; text-shadow: none;
+    color: var(--text-main); background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16); backdrop-filter: blur(10px);
+    animation: heroBreakIn 0.35s ease both;
+}
+.hero-break i { font-size: 0.74rem; color: var(--accent); }
+.hero-break .hb-name { opacity: 0.75; }
+.hero-break b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.hero-break em {
+    font-style: normal; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+    color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+/* Đang trong giờ nghỉ: nổi bật theo màu accent */
+.hero-break.now { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.hero-break.now .hb-name { opacity: 1; }
+.hero-break.now em { color: var(--text-main); background: color-mix(in srgb, var(--accent) 45%, transparent); }
+@keyframes heroBreakIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+body.light-mode .hero-break { background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.12); }
+body.light-mode .hero-break.now { background: color-mix(in srgb, var(--accent) 20%, transparent); border-color: var(--accent); }
+body.has-custom-bg .hero-break { color: #fff; }
+body.has-custom-bg.bg-photo-light .hero-break { color: #1f2328; border-color: rgba(0, 0, 0, 0.2); }
+
+/* Màn hình hẹp: không đủ chỗ ngang cho 2 chip cạnh badge -> hàng chip cuộn ngang (không cắt chữ, không xuống dòng) */
+@media (max-width: 600px) {
+    .hero-breaks { overflow-x: auto; scrollbar-width: none; }
+    .hero-breaks::-webkit-scrollbar { display: none; }
+    .hero-break { flex: 0 0 auto; text-overflow: clip; }
+    .hero-break .hb-name { display: none; } /* gọn chữ: icon + giờ + còn/sau (màu nổi bật đã báo "đang nghỉ") */
+}
+
+/* ==========================================================================
+   FIX "LỘ KHUNG NỀN" (hero + widget đáy trông như bị cắt thành khung chữ nhật)
+   Nguyên nhân: .hero-stack và .character-tkb-mini có overflow:hidden NGAY SÁT chữ / khung widget,
+   nên bóng chữ (text-shadow), bóng khung widget (box-shadow) và chữ nền lớn bị cắt thẳng tại mép
+   -> hiện ra cạnh vuông sắc nét, nhìn rõ nhất trên ảnh nền tuỳ chỉnh.
+   Cách sửa: chừa chỗ cho bóng đổ thoải mái trước khi cắt, và cho chữ nền mờ dần về mép thay vì cắt cụt.
+   ========================================================================== */
+
+/* Desktop: mở rộng vùng cắt của stack ra ngoài 56px mỗi phía (bù lại bằng padding nên vị trí nội dung
+   KHÔNG đổi) -> bóng khung widget (blur 40px) mờ hết hẳn trước khi chạm mép cắt. */
+@media (min-width: 851px) {
+    .hero-stack {
+        --shadow-room: 56px;
+        left: calc(6% - var(--shadow-room)); right: calc(3% - var(--shadow-room));
+        top: calc(12% - var(--shadow-room)); bottom: calc(5% - var(--shadow-room));
+        padding: var(--shadow-room);
+    }
+}
+
+/* Desktop: thẻ hero KHÔNG cắt nữa (tiêu đề đã tự xuống dòng nên không cần chặn tràn) -> chữ nền lớn
+   (mã môn) hiện ĐỦ các chữ số, bóng chữ cũng không bị cắt; phần tràn xa nhất vẫn do .hero-stack chặn.
+   Mobile: giữ cắt gọn như cũ để chữ nền không làm tràn ngang, chừa 48px cho bóng chữ. */
+@media (min-width: 851px) {
+    .character-tkb-mini { overflow: visible; }
+}
+@media (max-width: 850px) {
+    @supports (overflow-clip-margin: 1px) {
+        .character-tkb-mini { overflow: clip; overflow-clip-margin: 48px; }
+    }
+}
+
+/* ==========================================================================
+   FIX "CHỮ MÀU ACCENT BỊ CHÌM VÀO ẢNH NỀN"
+   Chữ nền lớn (mã môn) và nhãn "HÔM NAY" tô bằng màu accent của môn học; khi accent trùng/gần màu
+   ảnh nền (vd xanh ngọc trên nền tím-xanh) thì chữ biến mất. Thêm 1 lớp tương phản luôn khác nền:
+   viền/pha màu "mực" (trắng ở nền tối, đen ở nền sáng) -> dù accent trùng nền vẫn đọc được.
+   --hero-ink: màu chữ tương phản với nền hiện tại (theo theme sáng/tối và độ sáng ảnh nền tuỳ chỉnh).
+   ========================================================================== */
+body { --hero-ink: var(--text-main); }
+body.has-custom-bg { --hero-ink: #ffffff; }
+body.has-custom-bg.bg-photo-light { --hero-ink: #1f2328; }
+
+/* Chữ nền lớn: KHÔNG viền — chỉ pha màu accent về phía "mực" (trắng/đen) nên luôn lệch khỏi màu nền,
+   dù accent trùng ảnh nền vẫn thấy được hình chữ số, mà không có đường viền. */
+.bg-text { color: color-mix(in srgb, var(--accent) 55%, var(--hero-ink)); }
+body.has-custom-bg .bg-text { opacity: 0.14; }
+
+/* Nhãn ngày: chỉ pha chữ về phía "mực" (không viền) để không chìm khi accent trùng nền */
+.hero-day { color: color-mix(in srgb, var(--accent) 65%, var(--hero-ink)); }
+
+/* Chip đếm ngược / ra chơi đang hoạt động: viền pha về màu "mực" để không chìm khi accent trùng nền */
+.hero-countdown.live,
+.hero-countdown.soon,
+.hero-break.now { border-color: color-mix(in srgb, var(--accent) 55%, var(--hero-ink)); }
