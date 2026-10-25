@@ -65,11 +65,6 @@ window.captureFullTimetable = async function () {
 
     if (!wrapper) return;
 
-    if (typeof html2canvas === 'undefined') {
-        showAlert('Không tải được thư viện chụp ảnh (html2canvas) - có thể do mạng yếu hoặc bị chặn CDN. Vui lòng thử lại.', 'Lỗi chụp ảnh');
-        return;
-    }
-
     if (!wrapper.querySelector('table')) {
         showAlert('Chưa có dữ liệu thời khóa biểu để chụp.', 'Không có gì để chụp');
         return;
@@ -86,6 +81,13 @@ window.captureFullTimetable = async function () {
     // của hàm - lỗi ở bất kỳ đâu cũng đều được "finally" dọn dẹp/khôi phục trạng thái nút đúng cách.
     let stage;
     try {
+        // Nạp html2canvas-pro theo nhu cầu (lần đầu bấm "Chụp TKB") thay vì chặn trang lúc khởi động.
+        try {
+            await loadScriptOnce(HTML2CANVAS_CDN_URL, 'html2canvas');
+        } catch (loadErr) {
+            showAlert('Không tải được thư viện chụp ảnh (html2canvas) - có thể do mạng yếu hoặc bị chặn CDN. Vui lòng thử lại.', 'Lỗi chụp ảnh');
+            return; // finally bên dưới vẫn khôi phục nút
+        }
         // Bề ngang khung đang hiển thị THẬT trên màn hình người dùng - dùng làm mốc "vừa khung" để
         // tính scale, vì bản sao khi tách ra ngoài màn hình sẽ không còn khung nào giới hạn nữa.
         const targetWidth = wrapper.clientWidth;

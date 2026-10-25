@@ -30,6 +30,8 @@ let plannerBuilt = false;
 //    Function + pg_cron) sẽ bắn Web Push tới máy bạn -> nhận được kể cả khi tắt hẳn trình duyệt.
 // =========================================
 const PLANNER_NOTIF_POLL_MS = 30000;   // tần suất kiểm tra phía client (30s)
+const PLANNER_DEADLINE_POLL_MS = 30 * 60 * 1000; // thông báo theo Hạn (ngày): 30 phút/lần
+let plannerDeadlineTimer = null;
 
 // MỤC 2: THỜI GIAN BÁO TRƯỚC CHO KẾ HOẠCH — GIỜ CÓ THỂ TỰ TÙY CHỈNH (Cài Đặt Workspace)
 // Trước đây bị cố định cứng "const PLANNER_NOTIF_LEAD_MIN = 5". Giờ đọc từ localStorage, người
@@ -61,6 +63,34 @@ let plannerAlarmAudioCtx = null;
 // khóa đó nằm trong Edge Function secrets, không xuất hiện ở đây).
 const PLANNER_PUSH_VAPID_PUBLIC_KEY = 'BNxj9bZH3u_IXBvcohC9BGIToPpzwFJ5bbU2ukd1O7W_2rwLY9dHQ-6qPnnCEF_kh7rskNJ-myLraXerYXietfg';
 
+// initPlannerNotifications() chạy lúc DOMContentLoaded, TRƯỚC khi phiên đăng nhập kịp khôi phục
+// (currentUser còn null) -> trước đây đăng ký push lúc mở trang luôn lỗi "reading 'id' of null" (bị
+// nuốt trong try/catch) và lần kiểm tra đầu tiên bị bỏ qua. Đợi tối đa ~10s cho tới khi có user.
+function plannerWaitForUser(timeoutMs = 10000) {
+    return new Promise((resolve) => {
+        if (currentUser) return resolve(true);
+        const t0 = Date.now();
+        const timer = setInterval(() => {
+            if (currentUser) { clearInterval(timer); resolve(true); }
+            else if (Date.now() - t0 > timeoutMs) { clearInterval(timer); resolve(false); }
+        }, 250);
+    });
+}
+
+// Hiện thông báo: ưu tiên qua Service Worker (bắt buộc trên Android Chrome / PWA iOS — `new Notification()`
+// ném "Illegal constructor" ở đó nên trước đây thông báo cục bộ không bao giờ hiện trên điện thoại),
+// lỗi/không có SW thì rơi về `new Notification()`.
+async function plannerShowNotification(title, options) {
+    try {
+        if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg && reg.showNotification) { await reg.showNotification(title, options); return true; }
+        }
+    } catch (e) { /* rơi xuống nhánh dưới */ }
+    try { new Notification(title, options); return true; }
+    catch (e) { console.warn('[PlannerNotif] Không bắn được thông báo:', e.message); return false; }
+}
+
 function plannerUrlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
     const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -80,6 +110,7 @@ async function plannerRegisterServiceWorker() {
 
 async function plannerSubscribePush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+    if (!(await plannerWaitForUser())) return false;
     const reg = await plannerRegisterServiceWorker();
     if (!reg) return false;
 
@@ -171,7 +202,8 @@ function initPlannerNotifications() {
                     // âm thanh không do người dùng chủ động bấm). Giữ lại để tái dùng lúc chuông
                     // reo sau này, dù lúc đó chỉ chạy từ setInterval (không có cử chỉ bấm mới).
                     try {
-                        plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        if (!plannerAlarmAudioCtx) plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        else if (plannerAlarmAudioCtx.state === 'suspended') plannerAlarmAudioCtx.resume();
                     } catch (e) { console.warn('[PlannerAlarm] Trình duyệt không hỗ trợ Web Audio:', e.message); }
                     startPlannerNotifPolling();
                     await plannerSubscribePush(); // đăng ký nhận Push thật từ server (chạy nền được)
@@ -205,7 +237,7 @@ function initPlannerNotifications() {
         // modal, đổi tab, v.v.) để âm thầm resume() ngay khi có cơ hội, không cần người dùng
         // phải bật/tắt lại thông báo mới có chuông.
         try {
-            plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (!plannerAlarmAudioCtx) plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
         } catch (e) { /* trình duyệt không hỗ trợ, bỏ qua — chuông sẽ không phát được nhưng thông báo chữ vẫn hoạt động bình thường */ }
         const unlockPlannerAlarm = () => {
             if (plannerAlarmAudioCtx && plannerAlarmAudioCtx.state === 'suspended') plannerAlarmAudioCtx.resume();
@@ -217,12 +249,16 @@ function initPlannerNotifications() {
 
 function startPlannerNotifPolling() {
     if (plannerNotifTimer) return; // đã chạy rồi, tránh chạy trùng nhiều interval
-    checkTodayPlannerBlocks(); // kiểm tra ngay 1 lần, không đợi đủ 30s đầu tiên
-    checkUpcomingDeadlineNotifications(); // MỤC 3: kiểm tra luôn thông báo theo Hạn (ngày)
-    plannerNotifTimer = setInterval(() => {
+    // kiểm tra ngay 1 lần (đợi có user, không bỏ qua rồi chờ thêm 30s như trước)
+    plannerWaitForUser().then((ok) => {
+        if (!ok || !plannerNotifTimer) return;
         checkTodayPlannerBlocks();
-        checkUpcomingDeadlineNotifications();
-    }, PLANNER_NOTIF_POLL_MS);
+        checkUpcomingDeadlineNotifications(); // MỤC 3: thông báo theo Hạn (ngày)
+    });
+    plannerNotifTimer = setInterval(checkTodayPlannerBlocks, PLANNER_NOTIF_POLL_MS);
+    // Thông báo theo HẠN (ngày) chỉ cần kiểm tra thưa: mỗi key chỉ bắn 1 lần/ngày, trước đây 2 truy vấn
+    // Supabase mỗi 30 giây (~5.700 lượt/ngày/tab) cho kết quả gần như không đổi.
+    plannerDeadlineTimer = setInterval(checkUpcomingDeadlineNotifications, PLANNER_DEADLINE_POLL_MS);
 }
 
 // GỘP 2 HÀM (báo trước N phút + chuông báo đúng giờ) VỀ CHUNG 1 LẦN QUERY DUY NHẤT: cả hai vốn
@@ -245,6 +281,7 @@ async function checkTodayPlannerBlocks() {
 
 function stopPlannerNotifPolling() {
     if (plannerNotifTimer) { clearInterval(plannerNotifTimer); plannerNotifTimer = null; }
+    if (plannerDeadlineTimer) { clearInterval(plannerDeadlineTimer); plannerDeadlineTimer = null; }
 }
 
 function plannerNotifiedSet() {
@@ -312,14 +349,12 @@ async function checkPlannerAlarmArrival(data, todayStr) {
     data.forEach(b => {
         if (b.is_done) return; // việc đã tick xong rồi thì khỏi báo thức nữa
         const key = `${todayStr}_${b.id}`;
-        if (nowMin >= b.start_min && nowMin <= b.start_min + 1 && !fired.has(key)) {
-            try {
-                new Notification('⏰ Đến giờ: ' + (b.title || 'Việc chưa đặt tên'), {
-                    body: `Bắt đầu lúc ${plannerFmtHM(b.start_min)}`,
-                    tag: 'alarm_' + key,
-                    requireInteraction: true, // giữ nguyên trên màn hình tới khi người dùng bấm tắt, giống báo thức thật
-                });
-            } catch (e) { console.warn('[PlannerAlarm] Không bắn được thông báo:', e.message); }
+        if (nowMin >= b.start_min && nowMin <= b.start_min + 5 && !fired.has(key)) { // 5 phút: tab nền bị giãn timer, cửa sổ 1 phút hay trượt mất; `fired` đảm bảo chỉ 1 lần
+            plannerShowNotification('⏰ Đến giờ: ' + (b.title || 'Việc chưa đặt tên'), {
+                body: `Bắt đầu lúc ${plannerFmtHM(b.start_min)}`,
+                tag: 'alarm_' + key,
+                requireInteraction: true, // giữ nguyên trên màn hình tới khi người dùng bấm tắt, giống báo thức thật
+            });
             playPlannerAlarmSound();
             fired.add(key);
             changed = true;
@@ -332,6 +367,10 @@ async function checkPlannerAlarmArrival(data, todayStr) {
 function plannerClearNotifiedFor(dateStr, id) {
     const set = plannerNotifiedSet();
     if (set.delete(`${dateStr}_${id}`)) plannerSaveNotifiedSet(set);
+    // Dời giờ/hoãn việc phải cho phép CHUÔNG ĐÚNG GIỜ reo lại ở giờ mới (trước đây chỉ xoá mốc "báo
+    // trước", chuông đã reo rồi thì hoãn sang giờ khác vẫn im lặng).
+    const alarmSet = plannerAlarmFiredSet();
+    if (alarmSet.delete(`${dateStr}_${id}`)) plannerSaveAlarmFiredSet(alarmSet);
 }
 
 function plannerSaveNotifiedSet(set) {
@@ -372,9 +411,8 @@ async function checkUpcomingPlannerNotifications(data, todayStr) {
             const body = minsUntil > 0
                 ? `Còn ${minsUntil} phút nữa tới giờ — bắt đầu lúc ${plannerFmtHM(b.start_min)}`
                 : `Đã tới giờ (${plannerFmtHM(b.start_min)})`;
-            try {
-                new Notification(b.title || 'Việc chưa đặt tên', { body, tag: key });
-            } catch (e) { console.warn('[PlannerNotif] Không bắn được thông báo:', e.message); }
+            // tag giống push từ server (planner_<id>) -> nếu cả 2 cùng tới, trình duyệt thay thế nhau thay vì báo 2 lần
+            plannerShowNotification(b.title || 'Việc chưa đặt tên', { body, tag: `planner_${b.id}` });
             notified.add(key);
             changed = true;
         }
@@ -432,9 +470,7 @@ async function checkUpcomingDeadlineNotifications() {
                 const body = daysUntil === 0
                     ? `Hôm nay là hạn chót! (${getPriorityInfo(item.priority).label})`
                     : `Còn ${daysUntil} ngày nữa tới hạn — ${getPriorityInfo(item.priority).label}`;
-                try {
-                    new Notification(`${label}: ${item.content}`, { body, tag: key });
-                } catch (e) { console.warn('[DeadlineNotif] Không bắn được thông báo:', e.message); }
+                plannerShowNotification(`${label}: ${item.content}`, { body, tag: key });
                 notified.add(key);
                 changed = true;
             }
@@ -461,9 +497,7 @@ async function checkUpcomingDeadlineNotifications() {
                 const body = daysUntil === 0
                     ? `Hôm nay là ngày đã lên kế hoạch! (${getPriorityInfo(item.priority).label})`
                     : `Còn ${daysUntil} ngày nữa — ${getPriorityInfo(item.priority).label}`;
-                try {
-                    new Notification(`Kế hoạch: ${item.title || 'Việc chưa đặt tên'}`, { body, tag: key });
-                } catch (e) { console.warn('[DeadlineNotif] Không bắn được thông báo:', e.message); }
+                plannerShowNotification(`Kế hoạch: ${item.title || 'Việc chưa đặt tên'}`, { body, tag: key });
                 notified.add(key);
                 changed = true;
             }

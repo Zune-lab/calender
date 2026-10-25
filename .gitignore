@@ -1,0 +1,4 @@
+# Supabase CLI: thư mục tạm sinh ra khi `supabase link` (chứa project-ref, pooler URL...) — không commit
+supabase/.temp/
+.DS_Store
+node_modules/

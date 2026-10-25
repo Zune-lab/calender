@@ -31,10 +31,19 @@ function escapeHtml(str) {
 // lại nhiều lần một lệnh ghi/xoá có thể gây trùng lặp dữ liệu.
 // ---------------------------------------------------------
 async function withRetry(queryFn, { retries = 2, baseDelayMs = 700 } = {}) {
+    // CHỈ thử lại khi lỗi mang tính TẠM THỜI: mất mạng (status 0/không có), 5xx, 429, 408.
+    // Lỗi vĩnh viễn (4xx như 400/401/403/404/406 — vd .single() không có dòng nào, RLS chặn...) thì
+    // trả về NGAY, không đợi thêm 2,1 giây vô ích rồi cũng ra đúng kết quả đó.
+    const isTransient = (r) => {
+        if (!r || !r.error) return false;
+        const st = r.status;
+        return !st || st >= 500 || st === 429 || st === 408;
+    };
     let lastResult;
     for (let attempt = 0; attempt <= retries; attempt++) {
         lastResult = await queryFn();
         if (!lastResult.error) return lastResult;
+        if (!isTransient(lastResult)) return lastResult;
         if (attempt < retries) {
             await new Promise((r) => setTimeout(r, baseDelayMs * (attempt + 1)));
         }
@@ -61,8 +70,63 @@ function parseVNExamDate(str) {
         if (year < 100) year += 2000;
     }
     if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
     const d = new Date(year, month - 1, day);
-    return isNaN(d.getTime()) ? null : d;
+    // new Date() tự "tràn" ngày (31/02 -> 03/03) -> phải so lại để từ chối ngày không có thật,
+    // nếu không lịch thi sai ngày (và có thể bị tự động xoá nhầm vì tưởng đã quá 14 ngày).
+    if (isNaN(d.getTime()) || d.getDate() !== day || d.getMonth() !== month - 1) return null;
+    return d;
+}
+
+// ---------------------------------------------------------
+// Ngày LOCAL dạng YYYY-MM-DD (KHÔNG dùng toISOString() vì nó trả về ngày UTC: ở Việt Nam, từ
+// 00:00–07:00 sáng nó vẫn ra "hôm qua", làm sai nhãn "Hôm nay"/"Còn N ngày").
+// ---------------------------------------------------------
+function fmtLocalDate(d) {
+    const dt = d || new Date();
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+// 'YYYY-MM-DD' -> Date lúc 00:00 GIỜ ĐỊA PHƯƠNG (new Date('YYYY-MM-DD') parse theo UTC nên lệch 7 giờ ở VN)
+function parseLocalDateStr(str) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(str || ''));
+    return m ? new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)) : null;
+}
+
+// Mốc bắt đầu học kỳ mặc định (thứ Hai 18/05/2026) — 1 nơi duy nhất cho cả Dashboard và TKB.
+function defaultSemesterStartDate() { return new Date(2026, 4, 18); }
+
+// Tên môn gốc (bỏ phần "- nhóm", "(thực hành)"...) viết thường — dùng làm khoá gộp môn/màu môn.
+// Trước đây đoạn split('-')[0].split('(')[0].trim().toLowerCase() bị chép tay ở ~10 chỗ.
+function baseSubjectKey(name) {
+    return String(name || '').split('-')[0].split('(')[0].trim().toLowerCase();
+}
+
+// Buổi học có diễn ra ở tuần weekIndex (0-indexed) không? Dùng chung Dashboard + TKB để 2 nơi
+// không bao giờ lệch nhau. Không có thông tin tuần (rỗng) -> coi như học mọi tuần; có chuỗi tuần
+// mà weekIndex nằm ngoài độ dài chuỗi -> môn đã kết thúc (trước đây TKB lại vẫn vẽ ra).
+function isSubjectActiveInWeek(sub, weekIndex) {
+    const weeks = sub && sub.weeks;
+    if (!weeks || !String(weeks).trim()) return true;
+    if (weekIndex < 0 || weekIndex >= weeks.length) return false;
+    const ch = weeks.charAt(weekIndex);
+    return ch !== '-' && ch !== ' ';
+}
+
+// Nạp 1 thư viện ngoài (xlsx, html2canvas...) CHỈ KHI cần dùng, thay vì chặn trang lúc khởi động
+// bằng ~1.2MB script mà đa số lần mở trang không dùng tới. Gọi nhiều lần vẫn chỉ nạp 1 lần.
+const _scriptLoadCache = {};
+function loadScriptOnce(url, globalName) {
+    if (globalName && typeof window[globalName] !== 'undefined') return Promise.resolve();
+    if (_scriptLoadCache[url]) return _scriptLoadCache[url];
+    _scriptLoadCache[url] = new Promise((resolve, reject) => {
+        const el = document.createElement('script');
+        el.src = url;
+        el.onload = () => resolve();
+        el.onerror = () => { delete _scriptLoadCache[url]; el.remove(); reject(new Error('Không tải được thư viện: ' + url)); };
+        document.head.appendChild(el);
+    });
+    return _scriptLoadCache[url];
 }
 
 // ---------------------------------------------------------
@@ -71,8 +135,16 @@ function parseVNExamDate(str) {
 // mỗi nơi làm tròn kiểu khác nhau (Math.floor theo ngày vs Math.ceil theo mili-giây) nên có
 // thể lệch 1 tuần ngay tại thời điểm nửa đêm giao giữa 2 tuần.
 // ---------------------------------------------------------
+// Số NGÀY LỊCH (địa phương) từ b tới a: a - b. Không phụ thuộc giờ trong ngày hay múi giờ của mốc.
+function calendarDayDiff(a, b) {
+    const dayNum = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+    return dayNum(a) - dayNum(b);
+}
+
 function calcCurrentWeekNumber(now, semesterStartDate, maxW) {
-    const diffDays = Math.floor((now.getTime() - semesterStartDate.getTime()) / (1000 * 60 * 60 * 24));
+    // So theo NGÀY LỊCH địa phương (Date.UTC của y/m/d) thay vì chênh mili-giây: tuần mới luôn bắt
+    // đầu đúng 00:00 thứ Hai, không bị trễ 7 tiếng khi mốc học kỳ được parse theo UTC.
+    const diffDays = calendarDayDiff(now, semesterStartDate);
     let week = diffDays >= 0 ? Math.floor(diffDays / 7) + 1 : 1;
     if (week < 1) week = 1;
     if (maxW && week > maxW) week = maxW;
@@ -102,15 +174,15 @@ function hashStringToIndex(str, arrayLength) {
 }
 
 function getSavedAccentColor() {
-    return localStorage.getItem('customAccent') || null;
+    try { return localStorage.getItem('customAccent') || null; } catch (e) { return null; }
 }
 
 function setSavedAccentColor(hex) {
-    localStorage.setItem('customAccent', hex);
+    try { localStorage.setItem('customAccent', hex); } catch (e) { console.warn('[Accent] Không lưu được màu (bộ nhớ đầy?):', e.message); }
 }
 
 function clearSavedAccentColor() {
-    localStorage.removeItem('customAccent');
+    try { localStorage.removeItem('customAccent'); } catch (e) {}
 }
 
 // Màu accent cuối cùng cho 1 user: ưu tiên màu tự chọn đã lưu (nếu có), nếu chưa
@@ -178,7 +250,8 @@ function getSavedSubjectColors() {
 function saveSubjectColor(subjectName, color) {
     const saved = getSavedSubjectColors();
     saved[subjectName] = color;
-    localStorage.setItem('subjectCustomColors', JSON.stringify(saved));
+    try { localStorage.setItem('subjectCustomColors', JSON.stringify(saved)); }
+    catch (e) { console.warn('[SubjectColor] Không lưu được màu môn (bộ nhớ đầy?):', e.message); }
 }
 
 // ---------------------------------------------------------
@@ -195,4 +268,59 @@ function resolveDisplayName(user, meta) {
         return "Người dùng SGU";
     }
     return user.email;
+}
+
+// ---------------------------------------------------------
+// Giờ trong chuỗi (vd "07:30", "7h30", "07g30", "7.30") -> số phút từ 00:00, hoặc null.
+// Trước đây Dashboard và TKB chỉ nhận dạng "HH:MM" nên lịch thi ghi "7h30" không có đếm ngược.
+// ---------------------------------------------------------
+function parseClockMinutes(str) {
+    const m = String(str || '').match(/(\d{1,2})\s*[:hHgG.]\s*(\d{2})/);
+    if (!m) return null;
+    const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+    return (h > 23 || mi > 59) ? null : h * 60 + mi;
+}
+
+// ---------------------------------------------------------
+// Gỡ Push Subscription của thiết bị này khỏi tài khoản đang đăng nhập (gọi TRƯỚC signOut).
+// Nếu không, server vẫn tiếp tục đẩy tiêu đề các việc của tài khoản cũ tới thiết bị này sau khi
+// đã đăng xuất (lộ nội dung riêng tư trên máy dùng chung). Best-effort, tối đa ~2,5 giây để
+// không chặn việc đăng xuất khi mạng chậm.
+// ---------------------------------------------------------
+async function removePushSubscriptionFor(client) {
+    try {
+        if (!client || !('serviceWorker' in navigator)) return;
+        const work = (async () => {
+            const reg = await navigator.serviceWorker.getRegistration();
+            const sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+            if (!sub) return;
+            await client.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+            await sub.unsubscribe();
+        })();
+        await Promise.race([work, new Promise((r) => setTimeout(r, 2500))]);
+    } catch (e) { console.warn('[Push] Không gỡ được subscription khi đăng xuất:', e.message); }
+}
+
+// ---------------------------------------------------------
+// Khi nhập lại TKB, các dòng `subjects` cũ bị xoá và tạo lại với id MỚI -> ghi chú/bài tập
+// (subject_details.subject_id) trỏ vào id cũ sẽ mất hoặc mồ côi. Hàm này ghép mỗi dòng cũ với 1 dòng
+// mới tương ứng để chuyển ghi chú sang. Thứ tự ưu tiên (chọn mức đầu tiên có kết quả):
+//   1) trùng mã HP + nhóm + thứ + tiết   2) trùng tên môn gốc + thứ + tiết   3) cùng tên môn gốc
+// (ghi chú vốn được gom theo TÊN MÔN GỐC nên mức 3 vẫn hiển thị đúng ở popup môn).
+// Trả về Map(idCũ -> idMới); dòng cũ không ghép được (môn không còn trong TKB mới) không có trong Map.
+// ---------------------------------------------------------
+function buildSubjectIdRemap(oldRows, newRows) {
+    const k1 = (r) => [r.course_code || '', r.group_id || '', r.day, r.time_slot || ''].join('|').toLowerCase();
+    const k2 = (r) => [baseSubjectKey(r.name), r.day, r.time_slot || ''].join('|');
+    const k3 = (r) => baseSubjectKey(r.name);
+    const idx = [new Map(), new Map(), new Map()];
+    (newRows || []).forEach((r) => {
+        [k1(r), k2(r), k3(r)].forEach((key, i) => { if (!idx[i].has(key)) idx[i].set(key, r.id); });
+    });
+    const remap = new Map();
+    (oldRows || []).forEach((o) => {
+        const target = idx[0].get(k1(o)) ?? idx[1].get(k2(o)) ?? idx[2].get(k3(o));
+        if (target !== undefined) remap.set(o.id, target);
+    });
+    return remap;
 }

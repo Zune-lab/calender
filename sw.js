@@ -10,7 +10,7 @@
 // FIX: Dùng path TƯƠNG ĐỐI (không có dấu / ở đầu) và tự tính theo self.registration.scope,
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
-const CACHE_NAME = 'sgu-workspace-v11'; // BUMP v8: gộp supabaseUrl/supabaseKey của index.js,
+const CACHE_NAME = 'sgu-workspace-v13'; // BUMP v8: gộp supabaseUrl/supabaseKey của index.js,
 // profile.js, tkb/calendar-1-core.js về 1 file chung 'supabase-config.js' (load trước mọi
 // script khác) -> thêm file mới này vào app shell để cache offline, đồng thời bump version
 // để SW install lại và không phục vụ nhầm bản index.js/profile.js/calendar-1-core.js cũ
@@ -24,6 +24,7 @@ const APP_SHELL_RELATIVE = [
     'tkb/calendar-1-core.js', 'tkb/calendar-2-timetable-modal.js', 'tkb/calendar-3-personalization.js',
     'tkb/calendar-4-planner-notify.js', 'tkb/calendar-5-planner-ui.js', 'tkb/calendar-5b-planner-overview.js',
     'tkb/calendar-6-export-capture.js',
+    'tkb/calendar-7-wallpaper.js',
     'manifest.json', 'icon-192.png', 'icon-512.png',
 ];
 
@@ -69,12 +70,17 @@ self.addEventListener('fetch', (event) => {
 
     event.respondWith(
         fetch(req, { cache: 'no-cache' }).then((res) => {
-            if (res.ok) {
+            // Chỉ cache phản hồi 200 đầy đủ (cache.put ném lỗi với 206 Partial) và nuốt lỗi ghi cache
+            // để không sinh "unhandled rejection" / không ảnh hưởng phản hồi đang trả về.
+            if (res.ok && res.status === 200) {
                 const clone = res.clone();
-                caches.open(CACHE_NAME).then((c) => c.put(req, clone));
+                caches.open(CACHE_NAME).then((c) => c.put(req, clone)).catch(() => {});
             }
             return res;
-        }).catch(() => caches.match(req).then((c) => c || (isHTML ? caches.match(scopedUrl('index.html')) : undefined)))
+        }).catch(() => caches.match(req, { ignoreSearch: true }).then((c) =>
+            // respondWith(undefined) làm trình duyệt báo lỗi mạng khó hiểu -> trả Response lỗi có chủ đích
+            c || (isHTML ? caches.match(scopedUrl('index.html')) : null) || Response.error()
+        ))
     );
 });
 

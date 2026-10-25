@@ -463,6 +463,7 @@ document.getElementById('excel-exam-file').addEventListener('change', async func
     const reader = new FileReader();
     reader.onload = async function(event) {
         try {
+            await loadScriptOnce(XLSX_CDN_URL, 'XLSX');
             const data = new Uint8Array(event.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
             const jsonArray = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { raw: false, defval: "" });
@@ -531,13 +532,15 @@ document.getElementById('excel-exam-file').addEventListener('change', async func
 
             showAlert("Đã đồng bộ Lịch Thi thành công!", "Hoàn tất"); 
             loadExams();
-            e.target.value = ''; 
             
         } catch (err) { 
             showAlert(`Lỗi xử lý file:\n${err.message}`, "Lỗi hệ thống"); 
             console.error(err);
+        } finally {
+            e.target.value = ''; // chọn lại cùng file sau khi lỗi vẫn kích hoạt 'change'
         }
     };
+    reader.onerror = () => { showAlert('Không đọc được file này.', 'Lỗi đọc file'); e.target.value = ''; };
     reader.readAsArrayBuffer(file);
 });
 
@@ -578,6 +581,16 @@ window.loadExams = async function() {
         }
     }
     
+    window._examsCache = exams || [];
+    renderExamCards(window._examsCache);
+};
+
+// Vẽ lại danh sách từ dữ liệu đã tải (bộ đếm "Còn X phút" chỉ phụ thuộc đồng hồ, không cần gọi mạng)
+window.renderExamsFromCache = function() {
+    if (window._examsCache) renderExamCards(window._examsCache);
+};
+
+function renderExamCards(exams) {
     const wrapper = document.getElementById('exams-wrapper'); 
     if (!wrapper) return;
     wrapper.innerHTML = ''; 
@@ -610,7 +623,7 @@ window.loadExams = async function() {
     const subjectColorMap = {}; 
     let colorIndex = 0;
     allLoadedSubjects.forEach(sub => {
-        const baseName = sub.name.split('-')[0].split('(')[0].trim().toLowerCase();
+        const baseName = baseSubjectKey(sub.name);
         if (!subjectColorMap[baseName]) { 
             subjectColorMap[baseName] = gradientColors[colorIndex % gradientColors.length][0]; 
             colorIndex++; 
@@ -630,10 +643,10 @@ window.loadExams = async function() {
             // Tính chính xác còn bao nhiêu PHÚT tới giờ thi (ghép ngày thi + giờ bắt đầu thật),
             // để cảnh báo khẩn khi sắp tới giờ, không chỉ dựa vào so sánh ngày
             let minutesUntilExam = null;
-            const timeMatch = String(exam.exam_time || '').match(/(\d{1,2}):(\d{2})/);
-            if (timeMatch) {
+            const examClockMin = parseClockMinutes(exam.exam_time); // nhận cả "07:30", "7h30", "07g30"
+            if (examClockMin !== null) {
                 const examDateTime = new Date(examDateObj);
-                examDateTime.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]), 0, 0);
+                examDateTime.setHours(Math.floor(examClockMin / 60), examClockMin % 60, 0, 0);
                 minutesUntilExam = (examDateTime - new Date()) / 60000;
             }
 
@@ -652,7 +665,7 @@ window.loadExams = async function() {
             }
         }
         
-        const baseName = exam.subject_name.split('-')[0].split('(')[0].trim().toLowerCase();
+        const baseName = baseSubjectKey(exam.subject_name);
         let c1 = '#FF3366'; 
         
         if (savedSubjectColors[baseName]) {
@@ -664,7 +677,7 @@ window.loadExams = async function() {
         }
 
         html += `
-            <div class="exam-card" style="--c1: ${c1};">
+            <div class="exam-card" style="--c1: ${escapeHtml(c1)};">
                 ${countdownHtml}
                 <div class="exam-course-code">Mã MH: ${escapeHtml(exam.course_code)}</div>
                 <h4>${escapeHtml(exam.subject_name)}</h4>

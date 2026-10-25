@@ -316,6 +316,11 @@ body.light-mode .tkb-next-line { background: rgba(255,255,255,0.6); }
 /* --- 3. GÓC PHẢI (PROFILE + ICONS) --- */
 .top-right-profile {
     position: absolute; right: 3%; top: 4%;
+    /* FIX "KHÔNG CLICK ĐƯỢC HỒ SƠ TRÊN PC": .hero-stack (z-index:10) ở desktop được nới ra 56px mỗi phía
+       (--shadow-room) nên vùng hộp của nó lấn lên góc phải-trên và phủ lên khối profile (trước đây không
+       có z-index -> nằm dưới). Click rơi vào .hero-stack thay vì vào khối này. Nâng z-index lên trên
+       .hero-stack / .right-icons-container (cùng 10). */
+    z-index: 20;
     display: flex; align-items: center; gap: 15px; background: var(--panel-bg);
     padding: 12px 20px; border-radius: 20px; border: 1px solid var(--panel-border);
     backdrop-filter: blur(20px); box-shadow: 0 10px 20px rgba(0,0,0,0.2);

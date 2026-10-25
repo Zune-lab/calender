@@ -47,7 +47,7 @@ function initDayPlanner() {
             alldayRow.addEventListener('click', async (e) => {
                 const chip = e.target.closest('.planner-allday-chip');
                 if (!chip || chip.disabled) return;
-                const id = parseInt(chip.dataset.id, 10);
+                const id = chip.dataset.id; // giữ nguyên chuỗi (parseInt làm hỏng id dạng UUID)
                 if (!id) return;
                 chip.disabled = true;
                 await window.markTaskDone(id);
@@ -218,8 +218,10 @@ window.goToPlannerThisWeek = function() {
     loadPlannerBlocks();
 };
 
+let _plannerLoadSeq = 0;
 async function loadPlannerBlocks() {
     if (!currentUser) return;
+    const loadSeq = ++_plannerLoadSeq; // bấm đổi tuần liên tiếp: chỉ lần gọi MỚI NHẤT được vẽ
     const tracksWrap = document.getElementById('planner-week-tracks');
     if (!tracksWrap) return;
     closePlannerEditor();
@@ -229,12 +231,17 @@ async function loadPlannerBlocks() {
     // tại), và lọc thẳng ở DB bằng is_done + plan_date thay vì tải hết dữ liệu về rồi lọc, nên
     // KHÔNG phụ thuộc đang xem đúng tuần nào — việc cũ ở tuần khác (không phải tuần đang mở)
     // vẫn bị dọn đúng hạn. Cùng kiểu với cách loadExams() tự xóa lịch thi cũ quá 14 ngày.
-    const cleanupCutoff = new Date(); cleanupCutoff.setHours(0, 0, 0, 0); cleanupCutoff.setDate(cleanupCutoff.getDate() - 7);
-    sbClient.from('daily_plans').delete()
-        .eq('user_id', currentUser.id).eq('is_done', true).lt('plan_date', plannerFmtDateInput(cleanupCutoff))
-        .then(({ error: cleanupErr }) => {
-            if (cleanupErr) console.warn('[Planner] Lỗi tự xóa việc đã xong quá hạn:', cleanupErr.message);
-        });
+    // Chỉ dọn tối đa 1 lần/ngày/thiết bị (trước đây 1 lệnh DELETE mỗi lần chuyển tab/đổi tuần).
+    const cleanupDayKey = plannerFmtDateInput(new Date());
+    if (localStorage.getItem('plannerCleanupDay') !== cleanupDayKey) {
+        try { localStorage.setItem('plannerCleanupDay', cleanupDayKey); } catch (e) {}
+        const cleanupCutoff = new Date(); cleanupCutoff.setHours(0, 0, 0, 0); cleanupCutoff.setDate(cleanupCutoff.getDate() - 7);
+        sbClient.from('daily_plans').delete()
+            .eq('user_id', currentUser.id).eq('is_done', true).lt('plan_date', plannerFmtDateInput(cleanupCutoff))
+            .then(({ error: cleanupErr }) => {
+                if (cleanupErr) console.warn('[Planner] Lỗi tự xóa việc đã xong quá hạn:', cleanupErr.message);
+            });
+    }
 
     // Chế độ "Tổng quan" (calendar-5b-planner-overview.js) tự tải lưới 5 tuần của nó.
     if (typeof plannerViewMode !== 'undefined' && plannerViewMode === 'overview') {
@@ -246,18 +253,29 @@ async function loadPlannerBlocks() {
     const startStr = plannerFmtDateInput(dates[0]);
     const endStr = plannerFmtDateInput(dates[6]);
 
-    const { data, error } = await sbClient.from('daily_plans')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .gte('plan_date', startStr)
-        .lte('plan_date', endStr)
-        .order('start_min', { ascending: true });
+    // 2 truy vấn độc lập -> chạy song song (trước đây nối đuôi nhau)
+    const [{ data, error }, { data: dueItems, error: dueErr }] = await Promise.all([
+        sbClient.from('daily_plans')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .gte('plan_date', startStr)
+            .lte('plan_date', endStr)
+            .order('start_min', { ascending: true }),
+        sbClient.from('subject_details')
+            .select('id, content, type, due_date, priority')
+            .eq('user_id', currentUser.id)
+            .eq('status', 'upcoming')
+            .gte('due_date', startStr)
+            .lte('due_date', endStr)
+    ]);
+    if (loadSeq !== _plannerLoadSeq) return; // đã có lần tải mới hơn (đổi tuần tiếp) -> bỏ kết quả cũ
 
     plannerBlocksByDate = {};
     dates.forEach(d => { plannerBlocksByDate[plannerFmtDateInput(d)] = []; });
 
     if (error) {
         console.error('[Planner] Lỗi tải kế hoạch tuần:', error.message);
+        if (typeof showAlert === 'function') showAlert('Không tải được Kế Hoạch Ngày. Vui lòng kiểm tra mạng rồi đổi tuần/tải lại.', 'Lỗi kết nối');
     } else {
         (data || []).forEach(r => {
             const key = r.plan_date;
@@ -269,15 +287,7 @@ async function loadPlannerBlocks() {
     renderPlannerNowLine();
     plannerApplyInitialScroll(false);
 
-    // DẢI "CẢ NGÀY" (kiểu Google Calendar): Ghi chú/Công việc (subject_details) có đặt Hạn
-    // rơi vào đúng tuần đang xem — query riêng vì đây là bảng khác, không có start_min/end_min.
-    const { data: dueItems, error: dueErr } = await sbClient.from('subject_details')
-        .select('id, content, type, due_date, priority')
-        .eq('user_id', currentUser.id)
-        .eq('status', 'upcoming')
-        .gte('due_date', startStr)
-        .lte('due_date', endStr);
-
+    // DẢI "CẢ NGÀY": dữ liệu dueItems đã tải song song ở trên.
     plannerAllDayByDate = {};
     dates.forEach(d => { plannerAllDayByDate[plannerFmtDateInput(d)] = []; });
     if (dueErr) {
@@ -582,6 +592,21 @@ function onPlannerTracksPointerDown(e) {
 
     window.addEventListener('pointermove', onPlannerTracksPointerMove);
     window.addEventListener('pointerup', onPlannerTracksPointerUp, { once: true });
+    window.addEventListener('pointercancel', plannerCancelDrag, { once: true });
+}
+
+// Huỷ kéo giữa chừng (pointercancel): dọn khối nháp/listener, vẽ lại từ dữ liệu gốc, KHÔNG lưu gì.
+function plannerCancelDrag() {
+    window.removeEventListener('pointermove', onPlannerTracksPointerMove);
+    window.removeEventListener('pointermove', onPlannerBlockPointerMove);
+    window.removeEventListener('pointerup', onPlannerTracksPointerUp);
+    window.removeEventListener('pointerup', onPlannerBlockPointerUp);
+    plannerStopAutoScroll();
+    if (plannerDrag) {
+        if (plannerDrag.mode === 'create' && plannerDrag.el) plannerDrag.el.remove();
+        plannerDrag = null;
+        renderPlannerBlocks();
+    }
 }
 
 function plannerRecalcCreateDrag(clientY) {
@@ -605,6 +630,7 @@ function onPlannerTracksPointerMove(e) {
 }
 
 function onPlannerTracksPointerUp(e) {
+    window.removeEventListener('pointercancel', plannerCancelDrag);
     window.removeEventListener('pointermove', onPlannerTracksPointerMove);
     plannerStopAutoScroll();
     if (!plannerDrag || plannerDrag.mode !== 'create') return;
@@ -643,6 +669,7 @@ function onPlannerBlockPointerDown(e, blockId, dateStr, mode) {
 
     window.addEventListener('pointermove', onPlannerBlockPointerMove);
     window.addEventListener('pointerup', onPlannerBlockPointerUp, { once: true });
+    window.addEventListener('pointercancel', plannerCancelDrag, { once: true });
 }
 
 function plannerRecalcBlockDrag(clientX, clientY) {
@@ -703,6 +730,7 @@ function onPlannerBlockPointerMove(e) {
 }
 
 async function onPlannerBlockPointerUp(e) {
+    window.removeEventListener('pointercancel', plannerCancelDrag);
     window.removeEventListener('pointermove', onPlannerBlockPointerMove);
     plannerStopAutoScroll();
     if (!plannerDrag || plannerDrag.mode === 'create') { plannerDrag = null; return; }
@@ -737,14 +765,21 @@ async function onPlannerBlockPointerUp(e) {
     // layout cột (khi trùng giờ với việc khác) khớp chính xác với dữ liệu vừa cập nhật.
     renderPlannerBlocks();
 
-    const updatePayload = { start_min: start, end_min: end };
+    // push_notified:false — dời giờ/ngày mà không reset cờ thì server KHÔNG BAO GIỜ đẩy thông báo ở giờ mới
+    // (khác với popup sửa, vốn đã reset). Xoá luôn mốc "đã báo/đã reo" cục bộ cho việc này.
+    const updatePayload = { start_min: start, end_min: end, push_notified: false };
     if (dateChanged) updatePayload.plan_date = finalDateStr;
+    plannerClearNotifiedFor(dateStr, blockId);
 
     const { error } = await sbClient.from('daily_plans')
         .update(updatePayload)
         .eq('id', blockId)
         .eq('user_id', currentUser.id);
-    if (error) console.error('[Planner] Lỗi cập nhật việc:', error.message);
+    if (error) {
+        console.error('[Planner] Lỗi cập nhật việc:', error.message);
+        if (typeof showAlert === 'function') showAlert('Không lưu được thay đổi giờ/ngày của việc này. Đang tải lại dữ liệu.', 'Lỗi kết nối');
+        loadPlannerBlocks(); // đồng bộ lại với dữ liệu thật thay vì để giao diện lệch DB
+    }
 }
 
 // ---- Popover đặt tên / chỉnh sửa / xóa ----
@@ -927,7 +962,12 @@ async function savePlannerEditor() {
         const updatePayload = { title, color, start_min: start, end_min: end, priority, push_notified: false };
         if (dateChanged) updatePayload.plan_date = newDate;
         const { error } = await sbClient.from('daily_plans').update(updatePayload).eq('id', draft.id).eq('user_id', currentUser.id);
-        if (error) console.error('[Planner] Lỗi lưu việc:', error.message);
+        if (error) {
+            console.error('[Planner] Lỗi lưu việc:', error.message);
+            if (typeof showAlert === 'function') showAlert('Không lưu được việc này. Đang tải lại dữ liệu.', 'Lỗi kết nối');
+            loadPlannerBlocks();
+            return;
+        }
         plannerClearNotifiedFor(draft.dateStr, draft.id); // giờ vừa đổi -> cho phép báo lại nếu lọt khung 5 phút
         if (dateChanged && !plannerBlocksByDate[newDate]) await plannerShowWeekOf(newDate); // ngày mới ngoài tuần đang xem -> nhảy tới đó
     } else {
@@ -935,7 +975,11 @@ async function savePlannerEditor() {
             user_id: currentUser.id, plan_date: newDate, title,
             start_min: start, end_min: end, color, priority
         }]).select().single();
-        if (error) { console.error('[Planner] Lỗi tạo việc mới:', error.message); return; }
+        if (error) {
+            console.error('[Planner] Lỗi tạo việc mới:', error.message);
+            if (typeof showAlert === 'function') showAlert('Không tạo được việc mới. Vui lòng thử lại.', 'Lỗi kết nối');
+            return;
+        }
         if (!plannerBlocksByDate[newDate]) {
             // Ngày được chọn nằm ngoài tuần đang xem -> chuyển tới đúng tuần đó để thấy việc vừa tạo
             plannerNeedScrollNow = false;
@@ -962,5 +1006,9 @@ async function deletePlannerEditorBlock() {
     }
     renderPlannerBlocks();
     const { error } = await sbClient.from('daily_plans').delete().eq('id', id).eq('user_id', currentUser.id);
-    if (error) console.error('[Planner] Lỗi xóa việc:', error.message);
+    if (error) {
+        console.error('[Planner] Lỗi xóa việc:', error.message);
+        if (typeof showAlert === 'function') showAlert('Không xóa được việc này. Đang tải lại dữ liệu.', 'Lỗi kết nối');
+        loadPlannerBlocks();
+    }
 }

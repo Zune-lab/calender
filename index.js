@@ -6,7 +6,7 @@
 // sửa ở profile.js). Giờ khởi tạo có kiểm tra bên trong initDashboard(), đồng bộ cách xử lý.
 let dashClient = null;
 let dashSubjects = [];
-let semesterStartDate = new Date('2026-05-18');
+let semesterStartDate = defaultSemesterStartDate(); // local midnight (new Date('YYYY-MM-DD') parse UTC -> lệch 7h ở VN)
 let currentUserId = null;
 // FIX: id của MÔN HỌC đang hiển thị ở Hero (nếu có) — dùng để lọc đúng BÀI TẬP/GHI CHÚ của
 // riêng môn đó ở widget bên dưới. Trước đây widget lấy thẳng window.allTasks/allNotes (TOÀN
@@ -78,15 +78,14 @@ function fmtClock(mins) {
 function baseSubjectName(sub) {
     return String(sub.name || 'Môn Ẩn').split('-')[0].split('(')[0].trim();
 }
+// (khoá gộp môn viết thường dùng baseSubjectKey() ở shared.js — cùng quy tắc với trang TKB)
 
 // Các buổi học của 1 ngày cụ thể (tuần weekIndex 0-indexed, thứ day theo quy ước 2..8), đã sắp theo giờ
 function daySessions(week, day) {
     return dashSubjects
         .filter(sub => {
             if (sub.day !== day) return false;
-            if (!sub.weeks || sub.weeks.length <= week) return false;
-            const char = sub.weeks.charAt(week);
-            return char !== '-' && char !== ' ';
+            return isSubjectActiveInWeek(sub, week); // cùng quy tắc với bảng TKB (shared.js)
         })
         .map(sub => ({ sub, range: parsePeriodRange(sub) }))
         .filter(x => x.range)
@@ -357,7 +356,17 @@ function renderProfilePill(user, meta) {
         profileWrap.classList.add('avatar-only');
         const nameToShow = resolveDisplayName(user, meta);
         if (avatarDiv) {
-            avatarDiv.innerHTML = `<img src="${meta.avatar}" title="${escapeHtml(nameToShow)}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+            // Dựng bằng DOM API (meta.avatar do người dùng ghi vào user_metadata -> không được nối vào innerHTML)
+            avatarDiv.textContent = '';
+            if (/^(data:image\/|https?:\/\/)/i.test(String(meta.avatar))) {
+                const img = document.createElement('img');
+                img.src = meta.avatar;
+                img.title = nameToShow;
+                img.style.cssText = 'width:100%; height:100%; object-fit:cover; border-radius:50%;';
+                avatarDiv.appendChild(img);
+            } else {
+                avatarDiv.innerHTML = '<i class="fas fa-user-graduate"></i>';
+            }
         }
         if (infoDiv) infoDiv.style.display = 'none';
     } else {
@@ -384,6 +393,16 @@ function renderProfilePill(user, meta) {
 
 // navigateWithFade() giờ nằm ở bg-sync.js (dùng chung với calendar.js, tránh lặp code)
 
+// Các thông báo lỗi nằm TRONG #main-dashboard-ui (opacity:0 + pointer-events:none lúc khởi động) —
+// nếu không bật lại thì người dùng chỉ thấy màn hình trống trơn dù đã có chữ báo lỗi.
+function showMainUI() {
+    const mainUI = document.getElementById('main-dashboard-ui');
+    if (mainUI) {
+        mainUI.style.opacity = '1';
+        mainUI.style.pointerEvents = 'auto';
+    }
+}
+
 async function initDashboard() {
     // 1. Ép bật màn hình Loading ngay khi hàm bắt đầu chạy
     const loader = document.getElementById('global-loader');
@@ -393,6 +412,7 @@ async function initDashboard() {
     // crash im lặng nếu mạng lỗi/CDN bị chặn (đồng bộ với cách profile.js đang xử lý).
     if (typeof window.supabase === 'undefined' || !window.supabase.createClient) {
         if (loader) loader.classList.add('hidden');
+        showMainUI();
         document.getElementById('mini-tkb-name').innerText = "LỖI TẢI THƯ VIỆN";
         document.getElementById('mini-tkb-time').innerText = "Không tải được Supabase (CDN). Kiểm tra kết nối mạng rồi tải lại trang.";
         return;
@@ -407,6 +427,7 @@ async function initDashboard() {
     // + bọc try/catch quanh toàn bộ phần còn lại, đồng bộ đúng tinh thần đã áp dụng ở profile.js.
     const dashWatchdog = setTimeout(() => {
         if (loader) loader.classList.add('hidden');
+        showMainUI();
         document.getElementById('mini-tkb-name').innerText = "TẢI QUÁ LÂU";
         document.getElementById('mini-tkb-time').innerText = "Kiểm tra kết nối mạng hoặc mở Console (F12) để xem lỗi chi tiết, rồi tải lại trang.";
     }, 10000);
@@ -421,23 +442,22 @@ async function initDashboard() {
 
         renderProfilePill(session.user, meta);
 
-        try {
-            const { data: settingsData } = await withRetry(() =>
-                dashClient.from('user_settings').select('semester_start_date').eq('user_id', userId).single()
-            );
-            if (settingsData && settingsData.semester_start_date) {
-                semesterStartDate = new Date(settingsData.semester_start_date + 'T00:00:00');
-            }
-        } catch (e) {}
-
-        // Bọc withRetry() cho từng lời gọi: Supabase thỉnh thoảng có đợt hạ tầng chập chờn ngắn
-        // khiến GET bị timeout/500-520 (xem shared.js -> withRetry để biết chi tiết) — tự thử lại
-        // vài lần thay vì để cả Dashboard trắng dữ liệu chỉ vì 1 request thoáng qua bị lỗi.
-        const [subjectsRes, examsRes, detailsRes] = await Promise.all([
+        const [settingsRes, subjectsRes, examsRes, detailsRes] = await Promise.all([
+            // maybeSingle(): user chưa có dòng cài đặt là chuyện bình thường, không phải lỗi
+            withRetry(() => dashClient.from('user_settings').select('semester_start_date').eq('user_id', userId).maybeSingle()),
             withRetry(() => dashClient.from('subjects').select('*').eq('user_id', userId)),
             withRetry(() => dashClient.from('exams').select('*').eq('user_id', userId)),
             withRetry(() => dashClient.from('subject_details').select('*').eq('user_id', userId).eq('status', 'upcoming'))
         ]);
+
+        const settingsData = settingsRes && settingsRes.data;
+        if (settingsData && settingsData.semester_start_date) {
+            semesterStartDate = parseLocalDateStr(settingsData.semester_start_date) || semesterStartDate;
+        }
+
+        // Nếu truy vấn CHÍNH thất bại (sau khi đã retry) thì báo lỗi rõ ràng — trước đây data=null bị
+        // coi như "chưa có TKB" và hiện nhầm "TRỐNG LỊCH HỌC", khiến người dùng tưởng mất dữ liệu.
+        if (subjectsRes.error) throw new Error('Không tải được thời khóa biểu: ' + subjectsRes.error.message);
 
         dashSubjects = subjectsRes.data || [];
         const allDetails = detailsRes.data || [];
@@ -445,7 +465,7 @@ async function initDashboard() {
         window.allNotes = allDetails.filter(d => d.type === 'note' || d.type === 'notification');
 
         const now = new Date();
-        const diffDays = Math.floor((now - semesterStartDate) / (1000 * 60 * 60 * 24));
+        const diffDays = calendarDayDiff(now, semesterStartDate);
         // weekIndex là 0-indexed (dùng để tra cứu ký tự trong chuỗi "weeks" bitmap), nên trừ 1
         // so với calcCurrentWeekNumber() (1-indexed, ở shared.js) — cùng 1 công thức làm tròn,
         // chỉ khác quy ước đánh số, để Dashboard và trang TKB không bao giờ lệch tuần nhau.
@@ -453,26 +473,18 @@ async function initDashboard() {
 
         let activeClassesThisWeek = 0;
         if (weekIndex >= 0) {
-            activeClassesThisWeek = dashSubjects.filter(sub => {
-                if (!sub.weeks || sub.weeks.length <= weekIndex) return false;
-                const char = sub.weeks.charAt(weekIndex);
-                return char !== '-' && char !== ' ';
-            }).length;
+            activeClassesThisWeek = dashSubjects.filter(sub => isSubjectActiveInWeek(sub, weekIndex)).length;
         }
 
-        const uniqueSubs = new Set(dashSubjects.map(s => String(s.name || '').split('-')[0].split('(')[0].trim().toLowerCase()));
+        const uniqueSubs = new Set(dashSubjects.map(s => baseSubjectKey(s.name)));
         document.getElementById('stat-total-subs').innerText = uniqueSubs.size;
         document.getElementById('stat-tkb-count').innerText = activeClassesThisWeek;
         document.getElementById('stat-exam-count').innerText = (examsRes.data || []).length;
 
         renderHero(now, weekIndex, examsRes.data || []);
-        switchWidget(0, document.querySelector('.widget-tabs button.active'));
+        refreshActiveWidget();
 
-        const mainUI = document.getElementById('main-dashboard-ui');
-        if (mainUI) {
-            mainUI.style.opacity = '1';
-            mainUI.style.pointerEvents = 'auto';
-        }
+        showMainUI();
 
         clearTimeout(dashWatchdog);
 
@@ -487,6 +499,7 @@ async function initDashboard() {
     } catch (err) {
         clearTimeout(dashWatchdog);
         if (loader) loader.classList.add('hidden');
+        showMainUI();
         document.getElementById('mini-tkb-name').innerText = "LỖI KẾT NỐI";
         document.getElementById('mini-tkb-time').innerText = "Không tải được dữ liệu: " + (err && err.message ? err.message : "Vui lòng kiểm tra kết nối mạng rồi tải lại trang.");
         console.error('[Dashboard] initDashboard lỗi:', err);
@@ -580,7 +593,7 @@ function startHeroTick(buildChip) {
             if (heroLastArgs) {
                 const before = heroSubjectId;
                 renderHero(new Date(), heroLastArgs.weekIndex, heroLastArgs.examsData);
-                if (heroSubjectId !== before) switchWidget(0, document.querySelector('.widget-tabs button.active'));
+                if (heroSubjectId !== before) refreshActiveWidget();
             }
             return;
         }
@@ -620,10 +633,10 @@ function renderExamDayHero(exam, now) {
     // Tính còn bao nhiêu phút tới giờ thi để quyết định mức độ khẩn cấp hiển thị
     let minutesUntilExam = null;
     let examStart = null;
-    const timeMatch = String(exam.exam_time || '').match(/(\d{1,2}):(\d{2})/);
-    if (timeMatch) {
+    const examClockMin = parseClockMinutes(exam.exam_time);
+    if (examClockMin !== null) {
         const examDateTime = new Date(now);
-        examDateTime.setHours(parseInt(timeMatch[1]), parseInt(timeMatch[2]), 0, 0);
+        examDateTime.setHours(Math.floor(examClockMin / 60), examClockMin % 60, 0, 0);
         minutesUntilExam = (examDateTime - now) / 60000;
         examStart = examDateTime;
     }
@@ -749,7 +762,7 @@ function renderHero(now, weekIndex, examsData) {
             // không phải đã kết thúc. Tách nhánh riêng để không hiển thị nhầm "KỲ HỌC KẾT THÚC".
             // diffDays được tính riêng trong initDashboard() nên KHÔNG tồn tại ở đây -> phải tự
             // tính lại từ (now, semesterStartDate) là 2 biến sẵn có trong phạm vi renderHero.
-            const diffDaysLocal = Math.floor((now - semesterStartDate) / (1000 * 60 * 60 * 24));
+            const diffDaysLocal = calendarDayDiff(now, semesterStartDate);
             const daysLeft = Math.abs(diffDaysLocal);
             document.getElementById('mini-tkb-name').innerText = "KỲ HỌC CHƯA BẮT ĐẦU";
             document.getElementById('mini-tkb-time').innerText = `Còn ${daysLeft} ngày nữa tới khai giảng`;
@@ -809,7 +822,7 @@ function renderHero(now, weekIndex, examsData) {
     const colors = ['#FF3366', '#00C9FF', '#7c3aed', '#11998e', '#FDBB2D'];
     let colorMap = {}, i = 0;
     dashSubjects.forEach(s => {
-        const bn = (s.name || '').split('-')[0].split('(')[0].trim().toLowerCase();
+        const bn = baseSubjectKey(s.name);
         if (!colorMap[bn]) colorMap[bn] = colors[i++ % colors.length];
     });
 
@@ -846,7 +859,7 @@ window.switchWidget = function(idx, btn) {
             return;
         }
 
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = fmtLocalDate(new Date()); // ngày LOCAL (toISOString là UTC: 00:00–07:00 sáng ở VN còn ra "hôm qua")
         const priorityDot = { high: '#ff4d4f', normal: '#ffb020', low: '#8b96a5' };
         box.innerHTML = merged.slice(0, 5).map(item => {
             const daysUntil = Math.round((new Date(item.due_date + 'T00:00:00') - new Date(todayStr + 'T00:00:00')) / 86400000);
@@ -886,6 +899,22 @@ window.switchWidget = function(idx, btn) {
     `).join('');
 };
 
+// Vẽ lại nội dung của TAB ĐANG ĐƯỢC CHỌN (không ép về tab 0) — dùng sau khi hero đổi môn.
+function refreshActiveWidget() {
+    const btn = document.querySelector('.widget-tabs button.active');
+    const idx = btn ? Array.prototype.indexOf.call(btn.parentElement.children, btn) : 0;
+    window.switchWidget(Math.max(0, idx), btn);
+}
+
+// Tab nền bị trình duyệt làm chậm/đóng băng timer -> quay lại tab thì đếm ngược/hero có thể cũ cả
+// phút. Vẽ lại ngay khi tab hiện trở lại.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !heroLastArgs || !dashSubjects) return;
+    const before = heroSubjectId;
+    renderHero(new Date(), heroLastArgs.weekIndex, heroLastArgs.examsData);
+    if (heroSubjectId !== before) refreshActiveWidget();
+});
+
 // ==========================================
 // CẦU NỐI NHẢY TAB TỪ DASHBOARD VÀO WORKSPACE
 // ==========================================
@@ -895,7 +924,12 @@ window.goToTab = function(tabName) {
 };
 
 window.logout = async () => {
-    if (dashClient) await dashClient.auth.signOut();
+    try {
+        if (dashClient) {
+            await removePushSubscriptionFor(dashClient); // trước signOut, khi còn quyền xoá dòng subscription
+            await dashClient.auth.signOut();
+        }
+    } catch (e) { console.warn('[Dashboard] Đăng xuất gặp lỗi (vẫn chuyển trang):', e && e.message); }
     navigateWithFade('tkb/calendar.html');
 };
 

@@ -192,16 +192,17 @@ function renderTimetable() {
 
     const renderedCards = new Set();
     safeSubjects.forEach(sub => {
-        if (sub.weeks && sub.weeks.length > weekIndex) {
-            const weekChar = sub.weeks.charAt(weekIndex);
-            if (weekChar === '-' || weekChar === ' ' || !weekChar) { return; }
-        }
+        // Cùng quy tắc với Dashboard (shared.js). Trước đây chuỗi tuần NGẮN hơn tuần đang xem bị coi là
+        // "vẫn học" nên môn đã kết thúc từ lâu vẫn hiện ở mọi tuần sau.
+        if (!isSubjectActiveInWeek(sub, weekIndex)) { return; }
+        if (!(sub.day >= 2 && sub.day <= 8)) { return; } // dữ liệu thứ lạ -> bỏ qua thay vì làm sập cả bảng
 
         const match = (sub.time_slot || '').match(/Tiết\s*(\d+)\s*-\s*(\d+)/i);
         if (match) {
             let startTiet = parseInt(match[1]); 
             let endTiet = parseInt(match[2]);
             if (startTiet > endTiet) { const temp = startTiet; startTiet = endTiet; endTiet = temp; }
+            if (startTiet < 1 || endTiet > 14) return; // ngoài lưới tiết 1..14: matrix[t] không tồn tại -> TypeError làm trắng bảng
 
             const uniqueKey = `${sub.day}-${startTiet}-${endTiet}-${sub.course_code}`;
             if (renderedCards.has(uniqueKey)) return; 
@@ -256,7 +257,7 @@ function renderTimetable() {
 
             if (slot.status === 'start') {
                 const sub = slot.data;
-                const baseName = sub.name.split('-')[0].split('(')[0].trim().toLowerCase();
+                const baseName = baseSubjectKey(sub.name);
                 
                 if (!subjectColorMap[baseName]) { subjectColorMap[baseName] = gradientColors[colorIndex % gradientColors.length]; colorIndex++; }
                 let c1, c2;
@@ -265,7 +266,7 @@ function renderTimetable() {
                 
                 window.globalSubjectColors[baseName] = c1;
                 
-                const customColorStyle = `style="--c1: ${c1}; --c2: ${c2};" data-c1="${escapeHtml(c1)}"`;
+                const customColorStyle = `style="--c1: ${escapeHtml(c1)}; --c2: ${escapeHtml(c2)};" data-c1="${escapeHtml(c1)}"`;
                 const rawName = sub.name.split('(')[0].trim();
                 // FIX: ngưỡng cũ là 70 -> môn như "Phân tích thiết kế hướng đối tượng" + phòng + GV
                 // (~46 ký tự) KHÔNG BAO GIỜ được xếp vào .large dù tên đã khá dài. Hạ ngưỡng xuống 45
@@ -349,10 +350,10 @@ function renderTimetable() {
         });
     }
 
-    const uniqueSubjects = [...new Set(safeSubjects.map(s => s.name.split('-')[0].split('(')[0].trim().toLowerCase()))];
+    const uniqueSubjects = [...new Set(safeSubjects.map(s => baseSubjectKey(s.name)))];
     const selectEl = document.getElementById('subject-color-select');
     if(selectEl) {
-        selectEl.innerHTML = '<option value="" style="color:#000;">-- Chọn môn học --</option>';
+        let optionsHtml = '<option value="" style="color:#000;">-- Chọn môn học --</option>';
         uniqueSubjects.forEach(sub => {
             const displayName = sub.charAt(0).toUpperCase() + sub.slice(1);
             // FIX BẢO MẬT (XSS): sub/displayName lấy trực tiếp từ subject.name (dữ liệu import từ
@@ -360,8 +361,9 @@ function renderTimetable() {
             // innerHTML mà KHÔNG escapeHtml() như mọi chỗ khác trong file này. Nếu tên môn học chứa
             // ký tự đặc biệt kiểu `"><img src=x onerror=...>` sẽ thực thi script ngay khi mở tab Cài
             // Đặt. escapeHtml() đã có sẵn ở shared.js, dùng lại cho cả value và text hiển thị.
-            selectEl.innerHTML += `<option value="${escapeHtml(sub)}" style="color:#000;">${escapeHtml(displayName)}</option>`;
+            optionsHtml += `<option value="${escapeHtml(sub)}" style="color:#000;">${escapeHtml(displayName)}</option>`;
         });
+        selectEl.innerHTML = optionsHtml; // gán 1 lần (trước đây += trong vòng lặp -> parse lại cả danh sách mỗi môn)
     }
 }
 
@@ -416,19 +418,33 @@ async function openModal(subject) {
     
     document.getElementById('subject-modal').classList.remove('hidden');
 
-    const baseName = subject.name.split('-')[0].split('(')[0].trim().toLowerCase();
-    const relatedSubjectIds = allLoadedSubjects.filter(s => s.name.split('-')[0].split('(')[0].trim().toLowerCase() === baseName).map(s => s.id);
+    const relatedSubjectIds = getRelatedSubjectIds(subject);
     currentRelatedSubjectIds = relatedSubjectIds;
     await loadSubjectDetails(relatedSubjectIds);
+}
+
+// Mọi dòng subjects cùng 1 môn (mỗi buổi/thứ là 1 dòng riêng) — ghi chú/công việc được gom theo tất cả id này
+function getRelatedSubjectIds(subject) {
+    const key = baseSubjectKey(subject.name);
+    return allLoadedSubjects.filter(s => baseSubjectKey(s.name) === key).map(s => s.id);
 }
 
 const closeModal = () => { document.getElementById('subject-modal').classList.add('hidden'); currentSubjectId = null; currentRelatedSubjectIds = []; };
 document.getElementById('close-modal-btn').addEventListener('click', closeModal);
 document.getElementById('subject-modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
 
+let _detailsLoadSeq = 0;
 async function loadSubjectDetails(relatedSubjectIds) {
+    const seq = ++_detailsLoadSeq;
     const { data, error } = await sbClient.from('subject_details').select('*').in('subject_id', relatedSubjectIds).eq('user_id', currentUser.id);
-    if (error) return console.error(error);
+    // Đã mở/đóng môn khác trong lúc chờ -> bỏ kết quả cũ, kẻo ghi chú của môn A hiện dưới môn B
+    if (seq !== _detailsLoadSeq) return;
+    if (error) {
+        console.error(error);
+        const box = document.getElementById('notes-list');
+        if (box) box.innerHTML = '<li style="opacity:.6; justify-content:center;">Không tải được dữ liệu. Đóng và mở lại để thử lại.</li>';
+        return;
+    }
 
     const lists = { notes: document.getElementById('notes-list'), notesTrash: document.getElementById('notes-trash'), tasksUp: document.getElementById('tasks-upcoming'), tasksDone: document.getElementById('tasks-done'), tasksTrash: document.getElementById('tasks-trash') };
     Object.values(lists).forEach(el => el.innerHTML = '');
@@ -579,12 +595,15 @@ window.emptyTrashBin = async function(btnElement, type) {
     if (!isConfirmed) return;
 
     btnElement.classList.add('delete');
+    // Chụp id NGAY bây giờ: sau 2,8s animation, người dùng có thể đã đóng popup (mảng bị xoá -> không xoá gì
+    // dù đã xác nhận) hoặc mở môn khác (-> xoá nhầm thùng rác của môn KHÁC).
+    const targetIds = [...currentRelatedSubjectIds];
     
     setTimeout(async () => {
         const { error } = await sbClient
             .from('subject_details')
             .delete()
-            .in('subject_id', currentRelatedSubjectIds)
+            .in('subject_id', targetIds)
             .eq('user_id', currentUser.id)
             .eq('type', type)
             .eq('status', 'deleted');
@@ -622,12 +641,13 @@ window.clearAllActiveItems = async function(btnElement, type) {
     if (!isConfirmed) return;
 
     btnElement.classList.add('animating');
+    const targetIds = [...currentRelatedSubjectIds]; // xem chú thích ở emptyTrashBin
 
     setTimeout(async () => {
         const { error } = await sbClient
             .from('subject_details')
             .update({ status: 'deleted' }) 
-            .in('subject_id', currentRelatedSubjectIds)
+            .in('subject_id', targetIds)
             .eq('user_id', currentUser.id)
             .eq('type', type)
             .eq('status', 'upcoming');
@@ -646,12 +666,13 @@ window.restoreAllTrashItems = async function(btnElement, type) {
     if (!isConfirmed) return;
 
     btnElement.classList.add('animating');
+    const targetIds = [...currentRelatedSubjectIds]; // xem chú thích ở emptyTrashBin
 
     setTimeout(async () => {
         const { error } = await sbClient
             .from('subject_details')
             .update({ status: 'upcoming' }) 
-            .in('subject_id', currentRelatedSubjectIds)
+            .in('subject_id', targetIds)
             .eq('user_id', currentUser.id)
             .eq('type', type)
             .eq('status', 'deleted'); 
@@ -707,10 +728,13 @@ window.addDetail = async function(type) {
         return;
     }
 
+    if (window._addDetailBusy) return; // Enter giữ phím / bấm đúp -> không chèn 2 bản
+    window._addDetailBusy = true;
     const { error } = await sbClient.from('subject_details').insert([{
         subject_id: currentSubjectId, user_id: currentUser.id, type: type, content: content,
         status: 'upcoming', priority: priority, due_date: dueDate
     }]);
+    window._addDetailBusy = false;
     if (!error) {
         input.value = '';
         if (dueDateInput) { dueDateInput.value = ''; dueDateInput.dispatchEvent(new Event('change', { bubbles: true })); }
@@ -722,7 +746,7 @@ window.addDetail = async function(type) {
         }
         reloadCurrentModal();
     } else {
-        showAlert("Lỗi khi thêm: " + error.message + " (Bạn đã thêm cột 'priority'/'due_date' vào bảng subject_details trong Supabase chưa?)", "Lỗi kết nối");
+        showAlert("Lỗi khi thêm: " + error.message, "Lỗi kết nối");
         console.error(error);
     }
 }
@@ -775,8 +799,7 @@ async function reloadCurrentModal() {
     const subject = allLoadedSubjects.find(s => s.id === currentSubjectId);
     if (!subject) return;
 
-    const baseName = subject.name.split('-')[0].split('(')[0].trim().toLowerCase();
-    const relatedSubjectIds = allLoadedSubjects.filter(s => s.name.split('-')[0].split('(')[0].trim().toLowerCase() === baseName).map(s => s.id);
+    const relatedSubjectIds = getRelatedSubjectIds(subject);
     currentRelatedSubjectIds = relatedSubjectIds;
 
     await loadSubjectDetails(relatedSubjectIds); 

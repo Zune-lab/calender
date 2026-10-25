@@ -13,6 +13,9 @@
 // (mạng yếu, bị chặn), việc này sẽ ném lỗi ngay lúc parse file và crash toàn bộ calendar.js trước
 // khi bất kỳ dòng nào khác kịp chạy. Dời việc khởi tạo có kiểm tra vào bên trong DOMContentLoaded
 // (đồng bộ với cách profile.js đang xử lý sự cố này).
+// URL thư viện nạp THEO NHU CẦU (không còn chặn trang lúc khởi động bằng ~1.2MB script ít khi dùng)
+const XLSX_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const HTML2CANVAS_CDN_URL = 'https://cdn.jsdelivr.net/npm/html2canvas-pro@2.4.2/dist/html2canvas-pro.min.js';
 let sbClient = null;
 
 let currentUser = null;
@@ -22,7 +25,7 @@ let allLoadedSubjects = [];
 // getSavedSubjectColors() / saveSubjectColor() giờ nằm ở shared.js (dùng chung với
 // index.js và profile.js, tránh mỗi nơi tự JSON.parse localStorage riêng)
 
-let semesterStartDate = new Date('2026-05-18'); 
+let semesterStartDate = defaultSemesterStartDate(); // local midnight (shared.js)
 
 // FIX BUG "THANH MỜ KHÔNG PHỦ HẾT CÁC THỨ": lưu ResizeObserver để hủy bản cũ mỗi lần render lại
 // bảng TKB, tránh tạo nhiều observer chồng chéo gây rò rỉ bộ nhớ.
@@ -31,40 +34,46 @@ let _stickyBarResizeObserver = null;
 // =========================================
 // 0. CUSTOM DIALOG LOGIC (THAY THẾ ALERT/CONFIRM)
 // =========================================
+// Hộp thoại dùng chung. Cải tiến so với bản cũ:
+//  - Xếp HÀNG ĐỢI: gọi liên tiếp (vd lỗi + thông báo) không còn làm 2 hộp thoại giẫm lên cùng 1 cặp
+//    nút (trước đây bấm "Đồng ý" ở hộp sau lại resolve luôn cả hộp trước -> xác nhận xoá bị trả
+//    lời nhầm).
+//  - Nội dung được ESCAPE HTML: thông báo lỗi của Supabase thường trích nguyên giá trị người dùng
+//    nhập/nhập từ Excel (vd `invalid input syntax ... "<img onerror=...>"`) -> trước đây gán thẳng
+//    vào innerHTML là lỗ hổng XSS chỉ cần mở 1 file Excel được tạo sẵn. Chỉ đổi \n thành <br>.
+//  - Phím Esc đóng hộp thoại (Hủy với hộp xác nhận).
+let _dialogQueue = Promise.resolve();
 window.showCustomDialog = function(message, isConfirm = false, title = "Thông báo") {
-    return new Promise((resolve) => {
+    const run = () => new Promise((resolve) => {
         const overlay = document.getElementById('custom-dialog-overlay');
         const titleEl = document.getElementById('custom-dialog-title');
         const msgEl = document.getElementById('custom-dialog-msg');
         const cancelBtn = document.getElementById('custom-dialog-cancel');
         const okBtn = document.getElementById('custom-dialog-ok');
 
-        titleEl.innerText = title;
-        msgEl.innerHTML = message.replace(/\n/g, '<br>');
-
-        if (isConfirm) {
-            cancelBtn.style.display = 'inline-flex';
-        } else {
-            cancelBtn.style.display = 'none';
-        }
-
+        titleEl.textContent = title;
+        msgEl.innerHTML = escapeHtml(message).replace(/\n/g, '<br>');
+        cancelBtn.style.display = isConfirm ? 'inline-flex' : 'none';
         overlay.classList.remove('hidden');
 
-        // Hàm dọn dẹp và đóng popup
-        const cleanup = () => {
+        const onOk = () => finish(true);
+        const onCancel = () => finish(false);
+        const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); finish(isConfirm ? false : true); } };
+        function finish(result) {
             overlay.classList.add('hidden');
-            // Clone node để xóa bỏ mọi event listener rác của lần mở trước
-            cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-            okBtn.replaceWith(okBtn.cloneNode(true));
-        };
-
-        // Gắn sự kiện cho các nút mới
-        const newCancelBtn = document.getElementById('custom-dialog-cancel');
-        const newOkBtn = document.getElementById('custom-dialog-ok');
-
-        newCancelBtn.addEventListener('click', () => { cleanup(); resolve(false); });
-        newOkBtn.addEventListener('click', () => { cleanup(); resolve(true); });
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey, true);
+            resolve(result);
+        }
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKey, true);
+        okBtn.focus();
     });
+    const p = _dialogQueue.then(run);
+    _dialogQueue = p.catch(() => {});
+    return p;
 };
 
 window.showAlert = (msg, title) => window.showCustomDialog(msg, false, title);
@@ -93,14 +102,15 @@ document.addEventListener('DOMContentLoaded', () => {
     sbClient.auth.onAuthStateChange((_event, session) => { handleSession(session); });
 
     updateDesktopClock();
-    setInterval(updateDesktopClock, 1000);
+    setInterval(() => { if (!document.hidden) updateDesktopClock(); }, 1000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) updateDesktopClock(); });
 
-    // Tự làm mới Lịch Thi mỗi 60s để badge "Còn X phút nữa!" luôn đúng thời gian thực,
-    // chỉ gọi khi người dùng đang thật sự đứng ở tab Lịch Thi (tránh gọi Supabase thừa)
+    // Làm mới badge "Còn X phút nữa!" mỗi 60s CHỈ bằng cách vẽ lại từ dữ liệu đã tải (không gọi
+    // Supabase mỗi phút như trước — dữ liệu lịch thi không đổi theo thời gian, chỉ có chữ đếm ngược đổi).
     setInterval(() => {
         const examsPane = document.getElementById('tab-exams');
-        if (examsPane && examsPane.classList.contains('active') && typeof loadExams === 'function') {
-            loadExams();
+        if (!document.hidden && examsPane && examsPane.classList.contains('active') && typeof renderExamsFromCache === 'function') {
+            renderExamsFromCache();
         }
     }, 60000);
     renderNeonColorButtons();
@@ -208,7 +218,8 @@ function updateDesktopClock() {
     if (!timeEl || !dateEl) return;
 
     const now = new Date();
-    timeEl.innerText = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    // Tự format HH:MM — toLocaleTimeString('en-US', {hour12:false}) hiện "24:05" thay vì "00:05" ở Chrome.
+    timeEl.innerText = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     // Hiển thị tiếng Việt, đúng thứ tự ngày/tháng: "Thứ Hai, 12/10"
     const VN_WEEKDAYS = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
     const dd = String(now.getDate()).padStart(2, '0');
@@ -290,8 +301,11 @@ function handleSession(session) {
 
     if (session) {
         if (currentUser && currentUser.id === session.user.id) {
-            if (loader) loader.classList.add('hidden');
-            return; 
+            // Cùng 1 người (sự kiện auth lặp lại: INITIAL_SESSION, TOKEN_REFRESHED, SIGNED_IN khi quay lại
+            // tab...) -> chỉ cập nhật bản user mới nhất. KHÔNG tắt loader ở đây: lần tải đầu có thể còn
+            // đang dang dở, tắt sớm sẽ lộ khung hình dở dang (đúng lỗi "khung hình mờ" đã từng sửa ở dưới).
+            currentUser = session.user;
+            return;
         }
 
         currentUser = session.user;
@@ -341,40 +355,31 @@ function handleSession(session) {
         document.getElementById('main-app').style.opacity = '1';
         document.getElementById('main-app').style.pointerEvents = 'auto';
         
-        withRetry(() => sbClient.from('user_settings').select('semester_start_date').eq('user_id', currentUser.id).single())
-        .then(async ({data, error}) => { 
-            if (error) {
-                // Không chặn cả trang chỉ vì lỗi mốc ngày bắt đầu kỳ học — dùng tạm giá trị mặc định
-                // (semesterStartDate khai báo sẵn ở đầu file) và vẫn tiếp tục tải TKB/Lịch thi bên dưới.
-                console.error('Lỗi tải cài đặt học kỳ:', error);
-            } else if (data && data.semester_start_date) {
-                semesterStartDate = new Date(data.semester_start_date + 'T00:00:00');
+        (async () => {
+            try {
+                // maybeSingle(): chưa có dòng cài đặt là bình thường (không retry/không báo lỗi)
+                const { data, error } = await withRetry(() => sbClient.from('user_settings').select('semester_start_date').eq('user_id', currentUser.id).maybeSingle());
+                if (error) {
+                    // Không chặn cả trang chỉ vì lỗi mốc ngày bắt đầu kỳ học — dùng tạm giá trị mặc định
+                    // (semesterStartDate khai báo sẵn ở đầu file) và vẫn tiếp tục tải TKB/Lịch thi bên dưới.
+                    console.error('Lỗi tải cài đặt học kỳ:', error);
+                } else if (data && data.semester_start_date) {
+                    semesterStartDate = parseLocalDateStr(data.semester_start_date) || semesterStartDate;
+                }
+                await loadTimetable();
+                loadExams();
+                checkUpcomingPlannerNotifications();
+                // Đợi thêm cả ảnh nền tuỳ chỉnh (nếu có) tải xong trước khi tắt loader.
+                await window._customBgReadyPromise;
+            } catch (err) {
+                console.error('[TKB] Lỗi khi tải dữ liệu ban đầu:', err);
+            } finally {
+                // finally: trước đây nếu loadTimetable() ném lỗi thì dòng tắt loader bị bỏ qua -> kẹt màn
+                // hình loading vĩnh viễn. 900ms để #main-app (fade-in 500ms) kịp hiện trọn vẹn trước khi
+                // loader ẩn đi, không lộ khung hình mờ/loang màu lúc vừa vào.
+                setTimeout(() => { if (loader) loader.classList.add('hidden'); }, 900);
             }
-            await loadTimetable(); 
-            loadExams();
-            checkUpcomingPlannerNotifications();
-
-            // Đợi thêm cả ảnh nền tuỳ chỉnh (nếu có) tải xong trước khi tắt loader — xem giải
-            // thích chi tiết ở chỗ khai báo window._customBgReadyPromise phía trên. Nếu không có
-            // ảnh nền thì promise này đã resolve sẵn (Promise.resolve()), không delay thêm gì cả.
-            await window._customBgReadyPromise;
-
-            // FIX BUG "1-2 KHUNG HÌNH BỊ MỜ/LOANG MÀU LÚC VỪA VÀO": #main-app fade-in mất 500ms
-            // (xem transition:opacity 0.5s ở thẻ #main-app trong calendar.html), nhưng trước đây
-            // màn che loader lại được cho biến mất chỉ sau 300ms kể từ lúc dữ liệu tải xong -> khi
-            // mạng nhanh/dữ liệu có sẵn cache, loader biến mất SỚM HƠN lúc #main-app hiện đủ 100%
-            // opacity, để lộ ra đúng khung hình "nửa vời" (mờ, loang màu) trong khoảnh khắc ngắn đó.
-            // Tăng lên 550ms (>500ms) để đảm bảo #main-app LUÔN hiện trọn vẹn trước khi loader bắt
-            // đầu ẩn đi, không còn khung hình "hở sáng" nào lọt ra ngoài nữa.
-            // Theo yêu cầu thực tế: dù đã đợi ảnh nền + tăng lên 550ms, vẫn còn tình trạng bảng
-            // TKB/blur hiện chậm hơn ảnh trong một số trường hợp (máy yếu, nhiều thẻ môn phải
-            // dựng DOM to, hoặc thiết bị GPU tính backdrop-filter chậm hơn dự tính) -> tăng thêm
-            // lên 900ms để có nhiều biên độ an toàn hơn nữa, chấp nhận đánh đổi loader hiện lâu
-            // hơn 1 chút để đổi lấy việc không bao giờ lộ khung hình dở dang nữa.
-            setTimeout(() => {
-                if (loader) loader.classList.add('hidden');
-            }, 900);
-        });
+        })();
 
     } else {
         currentUser = null;
@@ -417,8 +422,18 @@ window.handleAuth = async function(e) {
     const password = document.getElementById('auth-password').value;
     const errorEl = document.getElementById('auth-error');
     errorEl.innerText = 'Đang xử lý...';
+    const submitBtn = document.getElementById('auth-submit-btn');
+    if (submitBtn) submitBtn.disabled = true; // chống bấm đúp khi mạng chậm (đăng ký 2 lần / bị giới hạn tốc độ)
 
-    let result = authMode === 'login' ? await sbClient.auth.signInWithPassword({ email, password }) : await sbClient.auth.signUp({ email, password });
+    let result;
+    try {
+        const cleanEmail = email.trim();
+        result = authMode === 'login' ? await sbClient.auth.signInWithPassword({ email: cleanEmail, password }) : await sbClient.auth.signUp({ email: cleanEmail, password });
+    } catch (err) {
+        result = { error: { message: 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng rồi thử lại.' } };
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+    }
     if (result.error) { errorEl.innerText = result.error.message; return; }
 
     errorEl.innerText = '';
@@ -485,7 +500,7 @@ window.logout = async function() {
     // Nhớ Tab hiện tại trước khi Logout
     const activeTabLi = document.querySelector('.nav-links li.active');
     if (activeTabLi) {
-        const title = activeTabLi.getAttribute('title');
+        const title = activeTabLi.getAttribute('title') || '';
         let targetName = 'timetable'; 
         
         if (title.includes('Lịch Thi')) targetName = 'exams';
@@ -495,6 +510,7 @@ window.logout = async function() {
         localStorage.setItem('targetTab', targetName);
     }
 
+    await removePushSubscriptionFor(sbClient); // trước signOut để còn quyền xoá subscription
     await sbClient.auth.signOut(); 
 }
 
@@ -679,9 +695,11 @@ document.getElementById('excel-file').addEventListener('change', async function(
     const reader = new FileReader();
     reader.onload = async function(event) {
         try {
+            await loadScriptOnce(XLSX_CDN_URL, 'XLSX');
             const data = new Uint8Array(event.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
             const jsonArray = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            let pendingSemesterStart = null; // chỉ GHI (biến toàn cục + DB) sau khi chèn TKB mới thành công
 
             const formattedData = [];
 
@@ -714,15 +732,11 @@ document.getElementById('excel-file').addEventListener('change', async function(
                 const diffToMonday = dow === 0 ? 6 : dow - 1;
                 const newSemesterStart = new Date(earliestDate);
                 newSemesterStart.setDate(earliestDate.getDate() - diffToMonday);
-                semesterStartDate = newSemesterStart;
-
-                const yy = semesterStartDate.getFullYear();
-                const mm = String(semesterStartDate.getMonth() + 1).padStart(2, '0');
-                const dd = String(semesterStartDate.getDate()).padStart(2, '0');
-                const { error: settingsErr } = await sbClient.from('user_settings')
-                    .upsert({ user_id: currentUser.id, semester_start_date: `${yy}-${mm}-${dd}` }, { onConflict: 'user_id' });
-                if (settingsErr) console.error('[Import] Lỗi lưu mốc học kỳ mới:', settingsErr);
+                // KHÔNG ghi ngay: trước đây mốc mới được lưu vào DB TRƯỚC khi biết file có hợp lệ/chèn
+                // thành công không -> import lỗi vẫn làm lệch toàn bộ số tuần của TKB CŨ còn nguyên.
+                pendingSemesterStart = newSemesterStart;
             }
+            const effectiveSemesterStart = pendingSemesterStart || semesterStartDate;
 
             const sguStartTime = { 1:"07:00", 2:"07:50", 3:"09:00", 4:"09:50", 5:"10:40", 6:"13:00", 7:"13:50", 8:"15:00", 9:"15:50", 10:"16:40", 11:"17:40", 12:"18:30", 13:"19:20", 14:"20:10" };
             const sguEndTime = { 1:"07:50", 2:"08:40", 3:"09:50", 4:"10:40", 5:"11:30", 6:"13:50", 7:"14:40", 8:"15:50", 9:"16:40", 10:"17:30", 11:"18:30", 12:"19:20", 13:"20:10", 14:"21:00" };
@@ -735,9 +749,11 @@ document.getElementById('excel-file').addEventListener('change', async function(
                 const groupId = String(row['Nhóm'] || row['Nhóm tổ'] || '').trim();
                 const lecturer = String(row['Giảng viên'] || '').trim();
                 const room = String(row['Phòng'] || '').trim();
-                const day = parseInt(row['Thứ']);
-                
-                if (isNaN(day) || !subjectName) continue; 
+                const rawDay = String(row['Thứ'] ?? '').trim();
+                const day = /^(cn|chủ nhật)$/i.test(rawDay) ? 8 : parseInt(rawDay, 10);
+
+                // Thứ phải là 2..8 (8 = Chủ Nhật) — giá trị khác làm bảng TKB ném lỗi lúc vẽ
+                if (isNaN(day) || day < 2 || day > 8 || !subjectName) continue; 
                 
                 let timeSlot = String(row['Tiết'] || '').trim();
                 let startTiet = 0;
@@ -776,8 +792,8 @@ document.getElementById('excel-file').addEventListener('change', async function(
                             const eDate = parseDate(dates[1]);
                             
                             const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-                            const diffStart = Math.floor((sDate.getTime() - semesterStartDate.getTime()) / msPerWeek);
-                            const diffEnd = Math.floor((eDate.getTime() - semesterStartDate.getTime()) / msPerWeek);
+                            const diffStart = Math.floor((sDate.getTime() - effectiveSemesterStart.getTime()) / msPerWeek);
+                            const diffEnd = Math.floor((eDate.getTime() - effectiveSemesterStart.getTime()) / msPerWeek);
                             
                             let weekArr = Array(20).fill('-');
                             for (let w = Math.max(0, diffStart); w <= Math.min(19, diffEnd); w++) {
@@ -790,7 +806,7 @@ document.getElementById('excel-file').addEventListener('change', async function(
                     }
                 }
 
-                if (startTiet > 0 && endTiet >= startTiet) {
+                if (startTiet >= 1 && endTiet >= startTiet && endTiet <= 14) { // lưới tiết chỉ có 1..14
                     formattedData.push({
                         user_id: currentUser.id, 
                         name: subjectName, 
@@ -819,23 +835,61 @@ document.getElementById('excel-file').addEventListener('change', async function(
             // lưu trước danh sách ID cũ, CHÈN dữ liệu mới TRƯỚC — nếu bước này lỗi thì dữ liệu cũ
             // vẫn còn nguyên, chưa mất gì. Chỉ XÓA bản cũ (đúng theo ID đã lưu) SAU KHI chèn mới
             // thành công, nên nếu bước xóa có lỗi thì cùng lắm là hiện trùng lặp, không mất dữ liệu.
-            const { data: oldRows, error: fetchOldErr } = await sbClient.from('subjects').select('id').eq('user_id', currentUser.id);
+            const { data: oldRows, error: fetchOldErr } = await sbClient.from('subjects').select('id, name, course_code, group_id, day, time_slot').eq('user_id', currentUser.id);
             if (fetchOldErr) throw new Error("Không đọc được TKB cũ để chuẩn bị thay thế: " + fetchOldErr.message);
 
-            const { error: insertErr } = await sbClient.from('subjects').insert(formattedData);
+            const { data: insertedRows, error: insertErr } = await sbClient.from('subjects').insert(formattedData).select('id, name, course_code, group_id, day, time_slot');
             if (insertErr) throw new Error("Supabase từ chối lưu dữ liệu mới (TKB cũ vẫn còn nguyên, chưa mất gì): " + insertErr.message);
 
+            // GIỮ GHI CHÚ/BÀI TẬP: chuyển subject_details từ id môn cũ sang id môn mới TRƯỚC khi xoá bản cũ
+            // (xoá trước thì ghi chú bị xoá theo cascade hoặc mồ côi). Dòng cũ nào chuyển lỗi, hoặc không
+            // ghép được mà vẫn còn ghi chú, sẽ được GIỮ LẠI không xoá để không mất dữ liệu.
             const oldSubjectIds = (oldRows || []).map(r => r.id);
+            const keepOldIds = new Set();
+            let movedGroups = 0;
             if (oldSubjectIds.length) {
-                const { error: deleteErr } = await sbClient.from('subjects').delete().in('id', oldSubjectIds);
+                const remap = buildSubjectIdRemap(oldRows, insertedRows || []);
+                const { data: detailRows, error: detailErr } = await sbClient.from('subject_details')
+                    .select('subject_id').eq('user_id', currentUser.id).in('subject_id', oldSubjectIds);
+                if (detailErr) {
+                    // Không biết dòng nào có ghi chú -> giữ nguyên toàn bộ bản cũ (có thể hiện trùng) còn hơn mất dữ liệu
+                    oldSubjectIds.forEach(id => keepOldIds.add(id));
+                    console.warn('[Import] Không đọc được ghi chú để chuyển sang TKB mới, giữ lại bản cũ:', detailErr.message);
+                } else {
+                    const withDetails = new Set((detailRows || []).map(r => r.subject_id));
+                    await Promise.all([...withDetails].map(async (oldId) => {
+                        const newId = remap.get(oldId);
+                        if (newId === undefined) { keepOldIds.add(oldId); return; }
+                        const { error: moveErr } = await sbClient.from('subject_details')
+                            .update({ subject_id: newId }).eq('subject_id', oldId).eq('user_id', currentUser.id);
+                        if (moveErr) { keepOldIds.add(oldId); console.warn('[Import] Không chuyển được ghi chú của môn', oldId, moveErr.message); }
+                        else movedGroups++;
+                    }));
+                }
+            }
+
+            const idsToDelete = oldSubjectIds.filter(id => !keepOldIds.has(id));
+            if (idsToDelete.length) {
+                const { error: deleteErr } = await sbClient.from('subjects').delete().in('id', idsToDelete);
                 if (deleteErr) {
                     // Dữ liệu MỚI đã lưu an toàn — chỉ chưa dọn được bản cũ (sẽ hiện trùng lặp tạm
                     // thời). Không throw ở đây để tránh khiến người dùng tưởng nhầm là mất dữ liệu.
                     console.warn('[Import] Đã lưu TKB mới nhưng chưa xóa được TKB cũ (có thể hiện trùng, thử nhập lại lần nữa):', deleteErr.message);
                 }
             }
+            const keptNote = keepOldIds.size
+                ? `\n\nLưu ý: ${keepOldIds.size} buổi học cũ không còn trong TKB mới nhưng vẫn có ghi chú/bài tập nên được giữ lại (có thể hiện trùng) để không mất dữ liệu.`
+                : '';
 
-            showAlert("Đã đồng bộ TKB thành công! Giao diện sẽ tự động cập nhật.", "Hoàn tất"); 
+            if (pendingSemesterStart) {
+                semesterStartDate = pendingSemesterStart;
+                const ymd = `${semesterStartDate.getFullYear()}-${String(semesterStartDate.getMonth() + 1).padStart(2, '0')}-${String(semesterStartDate.getDate()).padStart(2, '0')}`;
+                const { error: settingsErr } = await sbClient.from('user_settings')
+                    .upsert({ user_id: currentUser.id, semester_start_date: ymd }, { onConflict: 'user_id' });
+                if (settingsErr) console.error('[Import] Lỗi lưu mốc học kỳ mới:', settingsErr);
+            }
+
+            showAlert("Đã đồng bộ TKB thành công! Ghi chú và bài tập của các môn vẫn được giữ nguyên." + keptNote, "Hoàn tất"); 
 
             // FIX: TKB mới là 1 lịch học hoàn toàn khác, không được giữ nguyên tuần đang xem dở của TKB cũ
             // (vd đang ở "Tuần 20" thì nhập TKB mới vào vẫn cứ hiện tiếp "Tuần 20" vì loadTimetable() chỉ đọc
@@ -845,13 +899,15 @@ document.getElementById('excel-file').addEventListener('change', async function(
 
             await loadTimetable(); 
             loadExams(); 
-            e.target.value = '';
             
         } catch (err) { 
             showAlert(`Lỗi xử lý file:\n${err.message || 'Vui lòng kiểm tra lại định dạng file.'}`, "Lỗi hệ thống"); 
             console.error("Chi tiết lỗi:", err);
+        } finally {
+            e.target.value = '';
         }
     };
+    reader.onerror = () => { showAlert('Không đọc được file này.', 'Lỗi đọc file'); e.target.value = ''; };
     reader.readAsArrayBuffer(file);
 });
 

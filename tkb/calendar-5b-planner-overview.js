@@ -168,7 +168,7 @@ function bindPlannerOverviewEvents() {
         // Bấm chip -> đổi trạng thái xong (kế hoạch) / hoàn thành (việc có hạn)
         const chip = e.target.closest('.pov-chip');
         if (!chip || chip.disabled) return;
-        const id = parseInt(chip.dataset.id, 10);
+        const id = chip.dataset.id; // giữ nguyên chuỗi (parseInt làm hỏng id dạng UUID)
         if (!id) return;
         chip.disabled = true;
 
@@ -178,7 +178,7 @@ function bindPlannerOverviewEvents() {
             return;
         }
         const dateKey = chip.closest('.pov-day').dataset.date;
-        const item = (plannerOverviewByDate[dateKey] || []).find(x => x.kind === 'plan' && x.id === id);
+        const item = (plannerOverviewByDate[dateKey] || []).find(x => x.kind === 'plan' && String(x.id) === String(id));
         if (!item) { chip.disabled = false; return; }
         const next = !item.done;
         item.done = next;

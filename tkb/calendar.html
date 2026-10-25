@@ -15,8 +15,11 @@
     <meta name="theme-color" content="#08090c">
     <link rel="icon" href="../icon-192.png">
     <link rel="apple-touch-icon" href="../icon-192.png">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- xlsx (~0.9MB) và html2canvas-pro chỉ nạp khi bấm Nhập Excel / Chụp TKB (loadScriptOnce ở shared.js;
+         URL khai báo ở calendar-1-core.js) — trước đây cả 2 chặn trang ở mọi lần mở. -->
     <!-- Dùng để chụp #timetable-wrapper thành ảnh PNG cho tính năng "Chụp TKB" - xem
          calendar-6-export-capture.js.
          FIX "LỖI CHỤP ẢNH: Attempting to parse an unsupported color function color-mix": bản
@@ -27,7 +30,6 @@
          hình thực tế. Đổi qua html2canvas-pro (fork giữ nguyên 100% API/tên hàm global
          "html2canvas" gốc, chỉ thêm phần hiểu được color-mix()/oklch()/lab()/lch()...) - không
          cần sửa gì thêm ở calendar-6-export-capture.js vì tên hàm gọi vẫn y hệt. -->
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas-pro@2.4.2/dist/html2canvas-pro.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
@@ -445,6 +447,16 @@
                         </div>
                     </div>
 
+                    <!-- ẢNH NỀN MÀN HÌNH KHOÁ TỰ CẬP NHẬT (calendar-7-wallpaper.js + Edge Function `wallpaper`) -->
+                    <div class="setting-group" style="margin-top: 30px;">
+                        <h4>Ảnh nền màn hình khoá tự cập nhật</h4>
+                        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px; max-width: 480px;">
+                            Tạo ảnh kiểu màn hình khoá: thẻ tiến độ năm + lịch 5 tuần với các việc/hạn của bạn. Dùng link bên dưới trong
+                            Phím tắt (iPhone) hoặc Tasker (Android) để điện thoại tự đổi ảnh nền mỗi ngày.
+                        </p>
+                        <div id="wallpaper-box"></div>
+                    </div>
+
                     <div class="setting-group" style="margin-top: 30px;">
                         <h4>Đổi hình nền Desktop (Link URL hoặc Tải từ máy)</h4>
                         
@@ -760,5 +772,6 @@
     <script src="calendar-5-planner-ui.js"></script>
     <script src="calendar-5b-planner-overview.js"></script>
     <script src="calendar-6-export-capture.js"></script>
+    <script src="calendar-7-wallpaper.js"></script>
 </body>
 </html>

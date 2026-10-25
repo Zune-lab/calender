@@ -59,13 +59,26 @@ Deno.serve(async () => {
     let sentCount = 0;
     const notifiedIds: string[] = [];
 
-    for (const plan of plans) {
-        const { data: subs } = await supabase
-            .from("push_subscriptions")
-            .select("id, endpoint, p256dh, auth")
-            .eq("user_id", plan.user_id);
+    // 1 truy vấn cho TẤT CẢ user liên quan (trước đây 1 truy vấn / việc -> N+1 truy vấn mỗi phút)
+    const userIds = [...new Set(plans.map((p) => p.user_id))];
+    const { data: allSubs, error: subsErr } = await supabase
+        .from("push_subscriptions")
+        .select("id, user_id, endpoint, p256dh, auth")
+        .in("user_id", userIds);
+    if (subsErr) {
+        // Không đánh dấu đã báo: lần chạy sau (1 phút nữa) sẽ thử lại
+        return new Response(JSON.stringify({ error: subsErr.message }), { status: 500 });
+    }
+    const subsByUser = new Map<string, typeof allSubs>();
+    for (const sub of allSubs ?? []) {
+        const list = subsByUser.get(sub.user_id) ?? [];
+        list.push(sub);
+        subsByUser.set(sub.user_id, list);
+    }
 
-        if (!subs || subs.length === 0) { notifiedIds.push(plan.id); continue; }
+    for (const plan of plans) {
+        const subs = subsByUser.get(plan.user_id) ?? [];
+        if (subs.length === 0) { notifiedIds.push(plan.id); continue; }
 
         const h = String(Math.floor(plan.start_min / 60)).padStart(2, "0");
         const m = String(plan.start_min % 60).padStart(2, "0");
@@ -82,23 +95,32 @@ Deno.serve(async () => {
             tag: `planner_${plan.id}`,
         });
 
-        for (const sub of subs) {
-            try {
-                await webpush.sendNotification(
-                    { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-                    payload
-                );
-                sentCount++;
-            } catch (err) {
-                // Subscription hết hạn/bị thu hồi (thường mã lỗi 404/410) -> dọn khỏi DB luôn
-                if (err && (err.statusCode === 404 || err.statusCode === 410)) {
-                    await supabase.from("push_subscriptions").delete().eq("id", sub.id);
-                } else {
-                    console.error("[planner-push-cron] Lỗi gửi push:", err);
-                }
+        // Gửi song song tới mọi thiết bị của user (trước đây gửi tuần tự, chậm dần theo số thiết bị)
+        const results = await Promise.allSettled(subs.map((sub) =>
+            webpush.sendNotification(
+                { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                payload
+            )
+        ));
+
+        let delivered = 0;
+        let transientFailure = false;
+        for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            if (r.status === "fulfilled") { delivered++; sentCount++; continue; }
+            const err = r.reason as { statusCode?: number };
+            // Subscription hết hạn/bị thu hồi (404/410) -> dọn khỏi DB
+            if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+                await supabase.from("push_subscriptions").delete().eq("id", subs[i].id);
+            } else {
+                transientFailure = true;
+                console.error("[planner-push-cron] Lỗi gửi push:", r.reason);
             }
         }
-        notifiedIds.push(plan.id);
+
+        // CHỈ đánh dấu "đã báo" khi ít nhất 1 thiết bị nhận được, hoặc không còn thiết bị nào hợp lệ.
+        // Trước đây lỗi tạm thời (mạng/5xx của dịch vụ push) vẫn bị đánh dấu đã báo -> mất thông báo vĩnh viễn.
+        if (delivered > 0 || !transientFailure) notifiedIds.push(plan.id);
     }
 
     if (notifiedIds.length > 0) {

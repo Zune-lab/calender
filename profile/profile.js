@@ -216,7 +216,14 @@ async function bootProfile() {
 
         if (meta.avatar) {
             base64Image = meta.avatar;
-            document.getElementById('avatar-container').innerHTML = `<img src="${meta.avatar}">`;
+            // DOM API thay vì nối chuỗi vào innerHTML (meta.avatar do người dùng ghi, không đáng tin)
+            const avatarBox = document.getElementById('avatar-container');
+            avatarBox.textContent = '';
+            if (/^(data:image\/|https?:\/\/)/i.test(String(meta.avatar))) {
+                const avatarImg = document.createElement('img');
+                avatarImg.src = meta.avatar;
+                avatarBox.appendChild(avatarImg);
+            }
             document.getElementById('remove-avatar-btn').style.display = 'inline-flex';
         }
         if (meta.full_name) {
@@ -260,7 +267,12 @@ window.logoutFromProfile = async function() {
     const msg = profileDirty ? 'Bạn có thay đổi chưa lưu. Vẫn đăng xuất?' : 'Đăng xuất khỏi tài khoản?';
     if (!confirm(msg)) return;
     profileDirty = false; // bỏ cảnh báo beforeunload vì người dùng đã chủ động xác nhận
-    try { if (window._sbClient) await window._sbClient.auth.signOut(); } catch (e) {}
+    try {
+        if (window._sbClient) {
+            await removePushSubscriptionFor(window._sbClient);
+            await window._sbClient.auth.signOut();
+        }
+    } catch (e) {}
     window.location.href = '../tkb/calendar.html';
 };
 window.addEventListener('beforeunload', (e) => {
@@ -287,6 +299,7 @@ document.getElementById('file-input').addEventListener('change', function(e) {
             document.getElementById('remove-avatar-btn').style.display = 'inline-flex';
             markProfileDirty();
         };
+        img.onerror = function() { showFatalError('Không đọc được ảnh này. Hãy chọn file JPG/PNG/WebP khác.'); };
         img.src = event.target.result;
     };
     reader.readAsDataURL(file);
