@@ -56,6 +56,46 @@ function _waitTwoFrames() {
     });
 }
 
+// FIX BUG "ẢNH CHỤP TRÊN ĐIỆN THOẠI MẤT HẾT CSS (chữ serif, ô trống trong suốt, không bo góc, cột
+// lệch)": html2canvas dựng bản nhân bản của trang trong 1 <iframe> mới, rồi các thẻ
+// <link rel="stylesheet"> được "nhận nuôi" vào iframe đó và PHẢI TẢI LẠI từ mạng/cache. html2canvas
+// chỉ chờ font (document.fonts.ready) chứ KHÔNG chờ stylesheet -> nếu CSS chưa kịp về lúc nó bắt đầu
+// vẽ thì ảnh ra đúng như trang chưa có CSS (chỉ còn các style inline do code chụp gán, như nền
+// gradient thẻ môn). Máy tính có cache + mạng nhanh nên CSS luôn về kịp, không lộ lỗi; điện thoại
+// (Safari/mạng chậm) thì bị thường xuyên. Cách sửa: chép sẵn toàn bộ luật CSS đang chạy ở trang
+// thật thành 1 thẻ <style> nội tuyến trong bản nhân bản (xem onclone ở bên dưới) -> không còn phụ
+// thuộc việc tải lại file CSS.
+function _collectPageCss() {
+    const imports = [];
+    let css = '';
+    for (const sheet of Array.from(document.styleSheets)) {
+        if (sheet.disabled) continue;
+        let rules;
+        try {
+            rules = sheet.cssRules; // stylesheet khác origin (vd font-awesome CDN) sẽ ném SecurityError
+        } catch (e) {
+            continue; // bỏ qua - thẻ <link> gốc của nó vẫn nằm trong bản nhân bản, được chờ tải riêng
+        }
+        if (!rules) continue;
+        let body = '';
+        for (const rule of Array.from(rules)) {
+            if (rule.type === CSSRule.IMPORT_RULE) {
+                // @import (vd Google Fonts Inter) chỉ hợp lệ khi nằm ĐẦU thẻ <style> -> gom lên đầu.
+                if (rule.href) imports.push(rule.href);
+                continue;
+            }
+            body += rule.cssText + '\n';
+        }
+        const media = sheet.media && sheet.media.mediaText;
+        css += media && media !== 'all' ? `@media ${media} {\n${body}}\n` : body;
+    }
+    return imports.map((href) => `@import url("${href}");`).join('\n') + '\n' + css;
+}
+
+function _withTimeout(promise, ms) {
+    return Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
+}
+
 window.captureFullTimetable = async function () {
     if (_isCapturingTimetable) return;
 
@@ -230,11 +270,39 @@ window.captureFullTimetable = async function () {
             renderScale *= Math.sqrt(MAX_CANVAS_AREA / area);
         }
 
+        // Thu thập CSS ở trang thật MỘT LẦN trước khi chụp (xem _collectPageCss để biết lý do).
+        const inlinedPageCss = _collectPageCss();
+
         const canvas = await html2canvas(clone, {
             backgroundColor: isLight ? '#eef2f7' : '#0b0f1a',
             scale: renderScale, // ảnh nét nhưng có trần an toàn, xem giải thích ở trên
             useCORS: true,
             logging: false,
+            // onclone được html2canvas CHỜ xong (hỗ trợ async) rồi mới vẽ -> chỗ đúng để đảm bảo
+            // bản nhân bản đã có đủ CSS + font trước khi chụp.
+            onclone: async (clonedDoc) => {
+                try {
+                    const styleEl = clonedDoc.createElement('style');
+                    styleEl.setAttribute('data-capture-inline', '1');
+                    styleEl.textContent = inlinedPageCss;
+                    clonedDoc.head.appendChild(styleEl);
+
+                    // Các <link> còn lại (khác origin, không chép được ở trên) - chờ tải xong, tối đa 4s.
+                    const pendingLinks = Array.from(clonedDoc.querySelectorAll('link[rel="stylesheet"]')).filter((l) => !l.sheet);
+                    if (pendingLinks.length) {
+                        await _withTimeout(Promise.all(pendingLinks.map((l) => new Promise((resolve) => {
+                            l.addEventListener('load', resolve, { once: true });
+                            l.addEventListener('error', resolve, { once: true });
+                        }))), 4000);
+                    }
+                    // Font (Inter...) vừa được <style> ở trên kéo vào -> chờ nạp xong, tối đa 3s.
+                    if (clonedDoc.fonts && clonedDoc.fonts.ready) {
+                        await _withTimeout(clonedDoc.fonts.ready, 3000);
+                    }
+                } catch (cssErr) {
+                    console.warn('Không chèn được CSS vào bản chụp:', cssErr);
+                }
+            },
         });
 
         const now = new Date();
