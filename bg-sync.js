@@ -295,11 +295,62 @@
         }
     });
 
+    // ==========================================
+    // ẨN LOADER AN TOÀN — dùng chung cho mọi trang.
+    // Trước đây mỗi trang tự setTimeout cứng (250/550/900ms) rồi ẩn loader, nên khi font/icon
+    // (Font Awesome, Inter) chưa tải xong thì loader biến mất trước và lộ ra icon vuông / chữ
+    // đổi font / khung hình loang (cảm giác "CSS bị bug"). Giờ: đợi font sẵn sàng (tối đa 1.5s)
+    // + 2 khung hình vẽ xong rồi mới ẩn. Gọi nhiều lần vẫn an toàn.
+    // ==========================================
+    window.hideGlobalLoader = function (extraDelayMs) {
+        const run = function () {
+            const loader = document.getElementById('global-loader');
+            if (!loader) return;
+            const fontsReady = (document.fonts && document.fonts.ready)
+                ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))])
+                : Promise.resolve();
+            fontsReady.catch(() => {}).then(() => {
+                requestAnimationFrame(() => requestAnimationFrame(() => loader.classList.add('hidden')));
+            });
+        };
+        if (extraDelayMs > 0) setTimeout(run, extraDelayMs); else run();
+    };
+
+    // CHỐT CHẶN CUỐI: dù lỗi gì xảy ra (script crash, CDN treo, promise không bao giờ resolve...)
+    // loader cũng không được kẹt quá 15 giây — luôn trả lại giao diện cho người dùng.
+    setTimeout(function () {
+        const loader = document.getElementById('global-loader');
+        if (loader && !loader.classList.contains('hidden')) {
+            console.warn('[Loader] Quá 15s vẫn chưa tắt — tự ẩn để không kẹt màn hình.');
+            loader.classList.add('hidden');
+            const mainUI = document.getElementById('main-dashboard-ui');
+            if (mainUI && mainUI.style.opacity === '0') { mainUI.style.opacity = '1'; mainUI.style.pointerEvents = 'auto'; }
+            // Trang TKB: không có UI để hiện -> báo cho người dùng biết thay vì để trang trống im lặng.
+            if (!mainUI && typeof window.showCustomDialog === 'function') {
+                window.showCustomDialog('Tải dữ liệu quá lâu. Kiểm tra kết nối mạng rồi tải lại trang.', false, 'Lỗi kết nối');
+            }
+        }
+    }, 15000);
+
+    // Rời trang/quay lại từ tab nền: nếu loader còn hiện mà trang đã tải xong thì tắt.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && document.readyState === 'complete') {
+            const loader = document.getElementById('global-loader');
+            if (loader && loader.dataset.navigating === '1') {
+                delete loader.dataset.navigating;
+                loader.classList.add('hidden');
+            }
+        }
+    });
+
     window.navigateWithFade = function (url) {
         const loader = document.getElementById('global-loader');
         if (loader) {
             loader.classList.remove('hidden');
+            loader.dataset.navigating = '1';
             setTimeout(() => { window.location.href = url; }, 450);
+            // Điều hướng bị huỷ/lỗi (mất mạng, bị chặn) -> sau 8s trả lại giao diện thay vì kẹt loader.
+            setTimeout(() => { loader.classList.add('hidden'); delete loader.dataset.navigating; }, 8000);
         } else {
             window.location.href = url;
         }

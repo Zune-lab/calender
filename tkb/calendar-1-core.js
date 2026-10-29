@@ -338,14 +338,14 @@ function handleSession(session) {
                 loadExams();
                 checkUpcomingPlannerNotifications();
                 // Đợi thêm cả ảnh nền tuỳ chỉnh (nếu có) tải xong trước khi tắt loader.
-                await window._customBgReadyPromise;
+                await Promise.race([window._customBgReadyPromise, new Promise((r) => setTimeout(r, 4000))]);
             } catch (err) {
                 console.error('[TKB] Lỗi khi tải dữ liệu ban đầu:', err);
             } finally {
                 // finally: trước đây nếu loadTimetable() ném lỗi thì dòng tắt loader bị bỏ qua -> kẹt màn
                 // hình loading vĩnh viễn. 900ms để #main-app (fade-in 500ms) kịp hiện trọn vẹn trước khi
                 // loader ẩn đi, không lộ khung hình mờ/loang màu lúc vừa vào.
-                setTimeout(() => { if (loader) loader.classList.add('hidden'); }, 900);
+                window.hideGlobalLoader(900);
             }
         })();
 
@@ -737,34 +737,58 @@ document.getElementById('excel-file').addEventListener('change', async function(
                 return;
             }
 
-            // FIX AN TOÀN DỮ LIỆU (nghiêm trọng): trước đây XÓA sạch TKB cũ TRƯỚC rồi mới CHÈN dữ
-            // liệu mới — nếu bước chèn thất bại giữa chừng (mất mạng, dữ liệu vi phạm ràng buộc DB,
-            // Supabase timeout...) thì TKB cũ đã bị xóa vĩnh viễn mà không có gì thay thế, không
-            // cách nào khôi phục ngoài việc còn giữ đúng file Excel cũ để nhập lại. Đảo thứ tự:
-            // lưu trước danh sách ID cũ, CHÈN dữ liệu mới TRƯỚC — nếu bước này lỗi thì dữ liệu cũ
-            // vẫn còn nguyên, chưa mất gì. Chỉ XÓA bản cũ (đúng theo ID đã lưu) SAU KHI chèn mới
-            // thành công, nên nếu bước xóa có lỗi thì cùng lắm là hiện trùng lặp, không mất dữ liệu.
-            const { data: oldRows, error: fetchOldErr } = await sbClient.from('subjects').select('id, name, course_code, group_id, day, time_slot').eq('user_id', currentUser.id);
-            if (fetchOldErr) throw new Error("Không đọc được TKB cũ để chuẩn bị thay thế: " + fetchOldErr.message);
+            // ĐỒNG BỘ GIỮ NGUYÊN ID (thay cho "xoá hết rồi tạo lại"): buổi nào trong file khớp với buổi cũ thì
+            // GIỮ dòng cũ (chỉ cập nhật nếu phòng/GV/tuần... đổi) nên ghi chú, bài tập, thùng rác gắn vào id đó
+            // KHÔNG hề bị đụng tới — nhập lại đúng TKB cũ là không thêm/xoá dòng nào. Thứ tự an toàn:
+            // (1) chèn buổi mới, (2) cập nhật buổi giữ lại, (3) chỉ với buổi cũ KHÔNG còn trong file mới:
+            // chuyển ghi chú sang buổi cùng môn nếu có, rồi mới xoá; còn ghi chú mà không chuyển được thì GIỮ LẠI.
+            const SUBJECT_COLS = 'id, name, course_code, group_id, day, time_slot, room, lecturer, exact_time, weeks';
+            const { data: oldRows, error: fetchOldErr } = await sbClient.from('subjects').select(SUBJECT_COLS).eq('user_id', currentUser.id);
+            if (fetchOldErr) throw new Error("Không đọc được TKB cũ để chuẩn bị đồng bộ: " + fetchOldErr.message);
 
-            const { data: insertedRows, error: insertErr } = await sbClient.from('subjects').insert(formattedData).select('id, name, course_code, group_id, day, time_slot');
-            if (insertErr) throw new Error("Supabase từ chối lưu dữ liệu mới (TKB cũ vẫn còn nguyên, chưa mất gì): " + insertErr.message);
+            const plan = planSubjectSync(oldRows || [], formattedData);
 
-            // GIỮ GHI CHÚ/BÀI TẬP: chuyển subject_details từ id môn cũ sang id môn mới TRƯỚC khi xoá bản cũ
-            // (xoá trước thì ghi chú bị xoá theo cascade hoặc mồ côi). Dòng cũ nào chuyển lỗi, hoặc không
-            // ghép được mà vẫn còn ghi chú, sẽ được GIỮ LẠI không xoá để không mất dữ liệu.
-            const oldSubjectIds = (oldRows || []).map(r => r.id);
+            let insertedRows = [];
+            if (plan.toInsert.length) {
+                const ins = await sbClient.from('subjects').insert(plan.toInsert).select('id, name, course_code, group_id, day, time_slot');
+                if (ins.error) throw new Error("Supabase từ chối lưu buổi học mới (TKB cũ vẫn còn nguyên, chưa mất gì): " + ins.error.message);
+                insertedRows = ins.data || [];
+            }
+
+            // Buổi giữ lại: chỉ gửi UPDATE cho dòng thật sự có thay đổi. Lỗi ở đây KHÔNG gây mất dữ liệu (dòng cũ còn nguyên).
+            const SYNC_FIELDS = ['name', 'course_code', 'group_id', 'day', 'time_slot', 'room', 'lecturer', 'exact_time', 'weeks'];
+            const same = (a, b) => String(a == null ? '' : a) === String(b == null ? '' : b);
+            let updatedCount = 0, updateFailed = 0;
+            await Promise.all(plan.matches.map(async ({ oldRow, newRow }) => {
+                const patch = {};
+                SYNC_FIELDS.forEach((f) => { if (!same(oldRow[f], newRow[f])) patch[f] = newRow[f]; });
+                if (!Object.keys(patch).length) return;
+                const { error: upErr } = await sbClient.from('subjects').update(patch).eq('id', oldRow.id).eq('user_id', currentUser.id);
+                if (upErr) { updateFailed++; console.warn('[Import] Không cập nhật được buổi', oldRow.id, upErr.message); }
+                else updatedCount++;
+            }));
+
+            // Buổi cũ không còn trong file mới: ghi chú (nếu có) chuyển sang buổi cùng môn trong TKB mới.
+            const finalRows = plan.matches.map(({ oldRow, newRow }) => ({ ...newRow, id: oldRow.id })).concat(insertedRows);
+            const goneIds = plan.unmatchedOld.map(r => r.id);
             const keepOldIds = new Set();
-            if (oldSubjectIds.length) {
-                const remap = buildSubjectIdRemap(oldRows, insertedRows || []);
-                const { data: detailRows, error: detailErr } = await sbClient.from('subject_details')
-                    .select('subject_id').eq('user_id', currentUser.id).in('subject_id', oldSubjectIds);
+            if (goneIds.length) {
+                const remap = buildSubjectIdRemap(plan.unmatchedOld, finalRows);
+                // Đọc theo trang (.range): PostgREST mặc định chỉ trả tối đa 1000 dòng/lần, đọc 1 lần có thể bỏ sót.
+                const withDetails = new Set();
+                let detailErr = null;
+                for (let from = 0; ; from += 1000) {
+                    const { data: page, error } = await sbClient.from('subject_details')
+                        .select('subject_id').eq('user_id', currentUser.id).in('subject_id', goneIds).range(from, from + 999);
+                    if (error) { detailErr = error; break; }
+                    (page || []).forEach(r => withDetails.add(r.subject_id));
+                    if (!page || page.length < 1000) break;
+                }
                 if (detailErr) {
-                    // Không biết dòng nào có ghi chú -> giữ nguyên toàn bộ bản cũ (có thể hiện trùng) còn hơn mất dữ liệu
-                    oldSubjectIds.forEach(id => keepOldIds.add(id));
+                    // Không biết buổi nào có ghi chú -> giữ nguyên toàn bộ buổi cũ còn thừa còn hơn mất dữ liệu
+                    goneIds.forEach(id => keepOldIds.add(id));
                     console.warn('[Import] Không đọc được ghi chú để chuyển sang TKB mới, giữ lại bản cũ:', detailErr.message);
                 } else {
-                    const withDetails = new Set((detailRows || []).map(r => r.subject_id));
                     await Promise.all([...withDetails].map(async (oldId) => {
                         const newId = remap.get(oldId);
                         if (newId === undefined) { keepOldIds.add(oldId); return; }
@@ -775,18 +799,16 @@ document.getElementById('excel-file').addEventListener('change', async function(
                 }
             }
 
-            const idsToDelete = oldSubjectIds.filter(id => !keepOldIds.has(id));
+            const idsToDelete = goneIds.filter(id => !keepOldIds.has(id));
             if (idsToDelete.length) {
-                const { error: deleteErr } = await sbClient.from('subjects').delete().in('id', idsToDelete);
-                if (deleteErr) {
-                    // Dữ liệu MỚI đã lưu an toàn — chỉ chưa dọn được bản cũ (sẽ hiện trùng lặp tạm
-                    // thời). Không throw ở đây để tránh khiến người dùng tưởng nhầm là mất dữ liệu.
-                    console.warn('[Import] Đã lưu TKB mới nhưng chưa xóa được TKB cũ (có thể hiện trùng, thử nhập lại lần nữa):', deleteErr.message);
-                }
+                const { error: deleteErr } = await sbClient.from('subjects').delete().in('id', idsToDelete).eq('user_id', currentUser.id);
+                if (deleteErr) console.warn('[Import] Đã lưu TKB mới nhưng chưa xóa được buổi cũ không còn dùng (nhập lại lần nữa để dọn):', deleteErr.message);
             }
             const keptNote = keepOldIds.size
                 ? `\n\nLưu ý: ${keepOldIds.size} buổi học cũ không còn trong TKB mới nhưng vẫn có ghi chú/bài tập nên được giữ lại (có thể hiện trùng) để không mất dữ liệu.`
                 : '';
+            const summary = `\n\nGiữ nguyên ${plan.matches.length - updatedCount - updateFailed} buổi, cập nhật ${updatedCount}, thêm mới ${insertedRows.length}, bỏ ${idsToDelete.length}.`
+                + (updateFailed ? `\n${updateFailed} buổi chưa cập nhật được thông tin mới (dữ liệu cũ vẫn còn, nhập lại để thử lại).` : '');
 
             if (pendingSemesterStart) {
                 semesterStartDate = pendingSemesterStart;
@@ -796,7 +818,7 @@ document.getElementById('excel-file').addEventListener('change', async function(
                 if (settingsErr) console.error('[Import] Lỗi lưu mốc học kỳ mới:', settingsErr);
             }
 
-            showAlert("Đã đồng bộ TKB thành công! Ghi chú và bài tập của các môn vẫn được giữ nguyên." + keptNote, "Hoàn tất"); 
+            showAlert("Đã đồng bộ TKB thành công! Ghi chú và bài tập của các môn vẫn được giữ nguyên." + summary + keptNote, "Hoàn tất"); 
 
             // FIX: TKB mới là 1 lịch học hoàn toàn khác, không được giữ nguyên tuần đang xem dở của TKB cũ
             // (vd đang ở "Tuần 20" thì nhập TKB mới vào vẫn cứ hiện tiếp "Tuần 20" vì loadTimetable() chỉ đọc

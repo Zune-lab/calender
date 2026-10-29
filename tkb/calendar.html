@@ -17,7 +17,7 @@
     <link rel="apple-touch-icon" href="../icon-192.png">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <!-- xlsx (~0.9MB) và html2canvas-pro chỉ nạp khi bấm Nhập Excel / Chụp TKB (loadScriptOnce ở shared.js;
          URL khai báo ở calendar-1-core.js) — trước đây cả 2 chặn trang ở mọi lần mở. -->
     <!-- Dùng để chụp #timetable-wrapper thành ảnh PNG cho tính năng "Chụp TKB" - xem
@@ -30,7 +30,8 @@
          hình thực tế. Đổi qua html2canvas-pro (fork giữ nguyên 100% API/tên hàm global
          "html2canvas" gốc, chỉ thêm phần hiểu được color-mix()/oklch()/lab()/lch()...) - không
          cần sửa gì thêm ở calendar-6-export-capture.js vì tên hàm gọi vẫn y hệt. -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"></noscript>
 </head>
 <body>
 
@@ -757,6 +758,8 @@
         <li style="--i: 6; --clr: #fff"><a href="404-error-face.html"><i class="fab fa-github"></i></a></li>
         <li style="--i: 7; --clr: #ff0000"><a href="404-error-face.html"><i class="fab fa-youtube"></i></a></li>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script src="../supabase-config.js"></script>
     <script src="../shared.js"></script>

@@ -345,6 +345,50 @@ function buildSubjectIdRemap(oldRows, newRows) {
     return remap;
 }
 
+// ---------------------------------------------------------
+// ĐỒNG BỘ TKB GIỮ NGUYÊN ID: thay vì xoá hết `subjects` rồi tạo lại (id đổi toàn bộ -> phải "chuyển"
+// ghi chú sang id mới, 1 bước lỗi là nhân đôi buổi học hoặc mất ghi chú), ghép từng buổi trong file
+// MỚI với buổi cũ tương ứng để GIỮ NGUYÊN dòng cũ. Nhập lại đúng TKB cũ => mọi buổi đều ghép được =>
+// không thêm/xoá dòng nào, ghi chú/bài tập không bị đụng tới.
+// Ghép theo nhiều lượt từ chặt đến lỏng; mỗi dòng cũ chỉ được ghép tối đa 1 lần (nên các buổi trùng
+// mã HP + nhóm + thứ + tiết nhưng khác tuần/phòng vẫn ghép 1-1 đúng cặp):
+//   1) giống hệt toàn bộ  2) mã HP + nhóm + thứ + tiết + tuần  3) mã HP + nhóm + thứ + tiết
+//   4) tên môn gốc + thứ + tiết
+// Trả về { matches: [{ oldRow, newRow }], toInsert: [newRow], unmatchedOld: [oldRow] }.
+// ---------------------------------------------------------
+function planSubjectSync(oldRows, newRows) {
+    const n = (v) => String(v == null ? '' : v).trim().toLowerCase();
+    const keyFns = [
+        (r) => [r.course_code, r.group_id, r.day, r.time_slot, r.weeks, r.room, r.lecturer, r.name].map(n).join('|'),
+        (r) => [r.course_code, r.group_id, r.day, r.time_slot, r.weeks].map(n).join('|'),
+        (r) => [r.course_code, r.group_id, r.day, r.time_slot].map(n).join('|'),
+        (r) => [baseSubjectKey(r.name), r.day, n(r.time_slot)].join('|'),
+    ];
+    const olds = (oldRows || []).slice().sort((a, b) => (a.id > b.id ? 1 : a.id < b.id ? -1 : 0));
+    const news = (newRows || []).slice();
+    const oldUsed = new Set();
+    const newMatch = new Array(news.length).fill(null);
+    keyFns.forEach((keyOf) => {
+        const queues = new Map();
+        olds.forEach((o) => {
+            if (oldUsed.has(o.id)) return;
+            const k = keyOf(o);
+            if (!queues.has(k)) queues.set(k, []);
+            queues.get(k).push(o);
+        });
+        news.forEach((nr, i) => {
+            if (newMatch[i]) return;
+            const q = queues.get(keyOf(nr));
+            if (q && q.length) { const o = q.shift(); oldUsed.add(o.id); newMatch[i] = o; }
+        });
+    });
+    return {
+        matches: news.map((nr, i) => newMatch[i] ? { oldRow: newMatch[i], newRow: nr } : null).filter(Boolean),
+        toInsert: news.filter((_, i) => !newMatch[i]),
+        unmatchedOld: olds.filter((o) => !oldUsed.has(o.id)),
+    };
+}
+
 // =========================================================
 // HẰNG SỐ DÙNG CHUNG (trước đây bị chép tay ở nhiều file và dễ lệch nhau)
 // =========================================================

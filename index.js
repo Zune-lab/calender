@@ -358,7 +358,17 @@ async function initDashboard() {
         document.getElementById('mini-tkb-time').innerText = "Không tải được Supabase (CDN). Kiểm tra kết nối mạng rồi tải lại trang.";
         return;
     }
-    dashClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    try {
+        dashClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    } catch (e) {
+        // supabase-config.js lỗi/thiếu biến -> trước đây ném lỗi ở ngoài try/catch làm loader kẹt mãi.
+        if (loader) loader.classList.add('hidden');
+        showMainUI();
+        document.getElementById('mini-tkb-name').innerText = "LỖI CẤU HÌNH";
+        document.getElementById('mini-tkb-time').innerText = "Không khởi tạo được Supabase: " + (e && e.message ? e.message : e);
+        console.error('[Dashboard] createClient lỗi:', e);
+        return;
+    }
 
     // FIX "LOADER TREO VÔ THỜI HẠN NẾU MẤT MẠNG/API LỖI GIỮA CHỪNG": trước đây chỉ có bước kiểm
     // tra CDN Supabase ở trên là được bọc chống lỗi — getSession() và Promise.all() bên dưới hoàn
@@ -438,10 +448,7 @@ async function initDashboard() {
         // #main-dashboard-ui fade-in mất 500ms (transition:opacity 0.5s ease khai báo ở index.html)
         // nhưng loader trước đây chỉ đợi 250ms rồi ẩn -> khi mạng nhanh, loader biến mất TRƯỚC khi UI
         // hiện đủ 100% opacity, lộ ra khung hình mờ/loang trong khoảnh khắc ngắn. Tăng lên 550ms.
-        setTimeout(() => {
-            const loader2 = document.getElementById('global-loader');
-            if (loader2) loader2.classList.add('hidden');
-        }, 550);
+        window.hideGlobalLoader(550);
     } catch (err) {
         clearTimeout(dashWatchdog);
         if (loader) loader.classList.add('hidden');

@@ -44,26 +44,37 @@ html {
    GLOBAL LOADER (BOUNCING DOTS) - copy từ tkb/style.css
 ========================================= */
 .global-loader {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    position: fixed; inset: 0; width: 100%; height: 100%;
     z-index: 99999; display: flex; align-items: center; justify-content: center;
-    background: rgba(8, 9, 12, 0.75);
-    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    background: rgba(8, 9, 12, 0.92);
+    contain: strict;
     transition: opacity 0.3s ease, visibility 0.3s;
 }
 .global-loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+/* Loader đang hiện thì tạm dừng blob nền phía sau để nhường GPU cho animation bounce */
+.global-loader:not(.hidden) ~ .ambient-bg .ambient-blob { animation-play-state: paused; }
+.global-loader.hidden .loader__dot, .global-loader.hidden .loader__shadow { animation-play-state: paused; }
 
 .loader { width: 200px; height: 60px; position: relative; z-index: 1; }
 .loader__dot {
     width: var(--dot-size); height: var(--dot-size); position: absolute; border-radius: 50%;
     background: linear-gradient(135deg, var(--dot-highlight), var(--dot-base));
-    left: 15%; transform-origin: 50%;
-    animation: bounce-dot var(--cycle) alternate infinite var(--ease);
+    left: 15%; top: 0; transform-origin: 50% 0; will-change: transform;
+    animation: bounce-dot-y var(--cycle) alternate infinite var(--ease),
+               bounce-dot-s var(--cycle) alternate infinite var(--ease);
     box-shadow: 0 1px 10px rgba(255, 255, 255, 0.35);
 }
-@keyframes bounce-dot {
-    0% { top: 60px; height: 5px; border-radius: 50px 50px 25px 25px; transform: scaleX(1.7); }
-    40% { height: 20px; border-radius: 50%; transform: scaleX(1); }
-    100% { top: 0%; }
+/* Bản gốc animate top (easing cả chu kỳ) + height (easing 40% đầu) -> 2 easing khác nhau nên 1 thuộc tính
+   transform không tái tạo đúng. Tách 2 animation: `translate` (thay top) + `scale` (thay height),
+   cả hai chạy trên compositor/GPU, không layout lại -> mượt mà chuyển động khớp 100% bản gốc. */
+@keyframes bounce-dot-y {
+    0% { translate: 0 60px; }
+    100% { translate: 0 0; }
+}
+@keyframes bounce-dot-s {
+    0% { scale: 1.7 0.25; }
+    40% { scale: 1 1; }
+    100% { scale: 1 1; }
 }
 .loader__dot:nth-child(2) { left: 45%; animation-delay: 0.2s; }
 .loader__dot:nth-child(3) { left: auto; right: 15%; animation-delay: 0.3s; }
@@ -72,6 +83,7 @@ html {
     width: var(--dot-size); height: 4px; border-radius: 50%; background: var(--shadow-color);
     position: absolute; top: 62px; transform-origin: 50%; z-index: -1; left: 15%;
     filter: blur(var(--shadow-blur));
+    will-change: transform, opacity;
     animation: bounce-shadow var(--cycle) alternate infinite var(--ease);
 }
 @keyframes bounce-shadow {
