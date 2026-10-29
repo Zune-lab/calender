@@ -1,6 +1,6 @@
 // =========================================================
 // SGU WORKSPACE — planner-push-cron
-// Edge Function này được pg_cron gọi MỖI PHÚT (xem supabase_push_setup.sql).
+// Edge Function này được pg_cron gọi MỖI PHÚT (cần bảng daily_plans + push_subscriptions và secrets VAPID_*).
 // Việc của nó: tìm các "daily_plans" sắp bắt đầu trong 5 phút tới, chưa được báo,
 // rồi bắn Web Push THẬT tới mọi thiết bị đã đăng ký (push_subscriptions) của user đó.
 // Nhờ chạy phía server nên vẫn hoạt động dù trình duyệt của người dùng đang TẮT HẲN.
@@ -18,26 +18,24 @@ const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY")!;
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY")!;
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@example.com";
 
-const NOTIF_LEAD_MIN = 5; // báo trước 5 phút, khớp với phần polling phía client (calendar.js)
+// Báo trước 5 phút (cố định phía server). Phần polling ở client cho người dùng tự chỉnh số phút (Cài Đặt) nên khi
+// họ chọn khác 5 thì push từ server vẫn tới đúng mốc 5 phút này, không theo số phút họ chọn.
+const NOTIF_LEAD_MIN = 5;
 
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
-function todayDateStr(): string {
-    // Giờ Việt Nam (UTC+7) — daily_plans lưu plan_date theo giờ local của người dùng
-    const now = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    return now.toISOString().slice(0, 10);
-}
-
-function nowMinutesVN(): number {
-    const now = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    return now.getUTCHours() * 60 + now.getUTCMinutes();
+// Giờ Việt Nam (UTC+7) — daily_plans lưu plan_date theo giờ local của người dùng. Dùng 1 "đồng hồ VN" cho cả
+// ngày lẫn phút để 2 giá trị luôn khớp nhau (trước đây tính 2 lần ở 2 hàm, qua nửa đêm có thể lệch).
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+function vnClock(): { dateStr: string; minutes: number } {
+    const now = new Date(Date.now() + VN_OFFSET_MS);
+    return { dateStr: now.toISOString().slice(0, 10), minutes: now.getUTCHours() * 60 + now.getUTCMinutes() };
 }
 
 Deno.serve(async () => {
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    const todayStr = todayDateStr();
-    const nowMin = nowMinutesVN();
+    const { dateStr: todayStr, minutes: nowMin } = vnClock();
     const windowEnd = nowMin + NOTIF_LEAD_MIN;
 
     // Lấy các việc HÔM NAY, bắt đầu trong khoảng [now, now+5phút], CHƯA được báo
@@ -46,6 +44,7 @@ Deno.serve(async () => {
         .select("id, user_id, title, start_min, plan_date")
         .eq("plan_date", todayStr)
         .eq("push_notified", false)
+        .eq("is_done", false) // việc đã tick xong thì khỏi đẩy thông báo (client cũng bỏ qua việc đã xong)
         .gte("start_min", nowMin)
         .lte("start_min", windowEnd);
 

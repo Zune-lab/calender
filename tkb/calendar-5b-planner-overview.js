@@ -3,7 +3,7 @@
 //   - Thẻ tiến độ năm (xx% năm đã trôi qua, còn N ngày)
 //   - Lưới 5 tuần, mỗi ngày tối đa 3 chip 1 dòng (thanh màu + icon tick/vòng tròn + tên),
 //     phần dư hiện "+N". Hôm nay được khoanh tròn.
-// Dùng lại: plannerWeekStart, plannerGetMonday, plannerFmtDateInput, plannerIsSameDate,
+// Dùng lại: plannerWeekStart, plannerGetMonday, fmtLocalDate, plannerIsSameDate,
 // PRIORITY_LEVELS, PLANNER_COLORS (calendar-4) và escapeHtml (shared.js).
 
 const PLANNER_OVERVIEW_WEEKS = 5;      // số tuần hiển thị
@@ -50,8 +50,8 @@ function renderPlannerYearCard() {
 async function loadPlannerOverview() {
     if (!currentUser) return;
     const dates = plannerOverviewDates();
-    const startStr = plannerFmtDateInput(dates[0]);
-    const endStr = plannerFmtDateInput(dates[dates.length - 1]);
+    const startStr = fmtLocalDate(dates[0]);
+    const endStr = fmtLocalDate(dates[dates.length - 1]);
 
     updatePlannerOverviewLabel(dates);
     renderPlannerYearCard();
@@ -68,7 +68,7 @@ async function loadPlannerOverview() {
     ]);
 
     plannerOverviewByDate = {};
-    dates.forEach(d => { plannerOverviewByDate[plannerFmtDateInput(d)] = []; });
+    dates.forEach(d => { plannerOverviewByDate[fmtLocalDate(d)] = []; });
 
     if (plansRes.error) {
         console.error('[PlannerOverview] Lỗi tải kế hoạch:', plansRes.error.message);
@@ -131,7 +131,7 @@ function renderPlannerOverview() {
         html += '<div class="pov-week">';
         for (let i = 0; i < 7; i++) {
             const d = dates[w * 7 + i];
-            const key = plannerFmtDateInput(d);
+            const key = fmtLocalDate(d);
             const items = plannerOverviewByDate[key] || [];
             const shown = items.slice(0, PLANNER_OVERVIEW_MAX_CHIPS);
             const extra = items.length - shown.length;
@@ -160,8 +160,7 @@ function bindPlannerOverviewEvents() {
         // Bấm số ngày hoặc "+N" -> nhảy sang lưới giờ của đúng tuần đó
         const jump = e.target.closest('.pov-daynum, .pov-more');
         if (jump) {
-            const [y, m, d] = jump.dataset.date.split('-').map(Number);
-            plannerWeekStart = plannerGetMonday(new Date(y, m - 1, d));
+            plannerWeekStart = plannerGetMonday(parseLocalDateStr(jump.dataset.date) || new Date());
             setPlannerViewMode('grid');
             return;
         }

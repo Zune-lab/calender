@@ -13,8 +13,7 @@ window.applyCustomBG = function() {
 // -> Dashboard/Hồ Sơ đang mở song song cũng tự cập nhật theo qua sự kiện 'storage'/'customBackgroundChange'),
 // đồng thời dọn sạch ô nhập URL và input file để UI không còn hiển thị giá trị cũ.
 window.resetCustomBG = function() {
-    if (window.clearCustomBackground) window.clearCustomBackground();
-    else localStorage.removeItem('customBg');
+    window.clearCustomBackground();
 
     const urlInput = document.getElementById('custom-bg-url');
     if (urlInput) urlInput.value = '';
@@ -33,16 +32,15 @@ const PERSONALIZATION_COLOR_PRESETS = [
     { name: 'LỤC', color: '#38ef7d', soft: 'rgba(56,239,125,0.45)' }
 ];
 
-function renderNeonColorButtons() {
-    const container = document.getElementById('neon-color-presets');
-    if(!container) return;
-
-    let html = '';
-    PERSONALIZATION_COLOR_PRESETS.forEach(p => {
-        html += `<button class="neon-color-btn" onclick="applyPresetColor('${p.color}', this)" title="${p.name}" style="background: ${p.color}; --btn-color: ${p.color}; --btn-soft: ${p.soft};"></button>`;
-    });
-    container.innerHTML = html;
+// Vẽ dãy nút preset vào 1 container; onClickFn là tên hàm global được gọi khi bấm (trước đây 2 hàm chép y hệt).
+function renderColorPresetButtons(containerId, onClickFn) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = PERSONALIZATION_COLOR_PRESETS.map(p =>
+        `<button class="neon-color-btn" onclick="${onClickFn}('${p.color}', this)" title="${p.name}" style="background: ${p.color}; --btn-color: ${p.color}; --btn-soft: ${p.soft};"></button>`
+    ).join('');
 }
+function renderNeonColorButtons() { renderColorPresetButtons('neon-color-presets', 'applyPresetColor'); }
 
 // =========================================
 // "ĐỔI MÀU ACCENT HỆ THỐNG": bổ sung phần code JS còn thiếu hoàn toàn — calendar.html đã có sẵn
@@ -53,16 +51,7 @@ function renderNeonColorButtons() {
 // 'customAccent' — ĐÚNG với key mà shared.js (resolveAccentForUser) đã đọc, và index.js (trang
 // Dashboard) cũng đọc lại y hệt, nên đổi ở đây sẽ đồng bộ sang cả Dashboard/Hồ sơ.
 // =========================================
-function renderAccentColorPresets() {
-    const container = document.getElementById('accent-color-presets');
-    if (!container) return;
-
-    let html = '';
-    PERSONALIZATION_COLOR_PRESETS.forEach(p => {
-        html += `<button class="neon-color-btn" onclick="applyPresetAccentColor('${p.color}', this)" title="${p.name}" style="background: ${p.color}; --btn-color: ${p.color}; --btn-soft: ${p.soft};"></button>`;
-    });
-    container.innerHTML = html;
-}
+function renderAccentColorPresets() { renderColorPresetButtons('accent-color-presets', 'applyPresetAccentColor'); }
 
 // Áp màu accent lên giao diện NGAY LẬP TỨC, không đụng tới localStorage — dùng khi màu đã được
 // lưu/xoá ở nơi khác rồi (vd resetAccentColor gọi clearSavedAccentColor() xong chỉ cần vẽ lại UI).
@@ -98,21 +87,10 @@ window.applyCustomAccentColor = function() {
 }
 
 window.randomizeAccentColor = function() {
-    // shiftHue() (dùng ở trang Dashboard) nằm trong index.js, KHÔNG có ở trang TKB này -> tự
-    // viết 1 hàm HSL->HEX nhỏ gọn riêng, không phụ thuộc file khác, để random ra màu luôn tươi/đủ
-    // sáng (tránh random RGB thô dễ ra màu xỉn, xám khó nhìn trên nền tối của app).
+    // hslToHex() nằm ở shared.js: random theo HSL để màu luôn tươi/đủ sáng (random RGB thô dễ ra màu xỉn).
     const h = Math.floor(Math.random() * 360);
     const hexColor = hslToHex(h, 70, 58);
     setAccentColor(hexColor);
-}
-
-function hslToHex(h, s, l) {
-    s /= 100; l /= 100;
-    const k = n => (n + h / 30) % 12;
-    const a = s * Math.min(l, 1 - l);
-    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-    const toHex = x => Math.round(255 * x).toString(16).padStart(2, '0');
-    return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
 }
 
 // QUAY VỀ mặc định theo tài khoản (hash ổn định ở shared.js) — gỡ hẳn 'customAccent' rồi chỉ vẽ
@@ -157,15 +135,14 @@ window.applySubjectColor = function() {
 }
 
 window.resetSubjectColors = function() {
-    localStorage.removeItem('subjectCustomColors');
+    clearSavedSubjectColors();
     renderTimetable();
 }
 
 window.resetPersonalization = function() {
-    if (window.clearCustomBackground) window.clearCustomBackground();
-    else localStorage.removeItem('customBg');
+    window.clearCustomBackground();
     clearSavedAccentColor();
-    localStorage.removeItem('subjectCustomColors');
+    clearSavedSubjectColors();
     location.reload(); 
 }
 
@@ -215,7 +192,7 @@ window.changeWeek = function(step) {
     
     let currentWeek = parseInt(selector.value);
     let newWeek = currentWeek + step;
-    const maxW = window.maxSemesterWeek || 20; 
+    const maxW = window.maxSemesterWeek || MAX_SEMESTER_WEEKS; 
     
     if (newWeek >= 1 && newWeek <= maxW) {
         selectCustomWeek(newWeek);
@@ -359,13 +336,13 @@ function initCustomDatePicker(inputId) {
         const firstDay = new Date(y, m, 1);
         const startOffset = (firstDay.getDay() + 6) % 7; // Thứ 2 = cột đầu tiên
         const daysInMonth = new Date(y, m + 1, 0).getDate();
-        const tStr = plannerFmtDateInput(new Date());
+        const tStr = fmtLocalDate(new Date());
         const selected = nativeInput.value;
 
         let daysHtml = '';
         for (let i = 0; i < startOffset; i++) daysHtml += `<span class="cdp-day cdp-empty"></span>`;
         for (let d = 1; d <= daysInMonth; d++) {
-            const dStr = plannerFmtDateInput(new Date(y, m, d));
+            const dStr = fmtLocalDate(new Date(y, m, d));
             const isPast = dStr < tStr;
             const isToday = dStr === tStr;
             const isSelected = dStr === selected;
@@ -390,7 +367,7 @@ function initCustomDatePicker(inputId) {
     function updateTriggerText() {
         const span = trigger.querySelector('.custom-date-trigger-text');
         if (nativeInput.value) {
-            const [y, m, d] = nativeInput.value.split('-');
+            const [, m, d] = nativeInput.value.split('-');
             span.textContent = `${d}/${m}`;
             trigger.classList.add('has-value');
         } else {
@@ -437,7 +414,7 @@ function initCustomDatePicker(inputId) {
         const actionBtn = e.target.closest('[data-action]');
         if (actionBtn) {
             if (actionBtn.dataset.action === 'clear') { setValue(''); closePanel(); }
-            else if (actionBtn.dataset.action === 'today') { setValue(plannerFmtDateInput(new Date())); closePanel(); }
+            else if (actionBtn.dataset.action === 'today') { setValue(fmtLocalDate(new Date())); closePanel(); }
         }
     });
 
@@ -490,11 +467,7 @@ document.getElementById('excel-exam-file').addEventListener('change', async func
                     // parseVNExamDate() để tự nhận diện đúng thành phần NĂM (dựa độ dài 4 số)
                     // rồi tự build lại chuỗi DD/MM/YYYY chuẩn, không phụ thuộc vị trí.
                     const parsed = parseVNExamDate(examDate);
-                    if (parsed) {
-                        const dd = String(parsed.getDate()).padStart(2, '0');
-                        const mm = String(parsed.getMonth() + 1).padStart(2, '0');
-                        examDate = `${dd}/${mm}/${parsed.getFullYear()}`;
-                    }
+                    if (parsed) examDate = fmtDMY(parsed);
                 }
 
                 formattedData.push({
@@ -567,7 +540,7 @@ window.loadExams = async function() {
         exams = exams.filter(exam => {
             const d = parseVNExamDate(exam.exam_date);
             if (d) {
-                const daysSince = Math.floor((cleanupToday - d) / (1000 * 60 * 60 * 24));
+                const daysSince = calendarDayDiff(cleanupToday, d);
                 if (daysSince > 14) { staleIds.push(exam.id); return false; }
             }
             return true;
@@ -618,18 +591,8 @@ function renderExamCards(exams) {
     const today = new Date();
     today.setHours(0,0,0,0);
     
-    const gradientColors = [ ['#FF3366', '#FF9933'], ['#00C9FF', '#92FE9D'], ['#9d4edd', '#E100FF'], ['#11998e', '#38ef7d'], ['#FDBB2D', '#22C1C3'] ];
-    
-    const subjectColorMap = {}; 
-    let colorIndex = 0;
-    allLoadedSubjects.forEach(sub => {
-        const baseName = baseSubjectKey(sub.name);
-        if (!subjectColorMap[baseName]) { 
-            subjectColorMap[baseName] = gradientColors[colorIndex % gradientColors.length][0]; 
-            colorIndex++; 
-        }
-    });
-
+    // Cùng bảng màu + cùng thứ tự gán với bảng TKB/Dashboard (shared.js) -> môn thi cùng màu với môn học.
+    const subjectColorMap = buildSubjectColorMap(allLoadedSubjects);
     const savedSubjectColors = getSavedSubjectColors();
 
     exams.forEach(exam => {
@@ -637,18 +600,12 @@ function renderExamCards(exams) {
 
         let countdownHtml = '';
         if (examDateObj) {
-            const diffTime = examDateObj - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const diffDays = calendarDayDiff(examDateObj, today); // số NGÀY LỊCH (không lệch khi qua giờ mùa hè)
 
             // Tính chính xác còn bao nhiêu PHÚT tới giờ thi (ghép ngày thi + giờ bắt đầu thật),
             // để cảnh báo khẩn khi sắp tới giờ, không chỉ dựa vào so sánh ngày
-            let minutesUntilExam = null;
-            const examClockMin = parseClockMinutes(exam.exam_time); // nhận cả "07:30", "7h30", "07g30"
-            if (examClockMin !== null) {
-                const examDateTime = new Date(examDateObj);
-                examDateTime.setHours(Math.floor(examClockMin / 60), examClockMin % 60, 0, 0);
-                minutesUntilExam = (examDateTime - new Date()) / 60000;
-            }
+            const examStart = examStartDate(exam); // nhận cả "07:30", "7h30", "07g30"
+            const minutesUntilExam = examStart ? (examStart - new Date()) / 60000 : null;
 
             if (minutesUntilExam !== null && minutesUntilExam > 0 && minutesUntilExam <= 30) {
                 const minutesLeft = Math.ceil(minutesUntilExam);
@@ -666,15 +623,7 @@ function renderExamCards(exams) {
         }
         
         const baseName = baseSubjectKey(exam.subject_name);
-        let c1 = '#FF3366'; 
-        
-        if (savedSubjectColors[baseName]) {
-            c1 = savedSubjectColors[baseName]; 
-        } else if (window.globalSubjectColors && window.globalSubjectColors[baseName]) {
-            c1 = window.globalSubjectColors[baseName];
-        } else if (subjectColorMap[baseName]) {
-            c1 = subjectColorMap[baseName]; 
-        }
+        const c1 = savedSubjectColors[baseName] || (subjectColorMap[baseName] && subjectColorMap[baseName][0]) || SUBJECT_GRADIENTS[0][0];
 
         html += `
             <div class="exam-card" style="--c1: ${escapeHtml(c1)};">

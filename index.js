@@ -27,19 +27,16 @@ function setHeroSubjects(subs) {
 // (load trước file này trong index.html)
 
 // ==========================================
-// LƯỚI GIỜ TIẾT HỌC SGU (đồng bộ với sguStartTime/sguEndTime trong tkb/calendar.js)
+// LƯỚI GIỜ TIẾT HỌC SGU — nằm ở shared.js (SGU_PERIOD_TIMES), dùng chung với bảng TKB + import Excel.
 // Dùng để biết CHÍNH XÁC một lớp đang diễn ra hay chưa, thay vì chỉ so "cùng ngày"
 // ==========================================
-const PERIOD_START_MINS = { 1:420, 2:470, 3:540, 4:590, 5:640, 6:780, 7:830, 8:900, 9:950, 10:1000, 11:1060, 12:1110, 13:1160, 14:1210 };
-const PERIOD_END_MINS   = { 1:470, 2:520, 3:590, 4:640, 5:690, 6:830, 7:880, 8:950, 9:1000, 10:1050, 11:1110, 12:1160, 13:1210, 14:1260 };
-
 function parsePeriodRange(sub) {
     const match = (sub.time_slot || '').match(/Tiết\s*(\d+)(?:\s*-\s*(\d+))?/i);
     if (!match) return null;
-    const startP = parseInt(match[1]);
-    const endP = match[2] ? parseInt(match[2]) : startP;
-    const startMin = PERIOD_START_MINS[startP];
-    const endMin = PERIOD_END_MINS[endP];
+    const startP = parseInt(match[1], 10);
+    const endP = match[2] ? parseInt(match[2], 10) : startP;
+    const startMin = sguPeriodStartMin(startP);
+    const endMin = sguPeriodEndMin(endP);
     if (startMin === undefined || endMin === undefined) return null;
     return { startMin, endMin };
 }
@@ -55,11 +52,11 @@ function parsePeriodRange(sub) {
 const MERGE_MAX_BREAK_MIN = 30;
 
 function computeGridGaps() {
-    const nums = Object.keys(PERIOD_START_MINS).map(Number).sort((a, b) => a - b);
+    const nums = Object.keys(SGU_PERIOD_TIMES).map(Number).sort((a, b) => a - b);
     const gaps = [];
     for (let i = 0; i < nums.length - 1; i++) {
-        const breakStart = PERIOD_END_MINS[nums[i]];      // hết tiết trước
-        const breakEnd = PERIOD_START_MINS[nums[i + 1]];  // vào tiết sau
+        const breakStart = sguPeriodEndMin(nums[i]);      // hết tiết trước
+        const breakEnd = sguPeriodStartMin(nums[i + 1]);  // vào tiết sau
         if (breakEnd > breakStart) {
             gaps.push({ startMin: breakStart, endMin: breakEnd, len: breakEnd - breakStart,
                         long: breakEnd - breakStart > MERGE_MAX_BREAK_MIN });
@@ -71,12 +68,10 @@ const GRID_GAPS = computeGridGaps();
 const GRID_BREAKS = GRID_GAPS.filter(g => !g.long);      // ra chơi (nằm trong 1 khối học)
 const GRID_LONG_BREAKS = GRID_GAPS.filter(g => g.long);  // nghỉ trưa (11:30–13:00 với lưới hiện tại)
 
-function fmtClock(mins) {
-    return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
-}
+const fmtClock = fmtMinutesHM; // shared.js
 
 function baseSubjectName(sub) {
-    return String(sub.name || 'Môn Ẩn').split('-')[0].split('(')[0].trim();
+    return baseSubjectLabel(sub.name) || 'Môn Ẩn';
 }
 // (khoá gộp môn viết thường dùng baseSubjectKey() ở shared.js — cùng quy tắc với trang TKB)
 
@@ -203,16 +198,17 @@ function paintHeroBreaks(d) {
 // Tìm buổi học gần nhất trong tương lai, bắt đầu tìm SAU (afterWeek, afterDay) — dùng cho
 // cả trường hợp "hết lịch hôm nay" lẫn "lớp đang học xong thì lớp kế tiếp là gì"
 function findNearestFutureSession(afterWeek, afterDay) {
-    let candidates = [];
+    const candidates = [];
     dashSubjects.forEach(sub => {
-        if (!sub.weeks) return;
-        for (let w = afterWeek; w < sub.weeks.length; w++) {
-            const char = sub.weeks.charAt(w);
-            if (char !== '-' && char !== ' ') {
-                if (w > afterWeek || (w === afterWeek && sub.day > afterDay)) {
-                    candidates.push({ sub, w, day: sub.day });
-                    break;
-                }
+        // Cùng quy tắc isSubjectActiveInWeek() (shared.js): buổi KHÔNG có chuỗi tuần = học mọi tuần
+        // (trước đây bị bỏ qua hẳn nên không bao giờ được chọn làm "lớp tiếp theo").
+        const hasWeeks = !!(sub.weeks && String(sub.weeks).trim());
+        const lastW = hasWeeks ? sub.weeks.length - 1 : afterWeek + 1;
+        for (let w = afterWeek; w <= lastW; w++) {
+            if (!isSubjectActiveInWeek(sub, w)) continue;
+            if (w > afterWeek || sub.day > afterDay) {
+                candidates.push({ sub, w, day: sub.day });
+                break;
             }
         }
     });
@@ -243,40 +239,34 @@ if (window.syncCustomBackground) syncCustomBackground();
 
 // Ẩn/hiện lại blob ambient NGAY khi ảnh nền tuỳ chỉnh được đổi (từ Cài Đặt TKB, Hồ Sơ, hoặc
 // từ 1 tab khác) — không cần đợi tới lần render hero kế tiếp mới cập nhật theo.
-window.addEventListener('customBackgroundChange', (e) => {
+function applyCustomBgState(active, isLightBg) {
     const ambient = document.querySelector('.ambient-bg');
-    if (ambient) ambient.style.display = e.detail.active ? 'none' : '';
+    if (ambient) ambient.style.display = active ? 'none' : '';
     const scrim = document.getElementById('bg-scrim');
-    if (scrim) scrim.classList.toggle('active', !!e.detail.active);
+    if (scrim) scrim.classList.toggle('active', !!active);
     // FIX "CHỮ KHÓ ĐỌC TRÊN ẢNH NỀN TUỲ CHỈNH": trước đây chữ trên thẻ TKB chỉ đổi theo
     // light/dark mode, không quan tâm ẢNH NỀN thực tế sáng hay tối -> chữ trắng chìm vào ảnh
     // trắng, hoặc chữ đen chìm vào ảnh tối. Giờ bg-sync.js tự ĐO độ sáng trung bình của ảnh
     // (event.detail.isLightBg) và ở đây chỉ cần bật đúng class màu chữ tương ứng — không phụ
     // thuộc đang bật light hay dark mode nữa. Xem rule ở index.css (body.has-custom-bg /
     // body.has-custom-bg.bg-photo-light).
-    document.body.classList.toggle('has-custom-bg', !!e.detail.active);
-    document.body.classList.toggle('bg-photo-light', !!e.detail.active && !!e.detail.isLightBg);
-});
+    document.body.classList.toggle('has-custom-bg', !!active);
+    document.body.classList.toggle('bg-photo-light', !!active && !!isLightBg);
+}
+window.addEventListener('customBackgroundChange', (e) => applyCustomBgState(e.detail.active, e.detail.isLightBg));
 
 // ==========================================
 // TÔ MÀU AMBIENT BLOB THEO ACCENT (thay cho set background-image phẳng 1 màu cũ)
 // ==========================================
 function applyAmbientTint(hexColor) {
-    if (window.hasCustomBackground ? window.hasCustomBackground() : localStorage.getItem('customBg')) {
-        // Người dùng đã đặt ảnh nền tuỳ chỉnh (ở Cài Đặt TKB/Hồ Sơ) -> ẩn blob, không đè lên,
-        // đồng thời bật lớp kính mờ (.bg-scrim) để phủ dịu ảnh nền, giúp chữ luôn đọc rõ.
-        const ambient = document.querySelector('.ambient-bg');
-        if (ambient) ambient.style.display = 'none';
-        const scrim = document.getElementById('bg-scrim');
-        if (scrim) scrim.classList.add('active');
-        document.body.classList.add('has-custom-bg'); // xem ghi chú ở listener 'customBackgroundChange' phía trên
+    if (window.hasCustomBackground()) {
+        // Người dùng đã đặt ảnh nền tuỳ chỉnh (ở Cài Đặt TKB/Hồ Sơ) -> ẩn blob, bật lớp kính mờ.
         // Hero có thể được render lại (đổi accent) TRƯỚC KHI bg-sync.js đo xong độ sáng ảnh lần
         // đầu — dùng cache đã đo được gần nhất (mặc định false = coi ảnh tối) thay vì bỏ trống.
-        document.body.classList.toggle('bg-photo-light', !!(window.isCustomBackgroundLight && window.isCustomBackgroundLight()));
+        applyCustomBgState(true, window.isCustomBackgroundLight());
         return;
     }
-    document.body.classList.remove('has-custom-bg');
-    document.body.classList.remove('bg-photo-light');
+    applyCustomBgState(false, false);
     const blobA = document.getElementById('ambient-blob-a');
     const blobB = document.getElementById('ambient-blob-b');
     if (blobA) blobA.style.background = `radial-gradient(circle, ${hexColor}48 0%, transparent 60%)`;
@@ -288,55 +278,6 @@ function applyAmbientTint(hexColor) {
 // Tính màu bù (180°) đã giảm bão hòa + tăng sáng nhẹ -> tương phản nhưng dịu mắt
 function softComplement(hex) {
     return shiftHue(hex, 180, 0.55, 0.12);
-}
-
-// Dịch hue của 1 màu hex đi X độ, có thể tuỳ chỉnh hệ số bão hòa (satFactor)
-// và cộng thêm độ sáng (lightBoost, 0-1) -> tạo màu thứ 2 hài hòa cho blob-b
-function shiftHue(hex, degrees, satFactor = 1, lightBoost = 0) {
-    let r = parseInt(hex.slice(1, 3), 16) / 255;
-    let g = parseInt(hex.slice(3, 5), 16) / 255;
-    let b = parseInt(hex.slice(5, 7), 16) / 255;
-
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    let h, s, l = (max + min) / 2;
-
-    if (max === min) { h = s = 0; }
-    else {
-        const d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        switch (max) {
-            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-            case g: h = (b - r) / d + 2; break;
-            default: h = (r - g) / d + 4;
-        }
-        h /= 6;
-    }
-
-    h = (h * 360 + degrees) % 360 / 360;
-    s = Math.max(0, Math.min(1, s * satFactor));
-    l = Math.max(0, Math.min(1, l + lightBoost));
-
-    function hue2rgb(p, q, t) {
-        if (t < 0) t += 1;
-        if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-        return p;
-    }
-
-    let r2, g2, b2;
-    if (s === 0) { r2 = g2 = b2 = l; }
-    else {
-        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        const p = 2 * l - q;
-        r2 = hue2rgb(p, q, h + 1/3);
-        g2 = hue2rgb(p, q, h);
-        b2 = hue2rgb(p, q, h - 1/3);
-    }
-
-    const toHex = v => Math.round(v * 255).toString(16).padStart(2, '0');
-    return '#' + toHex(r2) + toHex(g2) + toHex(b2);
 }
 
 function renderProfilePill(user, meta) {
@@ -358,7 +299,7 @@ function renderProfilePill(user, meta) {
         if (avatarDiv) {
             // Dựng bằng DOM API (meta.avatar do người dùng ghi vào user_metadata -> không được nối vào innerHTML)
             avatarDiv.textContent = '';
-            if (/^(data:image\/|https?:\/\/)/i.test(String(meta.avatar))) {
+            if (isSafeImageSrc(meta.avatar)) {
                 const img = document.createElement('img');
                 img.src = meta.avatar;
                 img.title = nameToShow;
@@ -386,7 +327,7 @@ function renderProfilePill(user, meta) {
     profileWrap.style.cursor = 'pointer';
     profileWrap.title = "Sửa Hồ Sơ Của Bạn";
     profileWrap.onclick = () => {
-        localStorage.setItem('profileReturnTo', '../index.html');
+        localStorage.setItem(STORAGE_KEYS.profileReturnTo, '../index.html');
         navigateWithFade('profile/profile.html');
     };
 }
@@ -458,6 +399,11 @@ async function initDashboard() {
         // Nếu truy vấn CHÍNH thất bại (sau khi đã retry) thì báo lỗi rõ ràng — trước đây data=null bị
         // coi như "chưa có TKB" và hiện nhầm "TRỐNG LỊCH HỌC", khiến người dùng tưởng mất dữ liệu.
         if (subjectsRes.error) throw new Error('Không tải được thời khóa biểu: ' + subjectsRes.error.message);
+
+        // Truy vấn phụ lỗi (sau khi đã retry): không chặn cả trang nhưng phải ghi log, trước đây
+        // lỗi bị nuốt và "MÔN THI" hiện 0 như thể người dùng chưa có lịch thi.
+        if (examsRes.error) console.warn('[Dashboard] Không tải được lịch thi:', examsRes.error.message);
+        if (detailsRes.error) console.warn('[Dashboard] Không tải được ghi chú/bài tập:', detailsRes.error.message);
 
         dashSubjects = subjectsRes.data || [];
         const allDetails = detailsRes.data || [];
@@ -619,7 +565,7 @@ function classCountdownChip(status, range, d) {
 // Nhãn ngày: HÔM NAY / NGÀY MAI / THỨ X (· TUẦN N nếu không phải tuần này)
 function heroDayLabel(sessionDay, curDay, status, sessionWeek, weekIndex) {
     if (status === 'ongoing' || status === 'today') return 'HÔM NAY';
-    const dayName = sessionDay === 8 ? 'CHỦ NHẬT' : 'THỨ ' + sessionDay;
+    const dayName = dayLabelVN(sessionDay, true);
     const sameWeek = sessionWeek === weekIndex;
     const tomorrow = (sameWeek && sessionDay === curDay + 1) ||
                      (sessionWeek === weekIndex + 1 && curDay === 8 && sessionDay === 2);
@@ -631,15 +577,8 @@ function renderExamDayHero(exam, now) {
     const rawName = (exam.subject_name || 'Môn thi').trim();
 
     // Tính còn bao nhiêu phút tới giờ thi để quyết định mức độ khẩn cấp hiển thị
-    let minutesUntilExam = null;
-    let examStart = null;
-    const examClockMin = parseClockMinutes(exam.exam_time);
-    if (examClockMin !== null) {
-        const examDateTime = new Date(now);
-        examDateTime.setHours(Math.floor(examClockMin / 60), examClockMin % 60, 0, 0);
-        minutesUntilExam = (examDateTime - now) / 60000;
-        examStart = examDateTime;
-    }
+    const examStart = examStartDate(exam); // null nếu không đọc được giờ thi
+    const minutesUntilExam = examStart ? (examStart - now) / 60000 : null;
 
     const isUrgent = minutesUntilExam !== null && minutesUntilExam > 0 && minutesUntilExam <= 30;
     const isPast = minutesUntilExam !== null && minutesUntilExam <= 0;
@@ -814,24 +753,20 @@ function renderHero(now, weekIndex, examsData) {
 
     // Hiển thị "lớp kế tiếp" khi lớp hiện tại đang diễn ra, để dù hết tiết sớm vẫn biết tiết sau là gì
     if (status === 'ongoing' && nextAfter && nextLineEl && nextTextEl) {
-        const dayLabel = nextAfter.day === curDay ? "hôm nay" : (nextAfter.day === 8 ? "Chủ Nhật" : "Thứ " + nextAfter.day);
+        const dayLabel = nextAfter.day === curDay ? "hôm nay" : dayLabelVN(nextAfter.day);
         nextTextEl.innerText = `${nextAfter.block.name} • ${dayLabel}, ${nextAfter.block.hoursText}`;
         nextLineEl.style.display = 'flex';
     }
 
-    const colors = ['#FF3366', '#00C9FF', '#7c3aed', '#11998e', '#FDBB2D'];
-    let colorMap = {}, i = 0;
-    dashSubjects.forEach(s => {
-        const bn = baseSubjectKey(s.name);
-        if (!colorMap[bn]) colorMap[bn] = colors[i++ % colors.length];
-    });
+    const colorMap = buildSubjectColorMap(dashSubjects); // cùng bảng màu + cùng thứ tự gán với trang TKB (shared.js)
 
     const savedColors = getSavedSubjectColors();
     // GIỮ NGUYÊN THEO YÊU CẦU: màu ở đây LUÔN theo đúng môn học đang hiển thị (không bị màu
     // 'customAccent' ở Cài Đặt ghi đè), để nhìn màu là biết ngay sắp học môn gì. "Đổi màu Accent
     // hệ thống" ở Cài Đặt chỉ có tác dụng ở các màn hình KHÔNG có môn học cụ thể để tô theo
     // (chưa nhập TKB, kỳ học chưa bắt đầu/đã kết thúc) — xem nhánh "if (!upcoming)" phía trên.
-    const finalColor = savedColors[rawName.toLowerCase()] || colorMap[rawName.toLowerCase()] || '#ff4655';
+    const subjectKey = baseSubjectKey(rawName);
+    const finalColor = savedColors[subjectKey] || (colorMap[subjectKey] && colorMap[subjectKey][0]) || SUBJECT_GRADIENTS[0][0];
 
     document.documentElement.style.setProperty('--accent', finalColor);
     applyAmbientTint(finalColor);
@@ -860,12 +795,11 @@ window.switchWidget = function(idx, btn) {
         }
 
         const todayStr = fmtLocalDate(new Date()); // ngày LOCAL (toISOString là UTC: 00:00–07:00 sáng ở VN còn ra "hôm qua")
-        const priorityDot = { high: '#ff4d4f', normal: '#ffb020', low: '#8b96a5' };
         box.innerHTML = merged.slice(0, 5).map(item => {
-            const daysUntil = Math.round((new Date(item.due_date + 'T00:00:00') - new Date(todayStr + 'T00:00:00')) / 86400000);
+            const daysUntil = daysBetweenDateStrings(todayStr, item.due_date);
             const dueLabel = daysUntil < 0 ? `Trễ ${-daysUntil} ngày` : (daysUntil === 0 ? 'Hôm nay' : `Còn ${daysUntil} ngày`);
             const typeLabel = item.type === 'task' ? 'Bài tập' : 'Ghi chú';
-            const dotColor = priorityDot[item.priority] || priorityDot.normal;
+            const dotColor = getPriorityInfo(item.priority).color;
             return `
             <div class="list-item" onclick="window.goToTab('timetable')">
                 <div class="list-icon" style="color:${dotColor};"><i class="fas fa-circle" style="font-size:8px;"></i></div>
@@ -919,7 +853,7 @@ document.addEventListener('visibilitychange', () => {
 // CẦU NỐI NHẢY TAB TỪ DASHBOARD VÀO WORKSPACE
 // ==========================================
 window.goToTab = function(tabName) {
-    localStorage.setItem('targetTab', tabName);
+    localStorage.setItem(STORAGE_KEYS.targetTab, tabName);
     navigateWithFade('tkb/calendar.html');
 };
 
@@ -941,9 +875,5 @@ initDashboard();
 // chỉ dùng được trên máy đã cài) và để nhận Push Notification thật (xem sw.js).
 // ==========================================
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(err => {
-            console.warn('[PWA] Không đăng ký được Service Worker:', err.message);
-        });
-    });
+    window.addEventListener('load', registerAppServiceWorker);
 }

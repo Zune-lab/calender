@@ -20,7 +20,7 @@
 // =========================================================================
 
 (function () {
-    const BG_KEY = 'customBg';
+    const BG_KEY = STORAGE_KEYS.customBg;
     let cachedIsLightBg = false; // mặc định coi ảnh là TỐI cho tới khi đo được (an toàn hơn: chữ
                                   // sáng + bg-scrim tối vốn là hành vi cũ, ít rủi ro hơn nếu đo lỗi)
 
@@ -62,21 +62,29 @@
     // từng điểm ảnh, bỏ qua điểm trong suốt. Trả về null nếu không đo được (ảnh lỗi, hoặc ảnh dán
     // từ link URL ngoài không cho phép đọc pixel qua CORS — canvas bị "tainted").
     // ---------------------------------------------------------
-    function computeBrightness(img) {
+    // Trả về {r, g, b, luminance} trung bình (bỏ điểm trong suốt) hoặc null nếu không đọc được.
+    // topFraction (0-1) chỉ lấy dải TRÊN CÙNG của ảnh (vd header nằm đè lên).
+    function computeImageStats(img, topFraction) {
         try {
             const w = 24, h = 24;
             const canvas = document.createElement('canvas');
             canvas.width = w; canvas.height = h;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, w, h);
+            if (topFraction && topFraction < 1) {
+                ctx.drawImage(img, 0, 0, img.naturalWidth, Math.max(1, img.naturalHeight * topFraction), 0, 0, w, h);
+            } else {
+                ctx.drawImage(img, 0, 0, w, h);
+            }
             const data = ctx.getImageData(0, 0, w, h).data;
-            let total = 0, count = 0;
+            let r = 0, g = 0, b = 0, count = 0;
             for (let i = 0; i < data.length; i += 4) {
                 if (data[i + 3] < 10) continue; // bỏ qua điểm gần như trong suốt
-                total += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                r += data[i]; g += data[i + 1]; b += data[i + 2];
                 count++;
             }
-            return count ? total / count : null;
+            if (!count) return null;
+            r /= count; g /= count; b /= count;
+            return { r: Math.round(r), g: Math.round(g), b: Math.round(b), luminance: 0.299 * r + 0.587 * g + 0.114 * b };
         } catch (e) {
             return null; // canvas bị tainted (ảnh CORS) hoặc lỗi khác -> không xác định được
         }
@@ -86,19 +94,22 @@
     // preloadThenApply, vì gắn crossOrigin có thể khiến ảnh KHÔNG tải được nếu server ảnh không
     // hỗ trợ CORS — trong khi dùng làm background CSS thuần thì không cần CORS gì cả). Nếu việc
     // đo thất bại vì bất kỳ lý do gì, coi như "không xác định" -> mặc định là ảnh tối (an toàn).
-    function detectBrightness(url) {
+    function measureImage(url, topFraction) {
         return new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = 'anonymous';
             let done = false;
             let timer = null;
             const finish = (val) => { if (!done) { done = true; clearTimeout(timer); resolve(val); } };
-            img.onload = () => finish(computeBrightness(img));
+            img.onload = () => finish(computeImageStats(img, topFraction));
             img.onerror = () => finish(null);
             img.src = url;
             timer = setTimeout(() => finish(null), 1500); // đo chậm/treo thì thôi, không xác định được
         });
     }
+    // Cho các trang khác (header TKB, topbar Hồ Sơ) dùng lại thay vì tự vẽ canvas riêng.
+    window.measureImageStats = measureImage;
+    const detectBrightness = (url) => measureImage(url).then((st) => (st ? st.luminance : null));
 
     // Ngưỡng coi là "ảnh sáng màu" — trên thang 0-255. 165 chọn hơi nghiêng về phía "chữ sáng"
     // (tức ảnh phải khá sáng mới bị coi là nền sáng), vì chữ sáng + đổ bóng tối vốn đã đọc được
@@ -175,17 +186,18 @@
     // chỉ gọi đúng 1-2 dòng dưới đây thay vì tự viết lại FileReader/localStorage riêng.
     // ==========================================
 
-    // Gắn vào 1 <input type="file"> theo id: validate dung lượng (tối đa 3.5MB), đọc base64,
+    // Gắn vào 1 <input type="file"> theo id: validate dung lượng (tối đa 15MB — ảnh được nén lại trước khi lưu), đọc base64,
     // rồi lưu + áp dụng qua setCustomBackground(). Dùng window.showAlert() nếu trang có sẵn
     // (TKB), fallback về alert() thường nếu trang chưa có hàm này (Dashboard/Hồ Sơ).
+    // Hiện thông báo: dùng showAlert của trang (TKB) nếu có, không thì alert() thường.
+    function notify(msg, title) {
+        if (typeof window.showAlert === 'function') window.showAlert(msg, title);
+        else alert(title ? `${title}: ${msg}` : msg);
+    }
+
     window.attachBgFileInput = function (inputId) {
         const input = document.getElementById(inputId);
         if (!input) return;
-
-        const notify = (msg, title) => {
-            if (typeof window.showAlert === 'function') window.showAlert(msg, title);
-            else alert(title ? `${title}: ${msg}` : msg);
-        };
 
         input.addEventListener('change', function (e) {
             const file = e.target.files[0];
@@ -204,8 +216,9 @@
                 return;
             }
 
+            const input = this;
             const reader = new FileReader();
-            reader.onerror = () => notify("Không đọc được file ảnh này. Hãy thử ảnh khác.", "Lỗi đọc ảnh");
+            reader.onerror = () => { notify("Không đọc được file ảnh này. Hãy thử ảnh khác.", "Lỗi đọc ảnh"); input.value = ''; };
             reader.onload = function (event) {
                 compressImageDataUrl(event.target.result).then((dataUri) => {
                     try {
@@ -213,6 +226,7 @@
                     } catch (err) {
                         notify("Bộ nhớ tạm của trình duyệt đã đầy. Bạn hãy dùng ảnh nhẹ hơn hoặc sử dụng dán Link URL nhé!", "Lỗi bộ nhớ");
                     }
+                    input.value = ''; // chọn lại ĐÚNG file đó lần sau vẫn kích hoạt 'change' (trước đây bị bỏ qua)
                 });
             };
             reader.readAsDataURL(file);
@@ -252,15 +266,13 @@
         if (!input) return;
         const url = input.value.trim();
         if (!url) return;
-        if (!/^(https?:\/\/|data:image\/)/i.test(url)) {
-            const msg = "Link ảnh phải bắt đầu bằng http:// hoặc https://";
-            if (typeof window.showAlert === 'function') window.showAlert(msg, "Link không hợp lệ"); else alert(msg);
+        if (!isSafeImageSrc(url)) {
+            notify("Link ảnh phải bắt đầu bằng http:// hoặc https://", "Link không hợp lệ");
             return;
         }
         try { window.setCustomBackground(url); }
         catch (err) {
-            const msg = "Bộ nhớ tạm của trình duyệt đã đầy, không lưu được link ảnh.";
-            if (typeof window.showAlert === 'function') window.showAlert(msg, "Lỗi bộ nhớ"); else alert(msg);
+            notify("Bộ nhớ tạm của trình duyệt đã đầy, không lưu được link ảnh.", "Lỗi bộ nhớ");
         }
     };
 

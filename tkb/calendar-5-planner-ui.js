@@ -1,12 +1,12 @@
 // ===== calendar-5-planner-ui.js =====
 // Phần 5/5 của calendar.js. Nạp SAU calendar-4-planner-notify.js (dùng chung các hằng số/hàm
-// khai báo ở đó, ví dụ PLANNER_HOUR_PX, plannerFmtDateInput...).
+// khai báo ở đó, ví dụ PLANNER_HOUR_PX, fmtLocalDate...).
 // Nội dung: dựng lưới tuần Kế Hoạch Ngày, kéo-thả tạo/sửa/xoá khối việc, popup sửa việc.
 
 // ---- Không cho thêm/dời việc về NGÀY ĐÃ QUA (so chuỗi YYYY-MM-DD là đủ, vì cùng định dạng) ----
 // Việc đã có ở ngày cũ vẫn sửa/tick/xóa bình thường; chỉ chặn TẠO MỚI và DỜI SANG ngày cũ khác.
 function plannerIsPastDate(dateStr) {
-    return !!dateStr && dateStr < plannerFmtDateInput(new Date());
+    return !!dateStr && dateStr < fmtLocalDate(new Date());
 }
 
 function initDayPlanner() {
@@ -144,7 +144,7 @@ window.openPlannerQuickAdd = function () {
     let start = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
     start = Math.min(start, 1440 - PLANNER_MIN_DURATION);
     const end = Math.min(1440, start + 60);
-    const dateStr = plannerFmtDateInput(now);
+    const dateStr = fmtLocalDate(now);
     const existingCount = (plannerBlocksByDate[dateStr] || []).length;
     openPlannerEditor({
         id: null, dateStr, title: '', start_min: start, end_min: end,
@@ -154,7 +154,7 @@ window.openPlannerQuickAdd = function () {
 
 // Chuyển lưới sang tuần chứa `dateStr` rồi tải lại (dùng khi việc vừa lưu/dời nằm ngoài tuần đang xem)
 async function plannerShowWeekOf(dateStr) {
-    plannerWeekStart = plannerGetMonday(new Date(dateStr + 'T00:00:00'));
+    plannerWeekStart = plannerGetMonday(parseLocalDateStr(dateStr) || new Date());
     updatePlannerWeekHeader();
     updatePlannerWeekLabel();
     await loadPlannerBlocks();
@@ -181,11 +181,11 @@ function updatePlannerWeekHeader() {
         const col = document.getElementById(`planner-col-${i}`);
         if (!cell || !col) return;
         const isToday = plannerIsSameDate(d, today);
-        cell.querySelector('.dh-name').innerText = PLANNER_DAY_NAMES[d.getDay()];
-        cell.querySelector('.dh-date').innerText = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+        cell.querySelector('.dh-name').innerText = plannerDayName(d);
+        cell.querySelector('.dh-date').innerText = fmtDM(d);
         cell.classList.toggle('is-today', isToday);
         col.classList.toggle('is-today-col', isToday);
-        col.dataset.date = plannerFmtDateInput(d);
+        col.dataset.date = fmtLocalDate(d);
         col.classList.toggle('is-past-col', plannerIsPastDate(col.dataset.date));
     });
 }
@@ -197,7 +197,7 @@ function updatePlannerWeekLabel() {
     const start = dates[0], end = dates[6];
     const today = new Date();
     const isThisWeek = plannerIsSameDate(plannerGetMonday(today), plannerWeekStart);
-    const rangeText = `${String(start.getDate()).padStart(2, '0')}/${String(start.getMonth() + 1).padStart(2, '0')} - ${String(end.getDate()).padStart(2, '0')}/${String(end.getMonth() + 1).padStart(2, '0')}`;
+    const rangeText = `${fmtDM(start)} - ${fmtDM(end)}`;
     label.innerText = isThisWeek ? `Tuần này, ${rangeText}` : `Tuần ${rangeText}`;
 }
 
@@ -232,12 +232,12 @@ async function loadPlannerBlocks() {
     // KHÔNG phụ thuộc đang xem đúng tuần nào — việc cũ ở tuần khác (không phải tuần đang mở)
     // vẫn bị dọn đúng hạn. Cùng kiểu với cách loadExams() tự xóa lịch thi cũ quá 14 ngày.
     // Chỉ dọn tối đa 1 lần/ngày/thiết bị (trước đây 1 lệnh DELETE mỗi lần chuyển tab/đổi tuần).
-    const cleanupDayKey = plannerFmtDateInput(new Date());
+    const cleanupDayKey = fmtLocalDate(new Date());
     if (localStorage.getItem('plannerCleanupDay') !== cleanupDayKey) {
         try { localStorage.setItem('plannerCleanupDay', cleanupDayKey); } catch (e) {}
         const cleanupCutoff = new Date(); cleanupCutoff.setHours(0, 0, 0, 0); cleanupCutoff.setDate(cleanupCutoff.getDate() - 7);
         sbClient.from('daily_plans').delete()
-            .eq('user_id', currentUser.id).eq('is_done', true).lt('plan_date', plannerFmtDateInput(cleanupCutoff))
+            .eq('user_id', currentUser.id).eq('is_done', true).lt('plan_date', fmtLocalDate(cleanupCutoff))
             .then(({ error: cleanupErr }) => {
                 if (cleanupErr) console.warn('[Planner] Lỗi tự xóa việc đã xong quá hạn:', cleanupErr.message);
             });
@@ -250,8 +250,8 @@ async function loadPlannerBlocks() {
     }
 
     const dates = plannerWeekDates();
-    const startStr = plannerFmtDateInput(dates[0]);
-    const endStr = plannerFmtDateInput(dates[6]);
+    const startStr = fmtLocalDate(dates[0]);
+    const endStr = fmtLocalDate(dates[6]);
 
     // 2 truy vấn độc lập -> chạy song song (trước đây nối đuôi nhau)
     const [{ data, error }, { data: dueItems, error: dueErr }] = await Promise.all([
@@ -271,7 +271,7 @@ async function loadPlannerBlocks() {
     if (loadSeq !== _plannerLoadSeq) return; // đã có lần tải mới hơn (đổi tuần tiếp) -> bỏ kết quả cũ
 
     plannerBlocksByDate = {};
-    dates.forEach(d => { plannerBlocksByDate[plannerFmtDateInput(d)] = []; });
+    dates.forEach(d => { plannerBlocksByDate[fmtLocalDate(d)] = []; });
 
     if (error) {
         console.error('[Planner] Lỗi tải kế hoạch tuần:', error.message);
@@ -289,7 +289,7 @@ async function loadPlannerBlocks() {
 
     // DẢI "CẢ NGÀY": dữ liệu dueItems đã tải song song ở trên.
     plannerAllDayByDate = {};
-    dates.forEach(d => { plannerAllDayByDate[plannerFmtDateInput(d)] = []; });
+    dates.forEach(d => { plannerAllDayByDate[fmtLocalDate(d)] = []; });
     if (dueErr) {
         console.error('[Planner] Lỗi tải Ghi chú/Công việc sắp tới Hạn:', dueErr.message);
     } else {
@@ -309,7 +309,7 @@ function renderPlannerAllDay() {
     dates.forEach((d, i) => {
         const col = document.getElementById(`planner-allday-${i}`);
         if (!col) return;
-        const items = plannerAllDayByDate[plannerFmtDateInput(d)] || [];
+        const items = plannerAllDayByDate[fmtLocalDate(d)] || [];
         if (items.length) hasAny = true;
         col.innerHTML = items.map(item => {
             const info = getPriorityInfo(item.priority);
@@ -653,7 +653,7 @@ function onPlannerBlockPointerDown(e, blockId, dateStr, mode) {
     e.preventDefault();
     const block = (plannerBlocksByDate[dateStr] || []).find(b => b.id === blockId);
     if (!block) return;
-    const col = document.getElementById(`planner-col-${plannerWeekDates().findIndex(d => plannerFmtDateInput(d) === dateStr)}`);
+    const col = document.getElementById(`planner-col-${plannerWeekDates().findIndex(d => fmtLocalDate(d) === dateStr)}`);
     if (!col) return;
     const rect = col.getBoundingClientRect();
     const el = col.querySelector(`.planner-block[data-id="${blockId}"]`);
@@ -799,7 +799,7 @@ function openPlannerEditor(block, e) {
         dateInput.value = block.dateStr;
         // Việc đã có nằm ở ngày cũ: bỏ min để còn hiển thị được ngày gốc (kiểm tra lại lúc Lưu)
         if (block.id && plannerIsPastDate(block.dateStr)) dateInput.removeAttribute('min');
-        else dateInput.min = plannerFmtDateInput(new Date());
+        else dateInput.min = fmtLocalDate(new Date());
     }
     document.querySelectorAll('#planner-editor-dur button').forEach(b => b.classList.remove('active'));
     startInput.value = plannerFmtHM(block.start_min);
@@ -928,7 +928,7 @@ async function savePlannerEditor() {
 
     if (dateChanged && plannerIsPastDate(newDate)) {
         // Ngày cũ -> trả ô ngày về giá trị hợp lệ, nháy đỏ, GIỮ popup mở để người dùng chọn lại
-        const safeDate = draft.id ? draft.dateStr : plannerFmtDateInput(new Date());
+        const safeDate = draft.id ? draft.dateStr : fmtLocalDate(new Date());
         if (dateInput) {
             dateInput.value = safeDate;
             dateInput.classList.add('is-invalid');

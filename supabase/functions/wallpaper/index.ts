@@ -40,6 +40,7 @@ function init(): Promise<Uint8Array[]> {
     return ready;
 }
 
+// PHẢI khớp PRIORITY_LEVELS trong shared.js của app (Edge Function không import được file đó).
 const PRIORITY_COLOR: Record<string, string> = { high: "#ff4d4f", normal: "#ffb020", low: "#8b96a5" };
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const notFound = () => new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });

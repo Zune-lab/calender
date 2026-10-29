@@ -7,7 +7,7 @@ let base64Image = null;
 // LỐI TẮT CHUYỂN TRANG NHANH (Dashboard / TKB / Lịch Thi / Cài Đặt)
 // ==========================================
 window.navigateFromProfile = function(url, tabName) {
-    if (tabName) localStorage.setItem('targetTab', tabName);
+    if (tabName) localStorage.setItem(STORAGE_KEYS.targetTab, tabName);
     window.location.href = url;
 };
 
@@ -15,8 +15,8 @@ window.navigateFromProfile = function(url, tabName) {
 // QUAY LẠI ĐÚNG NƠI ĐÃ VÀO PROFILE (TKB hoặc Dashboard)
 // ==========================================
 window.goBackFromProfile = function() {
-    const returnTo = localStorage.getItem('profileReturnTo') || '../index.html';
-    localStorage.removeItem('profileReturnTo');
+    const returnTo = localStorage.getItem(STORAGE_KEYS.profileReturnTo) || '../index.html';
+    localStorage.removeItem(STORAGE_KEYS.profileReturnTo);
     window.location.href = returnTo;
 };
 
@@ -49,28 +49,16 @@ function applyAccentColor(hex) {
     // Nếu người dùng đã có ảnh nền tuỳ chỉnh (gán thẳng lên body.style.backgroundImage, xem khối
     // "ẢNH NỀN TUỲ CHỈNH" phía dưới), KHÔNG được ghi đè mất ảnh đó bằng gradient accent này —
     // cả 2 đều dùng chung 1 thuộc tính background-image trên body.
-    if (!(window.hasCustomBackground ? window.hasCustomBackground() : localStorage.getItem('customBg'))) {
+    if (!window.hasCustomBackground()) {
         document.body.style.backgroundImage = `radial-gradient(circle at 30% 0%, ${finalHex}25 0%, transparent 55%)`;
     }
 }
 
 function pickAccentForUser(userId) {
-    // Nếu người dùng đã tự chọn màu ở tab Cài Đặt (tkb/calendar.html) thì luôn ưu tiên
-    // dùng đúng màu đó, khỏi cần hash gì thêm.
-    const customColor = getSavedAccentColor();
-    if (customColor) {
-        applyAccentColor(customColor);
-        return;
-    }
-
-    // getSavedSubjectColors() (shared.js) đã tự try/catch bên trong rồi, không cần bọc thêm ở đây.
-    const usedColors = Object.values(getSavedSubjectColors());
-
-    let available = ACCENT_POOL.filter(c => !usedColors.includes(c));
-    if(!available.length) available = ACCENT_POOL;
-
-    const chosenColor = available[hashStringToIndex(userId, available.length)];
-    applyAccentColor(chosenColor);
+    // resolveAccentForUser() (shared.js) = màu tự chọn ở Cài Đặt, nếu chưa có thì hash ổn định theo tài khoản.
+    // Trước đây trang này tự lọc ACCENT_POOL theo màu môn học rồi mới hash -> cùng 1 tài khoản ra MÀU KHÁC với
+    // Dashboard/TKB dù comment ở shared.js nói 3 trang dùng chung 1 quy tắc.
+    applyAccentColor(resolveAccentForUser(userId));
 }
 
 // ==========================================
@@ -116,39 +104,17 @@ function updateTopbarScrimFromBg() {
         return;
     }
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function () {
-        try {
-            const size = 24; // thu nhỏ ảnh trước khi đọc pixel cho nhanh, chỉ cần màu trung bình
-            const canvas = document.createElement('canvas');
-            canvas.width = size; canvas.height = size;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, size, size);
-
-            const { data } = ctx.getImageData(0, 0, size, size);
-            let r = 0, g = 0, b = 0, count = 0;
-            for (let i = 0; i < data.length; i += 4) {
-                r += data[i]; g += data[i + 1]; b += data[i + 2];
-                count++;
-            }
-            r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count);
-
-            // Thanh topbar = đúng màu trung bình của ảnh, không pha gì thêm.
-            document.body.style.setProperty('--topbar-scrim', `rgba(${r}, ${g}, ${b}, 0.6)`);
-
-            // Độ sáng cảm nhận của đúng màu đó (0 = tối, 255 = sáng) để chọn chữ trắng hay đen.
-            const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-            const bgIsLight = luminance > 150;
-            document.body.style.setProperty('--topbar-text', bgIsLight ? '#1f2328' : '#ffffff');
-            document.body.style.setProperty('--topbar-muted', bgIsLight ? 'rgba(15, 18, 22, 0.65)' : 'rgba(255, 255, 255, 0.75)');
-        } catch (err) {
-            // Ảnh dính CORS (nguồn ngoài, không phải data URL) -> không đọc được pixel, âm thầm
-            // bỏ qua và giữ nguyên màu scrim mặc định thay vì làm vỡ trang.
-            console.warn('[Profile] Không lấy được màu ảnh nền cho topbar:', err);
-        }
-    };
-    img.src = match[1];
+    if (!window.measureImageStats) return;
+    // Ảnh CORS không đọc được pixel -> null -> giữ nguyên màu scrim mặc định thay vì làm vỡ trang.
+    window.measureImageStats(match[1]).then((st) => {
+        if (!st) return;
+        // Thanh topbar = đúng màu trung bình của ảnh, không pha gì thêm.
+        document.body.style.setProperty('--topbar-scrim', `rgba(${st.r}, ${st.g}, ${st.b}, 0.6)`);
+        // Độ sáng cảm nhận của đúng màu đó để chọn chữ trắng hay đen.
+        const bgIsLight = st.luminance > 150;
+        document.body.style.setProperty('--topbar-text', bgIsLight ? '#1f2328' : '#ffffff');
+        document.body.style.setProperty('--topbar-muted', bgIsLight ? 'rgba(15, 18, 22, 0.65)' : 'rgba(255, 255, 255, 0.75)');
+    });
 }
 
 // ==========================================
@@ -219,7 +185,7 @@ async function bootProfile() {
             // DOM API thay vì nối chuỗi vào innerHTML (meta.avatar do người dùng ghi, không đáng tin)
             const avatarBox = document.getElementById('avatar-container');
             avatarBox.textContent = '';
-            if (/^(data:image\/|https?:\/\/)/i.test(String(meta.avatar))) {
+            if (isSafeImageSrc(meta.avatar)) {
                 const avatarImg = document.createElement('img');
                 avatarImg.src = meta.avatar;
                 avatarBox.appendChild(avatarImg);
@@ -356,8 +322,4 @@ window.saveProfile = async function() {
 
 bootProfile();
 
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('../sw.js').catch(() => {});
-    });
-}
+window.addEventListener('load', registerAppServiceWorker);

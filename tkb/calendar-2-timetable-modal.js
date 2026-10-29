@@ -122,10 +122,10 @@ function renderTimetable() {
             }
         });
     } else {
-        actualMaxW = 20; 
+        actualMaxW = MAX_SEMESTER_WEEKS; 
     }
 
-    let maxW = actualMaxW < 20 ? actualMaxW + 1 : actualMaxW;
+    const maxW = actualMaxW < MAX_SEMESTER_WEEKS ? actualMaxW + 1 : actualMaxW;
 
     // FIX: trước đây chỉ rebuild khi SỐ LƯỢNG tuần (maxW) đổi khác — nếu import TKB mới nhưng
     // tình cờ ra cùng số tuần với TKB cũ (chỉ semesterStartDate đổi), dropdown vẫn giữ nguyên
@@ -183,7 +183,7 @@ function renderTimetable() {
     }
 
     const matrix = {};
-    for (let t = 1; t <= 14; t++) {
+    for (let t = 1; t <= SGU_PERIOD_COUNT; t++) {
         matrix[t] = {};
         for (let d = 2; d <= 8; d++) {
             matrix[t][d] = { status: 'empty', duration: 1, data: null };
@@ -202,10 +202,16 @@ function renderTimetable() {
             let startTiet = parseInt(match[1]); 
             let endTiet = parseInt(match[2]);
             if (startTiet > endTiet) { const temp = startTiet; startTiet = endTiet; endTiet = temp; }
-            if (startTiet < 1 || endTiet > 14) return; // ngoài lưới tiết 1..14: matrix[t] không tồn tại -> TypeError làm trắng bảng
+            if (startTiet < 1 || endTiet > SGU_PERIOD_COUNT) return; // ngoài lưới tiết: matrix[t] không tồn tại -> TypeError làm trắng bảng
 
             const uniqueKey = `${sub.day}-${startTiet}-${endTiet}-${sub.course_code}`;
             if (renderedCards.has(uniqueKey)) return; 
+
+            // 2 buổi TRÙNG TIẾT cùng ngày (nhập sai / trùng lịch): trước đây buổi sau ghi đè ô 'covered'
+            // lên ô 'start' của buổi trước -> số ô mỗi hàng lệch, cả bảng vỡ. Bỏ buổi đến sau thay vì vỡ bảng.
+            let overlaps = false;
+            for (let t = startTiet; t <= endTiet; t++) { if (matrix[t][sub.day].status !== 'empty') { overlaps = true; break; } }
+            if (overlaps) { console.warn('[TKB] Bỏ qua buổi học trùng tiết:', sub.name, sub.day, sub.time_slot); return; }
             renderedCards.add(uniqueKey);
 
             const duration = endTiet - startTiet + 1;
@@ -232,25 +238,21 @@ function renderTimetable() {
         const currentDate = new Date(currentWeekMonday);
         currentDate.setDate(currentWeekMonday.getDate() + (d - 2));
         currentDate.setHours(0, 0, 0, 0);
-        const dateStr = `${currentDate.getDate().toString().padStart(2, '0')}/${(currentDate.getMonth()+1).toString().padStart(2, '0')}`;
+        const dateStr = fmtDM(currentDate);
         
-        const dayName = d === 8 ? 'Chủ Nhật' : `Thứ ${d}`;
+        const dayName = dayLabelVN(d);
         const isToday = currentDate.getTime() === realToday.getTime();
         if (isToday) todayCol = d;
         tableHtml += `<th class="${isToday ? 'current-day-th' : ''}" data-day-col="${d}">${dayName}<br><span class="date-sub">${dateStr}</span></th>`;
     }
     tableHtml += `</tr></thead><tbody>`;
 
-    const timeMap = { 1:"07:00", 2:"07:50", 3:"09:00", 4:"09:50", 5:"10:40", 6:"13:00", 7:"13:50", 8:"15:00", 9:"15:50", 10:"16:40", 11:"17:40", 12:"18:30", 13:"19:20", 14:"20:10" };
-    const gradientColors = [ ['#FF3366', '#FF9933'], ['#00C9FF', '#92FE9D'], ['#9d4edd', '#E100FF'], ['#11998e', '#38ef7d'], ['#FDBB2D', '#22C1C3'] ];
-    const subjectColorMap = {}; let colorIndex = 0;
-    
-    window.globalSubjectColors = {};
-
+    // Bảng màu + thứ tự gán màu nằm ở shared.js (cùng Dashboard + Lịch Thi): màu môn không còn đổi theo tuần đang xem.
+    const subjectColorMap = buildSubjectColorMap(safeSubjects);
     const savedSubjectColors = getSavedSubjectColors();
 
-    for (let t = 1; t <= 14; t++) {
-        tableHtml += `<tr><td class="grid-time"><span class="tiet-n">Tiết ${t}</span><span class="tiet-time">${timeMap[t]}</span></td>`;
+    for (let t = 1; t <= SGU_PERIOD_COUNT; t++) {
+        tableHtml += `<tr><td class="grid-time"><span class="tiet-n">Tiết ${t}</span><span class="tiet-time">${sguPeriodStartText(t)}</span></td>`;
 
         for (let d = 2; d <= 8; d++) {
             const slot = matrix[t][d];
@@ -259,12 +261,9 @@ function renderTimetable() {
                 const sub = slot.data;
                 const baseName = baseSubjectKey(sub.name);
                 
-                if (!subjectColorMap[baseName]) { subjectColorMap[baseName] = gradientColors[colorIndex % gradientColors.length]; colorIndex++; }
-                let c1, c2;
-                if (savedSubjectColors[baseName]) { c1 = savedSubjectColors[baseName]; c2 = savedSubjectColors[baseName]; } 
-                else { c1 = subjectColorMap[baseName][0]; c2 = subjectColorMap[baseName][1]; }
-                
-                window.globalSubjectColors[baseName] = c1;
+                const [defC1, defC2] = subjectColorMap[baseName];
+                const c1 = savedSubjectColors[baseName] || defC1;
+                const c2 = savedSubjectColors[baseName] || defC2;
                 
                 const customColorStyle = `style="--c1: ${escapeHtml(c1)}; --c2: ${escapeHtml(c2)};" data-c1="${escapeHtml(c1)}"`;
                 const rawName = sub.name.split('(')[0].trim();
@@ -274,7 +273,7 @@ function renderTimetable() {
                 const contentLength = rawName.length + (sub.room || '').length + (sub.lecturer || '').length;
 
                 tableHtml += `
-                    <td rowspan="${slot.duration}" class="subject-card-td ${contentLength > 45 ? 'large' : 'compact'}" ${customColorStyle} onclick="window.openModalById('${sub.id}')">
+                    <td rowspan="${slot.duration}" class="subject-card-td ${contentLength > 45 ? 'large' : 'compact'}" ${customColorStyle} onclick="window.openModalById('${escapeHtml(sub.id)}')">
                         <div class="card-title-area">
                             <h4 title="${escapeHtml(rawName)}">${escapeHtml(rawName)} <br><span class="course-code">${escapeHtml(sub.course_code || 'N/A')}</span></h4>
                         </div>
@@ -399,8 +398,7 @@ async function openModal(subject) {
             subjectStartDate.setDate(semesterStartDate.getDate() + (startWeekIndex * 7) + (subject.day - 2));
             const subjectEndDate = new Date(semesterStartDate);
             subjectEndDate.setDate(semesterStartDate.getDate() + (endWeekIndex * 7) + (subject.day - 2));
-            const formatD = (d) => `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-            dateRangeText = `${formatD(subjectStartDate)} đến ${formatD(subjectEndDate)}`;
+            dateRangeText = `${fmtDMY(subjectStartDate)} đến ${fmtDMY(subjectEndDate)}`;
         }
     }
 
@@ -466,7 +464,7 @@ async function loadSubjectDetails(relatedSubjectIds) {
         const li = document.createElement('li');
         const originSub = allLoadedSubjects.find(s => s.id === item.subject_id);
         // FIX: trước đây in thẳng "Thứ ${originSub.day}" -> lớp học Chủ Nhật (day = 8) bị hiện sai thành "Thứ 8".
-        const originDayLabel = originSub ? (originSub.day === 8 ? 'Chủ Nhật' : `Thứ ${originSub.day}`) : '';
+        const originDayLabel = originSub ? dayLabelVN(originSub.day) : '';
         let originHtml = originSub ? `<span class="origin-tag"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Ghi tại: ${escapeHtml(originDayLabel)}, ${escapeHtml(originSub.time_slot)}</span>` : '';
 
         // MỤC 3: chấm màu + nhãn ưu tiên, và badge Hạn (đỏ nếu đã quá hạn)
@@ -474,9 +472,9 @@ async function loadSubjectDetails(relatedSubjectIds) {
         const priorityHtml = `<span class="priority-dot" style="background:${pInfo.color}" title="${pInfo.label}"></span>`;
         let dueHtml = '';
         if (item.due_date) {
-            const todayStr = plannerFmtDateInput(new Date());
+            const todayStr = fmtLocalDate(new Date());
             const isOverdue = item.due_date < todayStr && item.status === 'upcoming';
-            const [y, m, d] = item.due_date.split('-');
+            const [, m, d] = item.due_date.split('-');
             dueHtml = `<span class="due-date-badge${isOverdue ? ' overdue' : ''}">Hạn: ${d}/${m}${isOverdue ? ' (quá hạn)' : ''}</span>`;
         }
 
@@ -523,41 +521,8 @@ async function loadSubjectDetails(relatedSubjectIds) {
     document.getElementById('notes-trash-count').innerText = `(${counts.notesTrash})`;
     document.getElementById('tasks-trash-count').innerText = `(${counts.tasksTrash})`;
 
-    const noteTrashToggle = document.getElementById('notes-trash-toggle');
-    const noteTrashWrapper = document.getElementById('notes-trash-wrapper');
-    const noteTrashList = document.getElementById('notes-trash'); 
-    const noteTrashActions = document.getElementById('notes-trash-actions');
-
-    if (noteTrashToggle && noteTrashWrapper) {
-        if (noteTrashList) noteTrashList.classList.remove('hidden-trash'); 
-        if (counts.notesTrash === 0) {
-            noteTrashToggle.style.opacity = '0.3';
-            noteTrashToggle.style.pointerEvents = 'none'; 
-            noteTrashWrapper.classList.add('hidden-trash'); 
-            if (noteTrashActions) noteTrashActions.classList.add('hidden-trash');
-        } else {
-            noteTrashToggle.style.opacity = '1';
-            noteTrashToggle.style.pointerEvents = 'auto'; 
-        }
-    }
-
-    const taskTrashToggle = document.getElementById('tasks-trash-toggle');
-    const taskTrashWrapper = document.getElementById('tasks-trash-wrapper');
-    const taskTrashList = document.getElementById('tasks-trash');
-    const taskTrashActions = document.getElementById('tasks-trash-actions'); 
-
-    if (taskTrashToggle && taskTrashWrapper) {
-        if (taskTrashList) taskTrashList.classList.remove('hidden-trash');
-        if (counts.tasksTrash === 0) {
-            taskTrashToggle.style.opacity = '0.3';
-            taskTrashToggle.style.pointerEvents = 'none';
-            taskTrashWrapper.classList.add('hidden-trash');
-            if (taskTrashActions) taskTrashActions.classList.add('hidden-trash'); 
-        } else {
-            taskTrashToggle.style.opacity = '1';
-            taskTrashToggle.style.pointerEvents = 'auto';
-        }
-    }
+    syncTrashToggle('notes', counts.notesTrash);
+    syncTrashToggle('tasks', counts.tasksTrash);
 
     const notesClearAllBtn = document.getElementById('notes-clear-all-btn');
     if (notesClearAllBtn) {
@@ -579,6 +544,24 @@ async function loadSubjectDetails(relatedSubjectIds) {
     const taskSection = document.getElementById('task-section');
     if (noteSection) noteSection.classList.toggle('section-empty', counts.notesActive === 0);
     if (taskSection) taskSection.classList.toggle('section-empty', counts.tasksActive === 0);
+}
+
+// Bật/tắt nút mở thùng rác của 1 khối ('notes' | 'tasks'): không có mục nào trong rác -> mờ + ẩn khối.
+// Trước đây đoạn này được chép nguyên văn 2 lần (ghi chú / công việc).
+function syncTrashToggle(prefix, trashCount) {
+    const toggle = document.getElementById(`${prefix}-trash-toggle`);
+    const wrapper = document.getElementById(`${prefix}-trash-wrapper`);
+    const list = document.getElementById(`${prefix}-trash`);
+    const actions = document.getElementById(`${prefix}-trash-actions`);
+    if (!toggle || !wrapper) return;
+    if (list) list.classList.remove('hidden-trash');
+    const empty = trashCount === 0;
+    toggle.style.opacity = empty ? '0.3' : '1';
+    toggle.style.pointerEvents = empty ? 'none' : 'auto';
+    if (empty) {
+        wrapper.classList.add('hidden-trash');
+        if (actions) actions.classList.add('hidden-trash');
+    }
 }
 
 window.handleEnter = function(e, type) {
@@ -723,18 +706,24 @@ window.addDetail = async function(type) {
     // FIX: chặn thêm ở đây (không chỉ dựa vào min= trên input) để phòng trường hợp trình duyệt
     // cũ/WebView không hỗ trợ thuộc tính min trên input[type=date] -> vẫn có thể gõ tay/dán
     // ngày quá khứ vào. Ngày hạn không được sớm hơn hôm nay.
-    if (dueDate && dueDate < plannerFmtDateInput(new Date())) {
+    if (dueDate && dueDate < fmtLocalDate(new Date())) {
         showAlert("Hạn không được chọn ngày trong quá khứ.", "Ngày không hợp lệ");
         return;
     }
 
     if (window._addDetailBusy) return; // Enter giữ phím / bấm đúp -> không chèn 2 bản
     window._addDetailBusy = true;
-    const { error } = await sbClient.from('subject_details').insert([{
-        subject_id: currentSubjectId, user_id: currentUser.id, type: type, content: content,
-        status: 'upcoming', priority: priority, due_date: dueDate
-    }]);
-    window._addDetailBusy = false;
+    let error;
+    try {
+        ({ error } = await sbClient.from('subject_details').insert([{
+            subject_id: currentSubjectId, user_id: currentUser.id, type: type, content: content,
+            status: 'upcoming', priority: priority, due_date: dueDate
+        }]));
+    } catch (e) {
+        error = e; // mất mạng... -> trước đây cờ busy kẹt true mãi và không thêm được gì nữa tới khi tải lại trang
+    } finally {
+        window._addDetailBusy = false;
+    }
     if (!error) {
         input.value = '';
         if (dueDateInput) { dueDateInput.value = ''; dueDateInput.dispatchEvent(new Event('change', { bubbles: true })); }
@@ -757,42 +746,28 @@ window.addDetail = async function(type) {
 // (hoặc tắt nhầm khi debug), bất kỳ ai đăng nhập cũng có thể sửa/xóa dữ liệu của tài khoản khác
 // chỉ cần đoán/biết đúng UUID. Thêm `.eq('user_id', currentUser.id)` vào mọi câu lệnh — không
 // đổi hành vi bình thường (id hiển thị luôn đã thuộc đúng user rồi), chỉ chặn thêm 1 lớp an toàn.
-window.deleteDetail = async function(id) {
-    const { error } = await sbClient.from('subject_details').update({ status: 'deleted' }).eq('id', id).eq('user_id', currentUser.id);
-    if (error) { showAlert("Lỗi khi xóa: " + error.message, "Lỗi kết nối"); console.error(error); } 
+// Cập nhật 1 dòng subject_details của user hiện tại rồi vẽ lại popup (5 hàm bên dưới trước đây chép nguyên khối này).
+async function updateDetailStatus(id, status, errPrefix) {
+    const { error } = await sbClient.from('subject_details').update({ status }).eq('id', id).eq('user_id', currentUser.id);
+    if (error) { showAlert(`${errPrefix}: ${error.message}`, "Lỗi kết nối"); console.error(error); }
     else reloadCurrentModal();
 }
+window.deleteDetail = (id) => updateDetailStatus(id, 'deleted', "Lỗi khi xóa");
+window.restoreDetail = (id) => updateDetailStatus(id, 'upcoming', "Lỗi khôi phục");
+window.markTaskDone = (id) => updateDetailStatus(id, 'done', "Lỗi cập nhật task");
+window.unmarkTask = (id) => updateDetailStatus(id, 'upcoming', "Lỗi cập nhật task");
 
 window.hardDeleteDetail = async function(id) {
     const isConfirmed = await showConfirm('Bạn có chắc chắn muốn xóa vĩnh viễn mục này không? Dữ liệu sẽ mất hoàn toàn và không thể khôi phục.', 'Cảnh báo xóa vĩnh viễn');
     if (!isConfirmed) return;
     
     const { error } = await sbClient.from('subject_details').delete().eq('id', id).eq('user_id', currentUser.id);
-    
     if (error) { 
         showAlert("Lỗi khi xóa vĩnh viễn: " + error.message, "Lỗi kết nối"); 
         console.error(error); 
     } else {
         reloadCurrentModal();
     }
-}
-
-window.restoreDetail = async function(id) {
-    const { error } = await sbClient.from('subject_details').update({ status: 'upcoming' }).eq('id', id).eq('user_id', currentUser.id);
-    if (error) { showAlert("Lỗi khôi phục: " + error.message, "Lỗi kết nối"); console.error(error); } 
-    else reloadCurrentModal();
-}
-
-window.markTaskDone = async function(id) {
-    const { error } = await sbClient.from('subject_details').update({ status: 'done' }).eq('id', id).eq('user_id', currentUser.id);
-    if (error) { showAlert("Lỗi cập nhật task: " + error.message, "Lỗi kết nối"); console.error(error); } 
-    else reloadCurrentModal();
-}
-
-window.unmarkTask = async function(id) {
-    const { error } = await sbClient.from('subject_details').update({ status: 'upcoming' }).eq('id', id).eq('user_id', currentUser.id);
-    if (error) { showAlert("Lỗi cập nhật task: " + error.message, "Lỗi kết nối"); console.error(error); } 
-    else reloadCurrentModal();
 }
 
 async function reloadCurrentModal() { 

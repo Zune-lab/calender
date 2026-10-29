@@ -130,7 +130,7 @@ async function wallpaperDownload() {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const blobUrl = URL.createObjectURL(await res.blob());
         const a = document.createElement('a');
-        a.href = blobUrl; a.download = `man-hinh-khoa-${plannerFmtDateInput(new Date())}.png`;
+        a.href = blobUrl; a.download = `man-hinh-khoa-${fmtLocalDate(new Date())}.png`;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
     } catch (e) {
@@ -171,10 +171,13 @@ async function wallpaperDeleteToken() {
 async function wallpaperInit() {
     if (!document.getElementById('wallpaper-box')) return;
     if (!(await plannerWaitForUser())) return;
+    wallpaperToken = null; // đổi tài khoản không tải lại trang: không được giữ token (link xem lịch) của người trước
     const { data, error } = await sbClient.from('wallpaper_tokens').select('token').eq('user_id', currentUser.id).maybeSingle();
     // Bảng chưa tạo (42P01) = người dùng chưa bật tính năng: vẫn hiện nút tạo, lỗi cụ thể báo khi bấm
     if (!error && data) wallpaperToken = data.token;
     wallpaperRender();
 }
 
-document.addEventListener('DOMContentLoaded', wallpaperInit);
+// Gọi lại mỗi khi có người dùng MỚI đăng nhập (handleSession ở calendar-1-core.js) — trước đây chỉ chạy 1 lần lúc
+// mở trang: đăng nhập sau 10s thì hộp ảnh nền không bao giờ khởi tạo, đổi tài khoản thì hiện nhầm link của tài khoản cũ.
+window.onUserSessionStart = (window.onUserSessionStart || []).concat(wallpaperInit);

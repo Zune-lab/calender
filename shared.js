@@ -98,8 +98,11 @@ function defaultSemesterStartDate() { return new Date(2026, 4, 18); }
 
 // Tên môn gốc (bỏ phần "- nhóm", "(thực hành)"...) viết thường — dùng làm khoá gộp môn/màu môn.
 // Trước đây đoạn split('-')[0].split('(')[0].trim().toLowerCase() bị chép tay ở ~10 chỗ.
+function baseSubjectLabel(name) {
+    return String(name || '').split('-')[0].split('(')[0].trim();
+}
 function baseSubjectKey(name) {
-    return String(name || '').split('-')[0].split('(')[0].trim().toLowerCase();
+    return baseSubjectLabel(name).toLowerCase();
 }
 
 // Buổi học có diễn ra ở tuần weekIndex (0-indexed) không? Dùng chung Dashboard + TKB để 2 nơi
@@ -174,15 +177,15 @@ function hashStringToIndex(str, arrayLength) {
 }
 
 function getSavedAccentColor() {
-    try { return localStorage.getItem('customAccent') || null; } catch (e) { return null; }
+    try { return localStorage.getItem(STORAGE_KEYS.customAccent) || null; } catch (e) { return null; }
 }
 
 function setSavedAccentColor(hex) {
-    try { localStorage.setItem('customAccent', hex); } catch (e) { console.warn('[Accent] Không lưu được màu (bộ nhớ đầy?):', e.message); }
+    try { localStorage.setItem(STORAGE_KEYS.customAccent, hex); } catch (e) { console.warn('[Accent] Không lưu được màu (bộ nhớ đầy?):', e.message); }
 }
 
 function clearSavedAccentColor() {
-    try { localStorage.removeItem('customAccent'); } catch (e) {}
+    try { localStorage.removeItem(STORAGE_KEYS.customAccent); } catch (e) {}
 }
 
 // Màu accent cuối cùng cho 1 user: ưu tiên màu tự chọn đã lưu (nếu có), nếu chưa
@@ -213,7 +216,8 @@ function applyTheme() {
 }
 
 function getIsLightForCurrentThemeSetting() {
-    const saved = localStorage.getItem('theme');
+    let saved = null;
+    try { saved = localStorage.getItem(STORAGE_KEYS.theme); } catch (e) { /* localStorage bị chặn (chế độ riêng tư...) -> mặc định sáng */ }
     if (saved === 'system') {
         return !(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     }
@@ -228,7 +232,7 @@ function getIsLightForCurrentThemeSetting() {
 if (window.matchMedia) {
     const _systemThemeMql = window.matchMedia('(prefers-color-scheme: dark)');
     const _onSystemThemeChange = function () {
-        if (localStorage.getItem('theme') === 'system') {
+        if (localStorage.getItem(STORAGE_KEYS.theme) === 'system') {
             const isLight = applyTheme();
             window.dispatchEvent(new CustomEvent('themeChanged', { detail: { isLight } }));
         }
@@ -244,13 +248,13 @@ if (window.matchMedia) {
 // mà calendar.js đã có.
 // ---------------------------------------------------------
 function getSavedSubjectColors() {
-    try { return JSON.parse(localStorage.getItem('subjectCustomColors')) || {}; }
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.subjectColors)) || {}; }
     catch (e) { return {}; }
 }
 function saveSubjectColor(subjectName, color) {
     const saved = getSavedSubjectColors();
     saved[subjectName] = color;
-    try { localStorage.setItem('subjectCustomColors', JSON.stringify(saved)); }
+    try { localStorage.setItem(STORAGE_KEYS.subjectColors, JSON.stringify(saved)); }
     catch (e) { console.warn('[SubjectColor] Không lưu được màu môn (bộ nhớ đầy?):', e.message); }
 }
 
@@ -279,6 +283,22 @@ function parseClockMinutes(str) {
     if (!m) return null;
     const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
     return (h > 23 || mi > 59) ? null : h * 60 + mi;
+}
+
+// Phút trong ngày -> "HH:MM" (kẹp 0..1440). Trước đây index.js (fmtClock) và Kế Hoạch (plannerFmtHM) mỗi nơi 1 bản.
+function fmtMinutesHM(min) {
+    min = Math.max(0, Math.min(1440, Math.round(min)));
+    return `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
+}
+
+// Thời điểm BẮT ĐẦU của 1 kỳ thi (ngày thi + giờ bắt đầu) hoặc null nếu thiếu/sai ngày hoặc giờ.
+// Trước đây Dashboard và trang Lịch Thi mỗi nơi tự ghép lại logic này.
+function examStartDate(exam) {
+    const d = parseVNExamDate(exam && exam.exam_date);
+    const m = parseClockMinutes(exam && exam.exam_time);
+    if (!d || m === null) return null;
+    d.setHours(Math.floor(m / 60), m % 60, 0, 0);
+    return d;
 }
 
 // ---------------------------------------------------------
@@ -323,4 +343,136 @@ function buildSubjectIdRemap(oldRows, newRows) {
         if (target !== undefined) remap.set(o.id, target);
     });
     return remap;
+}
+
+// =========================================================
+// HẰNG SỐ DÙNG CHUNG (trước đây bị chép tay ở nhiều file và dễ lệch nhau)
+// =========================================================
+
+// Khoá localStorage dùng ở NHIỀU file — gom 1 chỗ để không gõ sai chính tả ở nơi nào đó.
+const STORAGE_KEYS = {
+    theme: 'theme',
+    customBg: 'customBg',
+    customAccent: 'customAccent',
+    subjectColors: 'subjectCustomColors',
+    targetTab: 'targetTab',
+    profileReturnTo: 'profileReturnTo',
+};
+
+// Số tuần tối đa của 1 học kỳ (lưới chọn tuần, mảng bitmap tuần của import Excel...).
+const MAX_SEMESTER_WEEKS = 20;
+
+// LƯỚI TIẾT HỌC SGU — NGUỒN DUY NHẤT (Dashboard, bảng TKB và import Excel cùng dùng).
+// Trước đây có 3 bản chép tay (index.js: phút, calendar-1: chuỗi giờ bắt đầu/kết thúc,
+// calendar-2: chuỗi giờ bắt đầu) — đổi lưới giờ phải nhớ sửa cả 3 nơi.
+const SGU_PERIOD_TIMES = {
+    1: ['07:00', '07:50'],  2: ['07:50', '08:40'],  3: ['09:00', '09:50'],  4: ['09:50', '10:40'],
+    5: ['10:40', '11:30'],  6: ['13:00', '13:50'],  7: ['13:50', '14:40'],  8: ['15:00', '15:50'],
+    9: ['15:50', '16:40'], 10: ['16:40', '17:30'], 11: ['17:40', '18:30'], 12: ['18:30', '19:20'],
+    13: ['19:20', '20:10'], 14: ['20:10', '21:00'],
+};
+const SGU_PERIOD_COUNT = Object.keys(SGU_PERIOD_TIMES).length;
+function _hmToMinutes(hm) { const [h, m] = hm.split(':').map(Number); return h * 60 + m; }
+function sguPeriodStartText(p) { return SGU_PERIOD_TIMES[p] ? SGU_PERIOD_TIMES[p][0] : ''; }
+function sguPeriodEndText(p) { return SGU_PERIOD_TIMES[p] ? SGU_PERIOD_TIMES[p][1] : ''; }
+function sguPeriodStartMin(p) { return SGU_PERIOD_TIMES[p] ? _hmToMinutes(SGU_PERIOD_TIMES[p][0]) : undefined; }
+function sguPeriodEndMin(p) { return SGU_PERIOD_TIMES[p] ? _hmToMinutes(SGU_PERIOD_TIMES[p][1]) : undefined; }
+
+// 3 MỨC ƯU TIÊN — dùng chung Dashboard, ghi chú/công việc, Kế Hoạch Ngày (trước đây màu bị chép
+// ở index.js lẫn calendar-4). Edge Function (Deno) không import được file này nên bản của nó
+// (supabase/functions/wallpaper/index.ts) phải sửa tay khi đổi màu ở đây.
+const PRIORITY_LEVELS = {
+    high:   { label: 'Quan trọng',           color: '#ff4d4f', leadDays: 7, order: 0 },
+    normal: { label: 'Bình thường',          color: '#ffb020', leadDays: 5, order: 1 },
+    low:    { label: 'Không quan trọng lắm', color: '#8b96a5', leadDays: 3, order: 2 }
+};
+function getPriorityInfo(key) { return PRIORITY_LEVELS[key] || PRIORITY_LEVELS.normal; }
+
+// MÀU MÔN HỌC — 1 bảng gradient + 1 hàm gán màu DUY NHẤT cho Dashboard, bảng TKB và Lịch Thi.
+// Trước đây: 3 bản bảng màu chép tay (Dashboard dùng #7c3aed, TKB dùng #9d4edd cho môn thứ 3) và
+// màu gán theo THỨ TỰ GẶP TRONG BẢNG ĐANG XEM nên cùng 1 môn đổi màu khi chuyển tuần / chuyển trang.
+// Giờ gán theo thứ tự tên môn gốc (A-Z) trên TOÀN BỘ danh sách môn -> ổn định ở mọi nơi.
+const SUBJECT_GRADIENTS = [
+    ['#FF3366', '#FF9933'], ['#00C9FF', '#92FE9D'], ['#9d4edd', '#E100FF'],
+    ['#11998e', '#38ef7d'], ['#FDBB2D', '#22C1C3'],
+];
+function buildSubjectColorMap(subjects) {
+    const keys = [...new Set((subjects || []).map((s) => baseSubjectKey(s.name)))].sort();
+    const map = {};
+    keys.forEach((k, i) => { map[k] = SUBJECT_GRADIENTS[i % SUBJECT_GRADIENTS.length]; });
+    return map;
+}
+
+// ---------------------------------------------------------
+// ĐỊNH DẠNG NGÀY/THỨ (VN) — trước đây chép tay ở ~10 chỗ
+// ---------------------------------------------------------
+// day theo quy ước của app: 2..7 = Thứ 2..Thứ 7, 8 = Chủ Nhật.
+function dayLabelVN(day, upper) {
+    const t = day === 8 ? 'Chủ Nhật' : 'Thứ ' + day;
+    return upper ? t.toUpperCase() : t;
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
+function fmtDM(d) { return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`; }
+function fmtDMY(d) { return `${fmtDM(d)}/${d.getFullYear()}`; }
+// Số ngày lịch giữa 2 chuỗi 'YYYY-MM-DD' (to - from)
+function daysBetweenDateStrings(fromStr, toStr) {
+    const a = parseLocalDateStr(toStr), b = parseLocalDateStr(fromStr);
+    return a && b ? calendarDayDiff(a, b) : NaN;
+}
+
+// ---------------------------------------------------------
+// MÀU: HSL <-> HEX (trước đây index.js có shiftHue(), calendar-3 có hslToHex() riêng)
+// ---------------------------------------------------------
+function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const toHex = (x) => Math.round(255 * x).toString(16).padStart(2, '0');
+    return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+}
+// Xoay hue của màu '#RRGGBB' đi `degrees`, nhân bão hoà với satFactor, cộng thêm lightBoost (0-1)
+function shiftHue(hex, degrees, satFactor = 1, lightBoost = 0) {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h /= 6;
+    }
+    const nh = (((h * 360 + degrees) % 360) + 360) % 360;
+    const ns = Math.max(0, Math.min(1, s * satFactor));
+    const nl = Math.max(0, Math.min(1, l + lightBoost));
+    return hslToHex(nh, ns * 100, nl * 100);
+}
+
+// Chỉ cho phép ảnh data:image/ hoặc http(s) — dùng cho avatar do người dùng tự ghi vào metadata.
+function isSafeImageSrc(src) { return /^(data:image\/|https?:\/\/)/i.test(String(src || '')); }
+
+// Màu môn học đã lưu: thêm hàm xoá (trước đây gọi localStorage.removeItem thẳng ở nhiều nơi)
+function clearSavedSubjectColors() {
+    try { localStorage.removeItem(STORAGE_KEYS.subjectColors); } catch (e) {}
+}
+
+// Đổi theme thủ công (calendar-1 trước đây tự ghi class + localStorage ở 3 chỗ)
+function setThemePreference(value) { // 'light' | 'dark' | 'system'
+    try { localStorage.setItem(STORAGE_KEYS.theme, value); } catch (e) {}
+    return applyTheme();
+}
+
+// Đăng ký Service Worker — đường dẫn tính theo vị trí của chính shared.js (cùng thư mục sw.js)
+// nên dùng được ở cả trang gốc lẫn tkb/, profile/ mà không phải gõ 'sw.js' / '../sw.js' từng nơi.
+const APP_ROOT_URL = (document.currentScript && document.currentScript.src) ? new URL('./', document.currentScript.src).href : '';
+function registerAppServiceWorker() {
+    if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+    return navigator.serviceWorker.register(APP_ROOT_URL + 'sw.js').catch((err) => {
+        console.warn('[PWA] Không đăng ký được Service Worker:', err && err.message);
+        return null;
+    });
 }

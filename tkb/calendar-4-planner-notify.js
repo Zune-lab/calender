@@ -14,7 +14,8 @@ const PLANNER_HOUR_PX = 64;       // chiều cao 1 giờ trên lưới (px) — 
 const PLANNER_SNAP_MIN = 15;      // bước làm tròn khi kéo (phút)
 const PLANNER_MIN_DURATION = 15;  // độ dài tối thiểu 1 khối việc (phút)
 const PLANNER_COLORS = ['#6C9BFF', '#4C7DFF', '#FF7A93', '#F5528C', '#3FC1A9', '#1DA88A', '#FFAE63', '#FF8A3D', '#B18AF5', '#8C5CF2', '#5FCBEB', '#2FA9D6', '#F5CC5C', '#E8A33D', '#8FE3A8', '#E86C6C', '#C9A0FF', '#7FD3C6'];
-const PLANNER_DAY_NAMES = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7']; // index = Date.getDay()
+// Tên thứ của 1 Date: dayLabelVN() (shared.js) dùng quy ước 2..8 (8 = Chủ Nhật), Date.getDay() là 0..6.
+function plannerDayName(d) { return dayLabelVN(d.getDay() === 0 ? 8 : d.getDay() + 1); }
 
 let plannerWeekStart = plannerGetMonday(new Date());
 let plannerBlocksByDate = {};   // { 'YYYY-MM-DD': [ {id,title,start_min,end_min,color} ] }
@@ -44,15 +45,7 @@ window.savePlannerNotifLead = function(minutes) {
     localStorage.setItem('plannerNotifLeadMin', minutes);
 };
 
-// MỤC 3: 3 MỨC ĐỘ QUAN TRỌNG — DÙNG CHUNG CHO GHI CHÚ/CÔNG VIỆC (subject_details) VÀ KẾ HOẠCH
-// NGÀY (daily_plans). leadDays quyết định báo trước bao nhiêu ngày so với "hạn" (due_date với
-// ghi chú/công việc, hoặc plan_date với việc trong Kế Hoạch).
-const PRIORITY_LEVELS = {
-    high:   { label: 'Quan trọng',           color: '#ff4d4f', leadDays: 7, order: 0 },
-    normal: { label: 'Bình thường',          color: '#ffb020', leadDays: 5, order: 1 },
-    low:    { label: 'Không quan trọng lắm', color: '#8b96a5', leadDays: 3, order: 2 }
-};
-function getPriorityInfo(key) { return PRIORITY_LEVELS[key] || PRIORITY_LEVELS.normal; }
+// MỤC 3: 3 MỨC ĐỘ QUAN TRỌNG (PRIORITY_LEVELS + getPriorityInfo) giờ nằm ở shared.js, dùng chung với Dashboard.
 let plannerNotifTimer = null;
 // TIẾNG CHUÔNG BÁO ĐÚNG GIỜ (giống báo thức/Google Calendar) — xem chi tiết ở mục "CHUÔNG BÁO
 // ĐÚNG GIỜ" phía dưới. AudioContext phải được tạo/resume trong 1 cử chỉ bấm thật của người
@@ -98,15 +91,7 @@ function plannerUrlBase64ToUint8Array(base64String) {
     return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
 }
 
-async function plannerRegisterServiceWorker() {
-    if (!('serviceWorker' in navigator)) return null;
-    try {
-        return await navigator.serviceWorker.register('../sw.js');
-    } catch (e) {
-        console.warn('[PlannerPush] Không đăng ký được Service Worker:', e.message);
-        return null;
-    }
-}
+const plannerRegisterServiceWorker = registerAppServiceWorker; // shared.js
 
 async function plannerSubscribePush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
@@ -148,6 +133,19 @@ async function plannerUnsubscribePush() {
             await sub.unsubscribe();
         }
     } catch (e) { console.warn('[PlannerPush] Lỗi hủy đăng ký push:', e.message); }
+}
+
+// Tạo (hoặc resume) AudioContext dùng cho chuông báo — gọi trong cử chỉ bấm của người dùng thì mới phát được.
+function ensurePlannerAudioCtx() {
+    try {
+        if (!plannerAlarmAudioCtx) plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        else if (plannerAlarmAudioCtx.state === 'suspended') plannerAlarmAudioCtx.resume();
+    } catch (e) { console.warn('[PlannerAlarm] Trình duyệt không hỗ trợ Web Audio:', e.message); }
+}
+
+// Điều kiện để được phép bắn thông báo (trước đây chép nguyên 3 lần ở 3 hàm check*)
+function plannerCanNotify() {
+    return !!currentUser && plannerNotifEnabled() && typeof Notification !== 'undefined' && Notification.permission === 'granted';
 }
 
 function plannerNotifEnabled() {
@@ -201,14 +199,13 @@ function initPlannerNotifications() {
                     // Tạo AudioContext NGAY TRONG cử chỉ bấm này (bắt buộc — trình duyệt chặn phát
                     // âm thanh không do người dùng chủ động bấm). Giữ lại để tái dùng lúc chuông
                     // reo sau này, dù lúc đó chỉ chạy từ setInterval (không có cử chỉ bấm mới).
-                    try {
-                        if (!plannerAlarmAudioCtx) plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                        else if (plannerAlarmAudioCtx.state === 'suspended') plannerAlarmAudioCtx.resume();
-                    } catch (e) { console.warn('[PlannerAlarm] Trình duyệt không hỗ trợ Web Audio:', e.message); }
+                    ensurePlannerAudioCtx();
                     startPlannerNotifPolling();
                     await plannerSubscribePush(); // đăng ký nhận Push thật từ server (chạy nền được)
                     // Thông báo xác nhận nhẹ để người dùng biết đã bật thành công
-                    new Notification('Đã bật thông báo', { body: 'Mình sẽ báo trước ' + getPlannerNotifLeadMin() + ' phút cho việc trong Kế Hoạch Ngày, và báo Hạn cho Ghi chú/Công việc theo mức ưu tiên — kể cả khi bạn tắt trình duyệt.' });
+                    // Qua plannerShowNotification (Service Worker): `new Notification()` ném "Illegal constructor"
+                    // trên Android Chrome/PWA iOS -> rơi vào catch bên dưới và công tắc tự tắt dù đã được cấp quyền.
+                    plannerShowNotification('Đã bật thông báo', { body: 'Mình sẽ báo trước ' + getPlannerNotifLeadMin() + ' phút cho việc trong Kế Hoạch Ngày, và báo Hạn cho Ghi chú/Công việc theo mức ưu tiên — kể cả khi bạn tắt trình duyệt.' });
                 } else {
                     this.checked = false;
                     localStorage.setItem('plannerNotifEnabled', '0');
@@ -236,9 +233,7 @@ function initPlannerNotifications() {
         // thái "suspended" (bị khoá). Lắng nghe cú click ĐẦU TIÊN bất kỳ ở đâu trên trang (mở
         // modal, đổi tab, v.v.) để âm thầm resume() ngay khi có cơ hội, không cần người dùng
         // phải bật/tắt lại thông báo mới có chuông.
-        try {
-            if (!plannerAlarmAudioCtx) plannerAlarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        } catch (e) { /* trình duyệt không hỗ trợ, bỏ qua — chuông sẽ không phát được nhưng thông báo chữ vẫn hoạt động bình thường */ }
+        ensurePlannerAudioCtx(); // lỗi/không hỗ trợ -> bỏ qua, chuông không phát nhưng thông báo chữ vẫn chạy
         const unlockPlannerAlarm = () => {
             if (plannerAlarmAudioCtx && plannerAlarmAudioCtx.state === 'suspended') plannerAlarmAudioCtx.resume();
         };
@@ -266,9 +261,9 @@ function startPlannerNotifPolling() {
 // ở LOGIC xử lý sau khi có dữ liệu — tách riêng thành 2 lần gọi Supabase mỗi 30 giây là dư thừa
 // không cần thiết. Query 1 lần ở đây, rồi truyền thẳng data cho cả 2 hàm logic bên dưới.
 async function checkTodayPlannerBlocks() {
-    if (!currentUser || !plannerNotifEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (!plannerCanNotify()) return;
 
-    const todayStr = plannerFmtDateInput(new Date());
+    const todayStr = fmtLocalDate(new Date());
     const { data, error } = await sbClient.from('daily_plans')
         .select('id, title, start_min, end_min, is_done')
         .eq('user_id', currentUser.id)
@@ -284,10 +279,25 @@ function stopPlannerNotifPolling() {
     if (plannerDeadlineTimer) { clearInterval(plannerDeadlineTimer); plannerDeadlineTimer = null; }
 }
 
-function plannerNotifiedSet() {
-    try { return new Set(JSON.parse(localStorage.getItem('plannerNotifiedIds') || '[]')); }
+// Tập id "đã báo" lưu localStorage — trước đây có 3 cặp hàm load/save gần như y hệt nhau.
+// keepKey(key, todayStr) quyết định mốc nào còn thuộc HÔM NAY (giữ lại), phần còn lại bị bỏ để không phình mãi.
+function loadIdSet(storageKey) {
+    try { return new Set(JSON.parse(localStorage.getItem(storageKey) || '[]')); }
     catch (e) { return new Set(); }
 }
+function saveIdSet(storageKey, set, keepKey) {
+    const todayStr = fmtLocalDate(new Date());
+    try { localStorage.setItem(storageKey, JSON.stringify([...set].filter((k) => keepKey(k, todayStr)))); }
+    catch (e) { console.warn('[Notif] Không lưu được mốc đã báo:', e.message); }
+}
+const startsWithToday = (key, todayStr) => key.startsWith(todayStr + '_');
+const includesToday = (key, todayStr) => key.includes(`_${todayStr}_`); // key dạng detail_<ngày>_<id> / plan_<ngày>_<id>
+function plannerNotifiedSet() { return loadIdSet('plannerNotifiedIds'); }
+function plannerSaveNotifiedSet(set) { saveIdSet('plannerNotifiedIds', set, startsWithToday); }
+function plannerAlarmFiredSet() { return loadIdSet('plannerAlarmFiredIds'); }
+function plannerSaveAlarmFiredSet(set) { saveIdSet('plannerAlarmFiredIds', set, startsWithToday); }
+function deadlineNotifiedSet() { return loadIdSet('deadlineNotifiedIds'); }
+function deadlineSaveNotifiedSet(set) { saveIdSet('deadlineNotifiedIds', set, includesToday); }
 
 // =========================================
 // CHUÔNG BÁO ĐÚNG GIỜ (giống báo thức/Google Calendar) — TÁCH RIÊNG khỏi thông báo "báo trước
@@ -304,16 +314,6 @@ function plannerNotifiedSet() {
 // định của hệ điều hành (không tuỳ biến được vì đó là giới hạn chung của Web Push, không phải
 // thiếu sót ở đây).
 // =========================================
-function plannerAlarmFiredSet() {
-    try { return new Set(JSON.parse(localStorage.getItem('plannerAlarmFiredIds') || '[]')); }
-    catch (e) { return new Set(); }
-}
-function plannerSaveAlarmFiredSet(set) {
-    const todayStr = plannerFmtDateInput(new Date());
-    const kept = [...set].filter(key => key.startsWith(todayStr + '_'));
-    localStorage.setItem('plannerAlarmFiredIds', JSON.stringify(kept));
-}
-
 // Phát 3 tiếng "tinh" ngắn liên tiếp bằng Web Audio (không cần file âm thanh ngoài nào).
 function playPlannerAlarmSound() {
     if (!plannerAlarmAudioCtx) return;
@@ -338,7 +338,7 @@ function playPlannerAlarmSound() {
 // 1 phút so với lúc poll thực sự chạy, vì poll cách nhau 30s — đủ để không bỏ lỡ mốc chính xác
 // dù JS timer có thể trôi vài giây). Chỉ báo ĐÚNG 1 LẦN mỗi việc/ngày.
 async function checkPlannerAlarmArrival(data, todayStr) {
-    if (!currentUser || !plannerNotifEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (!plannerCanNotify()) return;
 
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -373,15 +373,8 @@ function plannerClearNotifiedFor(dateStr, id) {
     if (alarmSet.delete(`${dateStr}_${id}`)) plannerSaveAlarmFiredSet(alarmSet);
 }
 
-function plannerSaveNotifiedSet(set) {
-    // Chỉ giữ lại mốc của HÔM NAY để tránh localStorage phình to vô hạn theo thời gian
-    const todayStr = plannerFmtDateInput(new Date());
-    const kept = [...set].filter(key => key.startsWith(todayStr + '_'));
-    localStorage.setItem('plannerNotifiedIds', JSON.stringify(kept));
-}
-
 async function checkUpcomingPlannerNotifications(data, todayStr) {
-    if (!currentUser || !plannerNotifEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (!plannerCanNotify()) return;
 
     const now = new Date();
     // 2 CHỖ GỌI KHÁC (đăng nhập xong, vừa lưu 1 việc mới) không có sẵn data để truyền vào —
@@ -389,7 +382,7 @@ async function checkUpcomingPlannerNotifications(data, todayStr) {
     // 2 nơi đó. Chỉ khi gọi TỪ checkTodayPlannerBlocks() (vòng lặp poll mỗi 30s, tần suất cao
     // nhất) mới thực sự tận dụng được data đã có sẵn, tránh query Supabase thừa.
     if (!data) {
-        todayStr = plannerFmtDateInput(now);
+        todayStr = fmtLocalDate(now);
         const { data: fetched, error } = await sbClient.from('daily_plans')
             .select('id, title, start_min, end_min')
             .eq('user_id', currentUser.id)
@@ -429,27 +422,10 @@ async function checkUpcomingPlannerNotifications(data, todayStr) {
 // theo mức ưu tiên (PRIORITY_LEVELS.leadDays: quan trọng=7, bình thường=5, không quan trọng lắm=3).
 // Dùng CHUNG kênh thông báo (Notification API) và điều kiện bật/tắt với Kế Hoạch (plannerNotifEnabled()).
 // =========================================
-function deadlineNotifiedSet() {
-    try { return new Set(JSON.parse(localStorage.getItem('deadlineNotifiedIds') || '[]')); }
-    catch (e) { return new Set(); }
-}
-function deadlineSaveNotifiedSet(set) {
-    // Key ở đây có dạng `detail_${todayStr}_${id}` hoặc `plan_${todayStr}_${id}` (khác với
-    // plannerSaveNotifiedSet ở trên, key không có prefix) -> phải dùng includes(`_${todayStr}_`)
-    // để khớp cả 2 prefix, KHÔNG được dùng startsWith(todayStr + '_') vì nó luôn sai (xoá sạch
-    // set mỗi lần lưu, khiến thông báo "Hạn" bắn lặp lại mỗi 30 giây thay vì 1 lần/ngày).
-    const todayStr = plannerFmtDateInput(new Date());
-    const kept = [...set].filter(key => key.includes(`_${todayStr}_`));
-    localStorage.setItem('deadlineNotifiedIds', JSON.stringify(kept));
-}
-function daysBetweenDateStrings(fromStr, toStr) {
-    return Math.round((new Date(toStr + 'T00:00:00') - new Date(fromStr + 'T00:00:00')) / 86400000);
-}
-
 async function checkUpcomingDeadlineNotifications() {
-    if (!currentUser || !plannerNotifEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (!plannerCanNotify()) return;
 
-    const todayStr = plannerFmtDateInput(new Date());
+    const todayStr = fmtLocalDate(new Date());
     const notified = deadlineNotifiedSet();
     let changed = false;
 
@@ -486,7 +462,7 @@ async function checkUpcomingDeadlineNotifications() {
         .select('id, title, plan_date, priority')
         .eq('user_id', currentUser.id)
         .gte('plan_date', todayStr)
-        .lte('plan_date', plannerFmtDateInput(futureLimit));
+        .lte('plan_date', fmtLocalDate(futureLimit));
 
     if (!plansErr && plans) {
         plans.forEach(item => {
@@ -515,16 +491,8 @@ function plannerGetMonday(date) {
     d.setHours(0, 0, 0, 0);
     return d;
 }
-function plannerFmtDateInput(d) {
-    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-function plannerFmtHM(min) {
-    min = Math.max(0, Math.min(1440, Math.round(min)));
-    const h = Math.floor(min / 60), m = min % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-function plannerIsSameDate(a, b) { return plannerFmtDateInput(a) === plannerFmtDateInput(b); }
+const plannerFmtHM = fmtMinutesHM; // shared.js
+function plannerIsSameDate(a, b) { return fmtLocalDate(a) === fmtLocalDate(b); }
 function plannerSnap(min) { return Math.round(min / PLANNER_SNAP_MIN) * PLANNER_SNAP_MIN; }
 function plannerPxToMin(px) { return Math.max(0, Math.min(1440, (px / PLANNER_HOUR_PX) * 60)); }
 // plannerEscapeText() đã bị xóa (dùng đúng escapeHtml() ở shared.js thay thế) — trước đây file

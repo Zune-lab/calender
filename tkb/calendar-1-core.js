@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // dùng bấm vào lịch có thể chọn lùi về NGÀY ĐÃ QUA (vô lý vì hạn công việc/ghi chú không
     // thể ở quá khứ). Set min = đúng ngày hôm nay -> trình duyệt tự khoá, không cho bấm chọn
     // ngày trước đó trong lịch popup nữa (chỉ chọn được hôm nay trở đi).
-    const todayInputStr = plannerFmtDateInput(new Date());
+    const todayInputStr = fmtLocalDate(new Date());
     ['note-due-date', 'task-due-date'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.min = todayInputStr;
@@ -146,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (themeToggle) {
-        const isSystemModeNow = localStorage.getItem('theme') === 'system';
+        const isSystemModeNow = localStorage.getItem(STORAGE_KEYS.theme) === 'system';
         if (themeSystemToggle) themeSystemToggle.checked = isSystemModeNow;
         syncManualSwitchLockState(isSystemModeNow);
 
@@ -154,26 +154,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // bật), vì người dùng vừa tự chọn rõ ràng 1 theme cụ thể.
         themeToggle.addEventListener('change', function() {
             if (themeSystemToggle) themeSystemToggle.checked = false;
-            if (this.checked) {
-                document.body.classList.add('light-mode');
-                localStorage.setItem('theme', 'light');
-            } else {
-                document.body.classList.remove('light-mode');
-                localStorage.setItem('theme', 'dark');
-            }
+            setThemePreference(this.checked ? 'light' : 'dark');
         });
     }
 
     if (themeSystemToggle) {
         themeSystemToggle.addEventListener('change', function() {
-            if (this.checked) {
-                localStorage.setItem('theme', 'system');
-            } else {
-                // Tắt "Theo hệ thống" -> chốt lại đúng theme đang hiển thị ngay lúc tắt thành
-                // 1 lựa chọn thủ công rõ ràng (light/dark), để công tắc bên cạnh hoạt động lại
-                // bình thường thay vì rơi về mặc định light một cách khó hiểu.
-                localStorage.setItem('theme', document.body.classList.contains('light-mode') ? 'light' : 'dark');
-            }
+            // Tắt "Theo hệ thống" -> chốt lại đúng theme đang hiển thị ngay lúc tắt thành
+            // 1 lựa chọn thủ công rõ ràng (light/dark), để công tắc bên cạnh hoạt động lại bình thường.
+            setThemePreference(this.checked ? 'system' : (document.body.classList.contains('light-mode') ? 'light' : 'dark'));
             syncManualSwitchLockState(this.checked);
         });
     }
@@ -219,12 +208,10 @@ function updateDesktopClock() {
 
     const now = new Date();
     // Tự format HH:MM — toLocaleTimeString('en-US', {hour12:false}) hiện "24:05" thay vì "00:05" ở Chrome.
-    timeEl.innerText = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    timeEl.innerText = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
     // Hiển thị tiếng Việt, đúng thứ tự ngày/tháng: "Thứ Hai, 12/10"
     const VN_WEEKDAYS = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
-    const dd = String(now.getDate()).padStart(2, '0');
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    dateEl.innerText = `${VN_WEEKDAYS[now.getDay()]}, ${dd}/${mm}`;
+    dateEl.innerText = `${VN_WEEKDAYS[now.getDay()]}, ${fmtDM(now)}`;
 }
 
 // =========================================
@@ -254,33 +241,12 @@ function updateTopbarContrast() {
     }
     const url = matches[matches.length - 1][2];
 
-    const img = new Image();
-    // Cần để đọc được pixel qua canvas; ảnh từ URL ngoài không cho phép CORS sẽ khiến canvas
-    // bị "tainted" -> getImageData ném lỗi, bắt ở catch bên dưới và bỏ qua an toàn (giữ mặc định).
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-        try {
-            const SAMPLE = 24; // chỉ cần mẫu nhỏ để tính độ sáng trung bình, không cần full-res
-            const canvas = document.createElement('canvas');
-            canvas.width = SAMPLE; canvas.height = SAMPLE;
-            const ctx = canvas.getContext('2d');
-            // Chỉ lấy mẫu dải TRÊN CÙNG của ảnh (nơi .dashboard-topbar thực sự nằm đè lên) thay
-            // vì trung bình cả bức ảnh — đúng ngữ cảnh hơn vì ảnh có thể sáng dưới/tối trên...
-            const srcH = Math.max(1, img.naturalHeight * 0.28);
-            ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, 0, 0, SAMPLE, SAMPLE);
-            const { data } = ctx.getImageData(0, 0, SAMPLE, SAMPLE);
-            let total = 0;
-            for (let i = 0; i < data.length; i += 4) {
-                total += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-            }
-            const avgLuminance = total / (data.length / 4); // 0 (đen) -> 255 (trắng)
-            document.body.classList.toggle('bg-is-light', avgLuminance > 150);
-        } catch (err) {
-            console.warn('[Contrast] Không đọc được độ sáng ảnh nền (có thể do CORS):', err.message);
-        }
-    };
-    img.onerror = () => {}; // ảnh lỗi/URL sai -> im lặng bỏ qua, giữ màu chữ mặc định
-    img.src = url;
+    // Dùng chung bộ đo của bg-sync.js (chỉ lấy dải TRÊN CÙNG ~28% — đúng chỗ .dashboard-topbar nằm đè).
+    // Ảnh CORS không đọc được pixel / ảnh lỗi -> null -> giữ màu chữ mặc định.
+    if (!window.measureImageStats) return;
+    window.measureImageStats(url, 0.28).then((st) => {
+        if (st) document.body.classList.toggle('bg-is-light', st.luminance > 150);
+    });
 }
 
 function initAdaptiveHeaderContrast() {
@@ -310,6 +276,8 @@ function handleSession(session) {
 
         currentUser = session.user;
         const meta = currentUser.user_metadata;
+        // Cho các module tách file (vd ảnh nền màn hình khoá) tự khởi tạo lại theo NGƯỜI DÙNG MỚI
+        (window.onUserSessionStart || []).forEach((fn) => { try { fn(); } catch (e) { console.warn('[Session] hook lỗi:', e.message); } });
 
         // FIX "ĐỔI MÀU ACCENT KHÔNG HOẠT ĐỘNG": trang TKB trước giờ CHƯA BAO GIỜ set biến CSS
         // --accent theo tài khoản hay theo màu tự chọn — luôn dùng đúng 1 màu mặc định cứng khai
@@ -328,7 +296,7 @@ function handleSession(session) {
             const oldImg = displayArea.querySelector('.custom-avatar-img');
             if (oldImg) oldImg.remove();
 
-            if (meta && meta.avatar) {
+            if (meta && meta.avatar && isSafeImageSrc(meta.avatar)) {
                 // Vẫn gắn title = tên đã resolve (tôn trọng hide_email) lên avatar, để hover
                 // vào là biết đang đăng nhập bằng ai — trước đây nhánh này bỏ qua hoàn toàn
                 // resolveDisplayName(), khiến toggle "Ẩn Email công khai" vô nghĩa với tài
@@ -394,7 +362,7 @@ function handleSession(session) {
     }
 }
 
-window.maxSemesterWeek = 20; 
+window.maxSemesterWeek = MAX_SEMESTER_WEEKS; 
 
 let authMode = 'login';
 window.switchAuthTab = function(mode) {
@@ -500,18 +468,56 @@ window.logout = async function() {
     // Nhớ Tab hiện tại trước khi Logout
     const activeTabLi = document.querySelector('.nav-links li.active');
     if (activeTabLi) {
-        const title = activeTabLi.getAttribute('title') || '';
-        let targetName = 'timetable'; 
-        
-        if (title.includes('Lịch Thi')) targetName = 'exams';
-        else if (title.includes('Cài Đặt')) targetName = 'settings';
-        else if (title.includes('Kế Hoạch')) targetName = 'planner';
-        
-        localStorage.setItem('targetTab', targetName);
+        localStorage.setItem(STORAGE_KEYS.targetTab, activeTabLi.dataset.tab || 'timetable');
     }
 
     await removePushSubscriptionFor(sbClient); // trước signOut để còn quyền xoá subscription
     await sbClient.auth.signOut(); 
+}
+
+// Tiêu đề header theo từng tab (trước đây khai báo riêng trong applyTargetTabInstant, còn switchTab
+// nhận từ onclick của HTML -> 2 nguồn có thể lệch nhau).
+const TAB_TITLES = { timetable: 'Thời Khóa Biểu', exams: 'Lịch Thi Học Kỳ', settings: 'Cài Đặt Workspace', planner: 'Kế Hoạch Ngày' };
+
+// Áp trạng thái giao diện của 1 tab (active nav, pane, tiêu đề, nút Nhập, khởi tạo Kế Hoạch).
+// Dùng chung cho chuyển tab bằng tay (switchTab) và nhảy tab lúc mở trang (applyTargetTabInstant) —
+// trước đây 2 hàm này chép nguyên khối logic giống hệt nhau.
+function applyTabState(tabId, titleText) {
+    document.querySelectorAll('[data-tab]').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll(`[data-tab="${tabId}"]`).forEach(el => el.classList.add('active'));
+
+    document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+    const pane = document.getElementById(`tab-${tabId}`);
+    if (pane) pane.classList.add('active');
+
+    const title = titleText || TAB_TITLES[tabId];
+    const topbarTitle = document.getElementById('topbar-title');
+    if (topbarTitle && title) topbarTitle.innerText = title;
+
+    // Icon nhỏ kế bên tiêu đề header — chỉ hiện khi đang ở tab Kế Hoạch Ngày
+    const topbarIcon = document.getElementById('topbar-title-icon');
+    if (topbarIcon) topbarIcon.style.display = (tabId === 'planner') ? 'flex' : 'none';
+
+    const importLabel = document.getElementById('top-import-label');
+    const importText = document.getElementById('top-import-text');
+    if (importLabel && importText) {
+        const importConfig = {
+            timetable: { forId: 'excel-file', text: 'Nhập TKB' },
+            exams: { forId: 'excel-exam-file', text: 'Nhập Lịch Thi' },
+        }[tabId];
+        if (importConfig) {
+            importLabel.style.display = 'inline-flex';
+            importLabel.setAttribute('for', importConfig.forId);
+            importText.innerText = importConfig.text;
+        } else {
+            importLabel.style.display = 'none';
+        }
+    }
+
+    if (tabId === 'planner' && typeof initDayPlanner === 'function') {
+        initDayPlanner();
+        loadPlannerBlocks();
+    }
 }
 
 window.switchTab = function(tabId, element, titleText) {
@@ -521,90 +527,16 @@ window.switchTab = function(tabId, element, titleText) {
     loader.classList.remove('hidden');
 
     setTimeout(() => {
-        // Đồng bộ trạng thái active cho MỌI nơi có nav (dock chính + nav mobile) qua data-tab
-        document.querySelectorAll('[data-tab]').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll(`[data-tab="${tabId}"]`).forEach(el => el.classList.add('active'));
-
-        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-        document.getElementById(`tab-${tabId}`).classList.add('active');
-
-        if(titleText) document.getElementById('topbar-title').innerText = titleText;
-
-        // Icon nhỏ kế bên tiêu đề header — chỉ hiện khi đang ở tab Kế Hoạch Ngày
-        const topbarIcon = document.getElementById('topbar-title-icon');
-        if (topbarIcon) topbarIcon.style.display = (tabId === 'planner') ? 'flex' : 'none';
-
-        const importLabel = document.getElementById('top-import-label');
-        const importText = document.getElementById('top-import-text');
-        
-        if (importLabel && importText) {
-            if (tabId === 'timetable') {
-                importLabel.style.display = 'inline-flex';
-                importLabel.setAttribute('for', 'excel-file');
-                importText.innerText = 'Nhập TKB';
-            } else if (tabId === 'exams') {
-                importLabel.style.display = 'inline-flex';
-                importLabel.setAttribute('for', 'excel-exam-file');
-                importText.innerText = 'Nhập Lịch Thi';
-            } else {
-                importLabel.style.display = 'none';
-            }
-        }
-
-        if (tabId === 'planner' && typeof initDayPlanner === 'function') {
-            initDayPlanner();
-            loadPlannerBlocks();
-        }
-
+        applyTabState(tabId, titleText);
         setTimeout(() => { loader.classList.add('hidden'); }, 150); 
     }, 350); 
 }
 
 function applyTargetTabInstant() {
-    const target = localStorage.getItem('targetTab');
-    localStorage.removeItem('targetTab'); 
-    if (!target) return;
-
-    const topbarTitleMap = { timetable: 'Thời Khóa Biểu', exams: 'Lịch Thi Học Kỳ', settings: 'Cài Đặt Workspace', planner: 'Kế Hoạch Ngày' };
-
-    const matches = document.querySelectorAll(`[data-tab="${target}"]`);
-    if (!matches.length) return;
-
-    document.querySelectorAll('[data-tab]').forEach(el => el.classList.remove('active'));
-    matches.forEach(el => el.classList.add('active'));
-
-    document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-    const pane = document.getElementById(`tab-${target}`);
-    if (pane) pane.classList.add('active');
-
-    const topbarTitle = document.getElementById('topbar-title');
-    if (topbarTitle) topbarTitle.innerText = topbarTitleMap[target];
-
-    // Icon nhỏ kế bên tiêu đề header — chỉ hiện khi đang ở tab Kế Hoạch Ngày
-    const topbarIcon = document.getElementById('topbar-title-icon');
-    if (topbarIcon) topbarIcon.style.display = (target === 'planner') ? 'flex' : 'none';
-
-
-    const importLabel = document.getElementById('top-import-label');
-    const importText = document.getElementById('top-import-text');
-    if (importLabel && importText) {
-        if (target === 'timetable') {
-            importLabel.style.display = 'inline-flex';
-            importLabel.setAttribute('for', 'excel-file');
-            importText.innerText = 'Nhập TKB';
-        } else if (target === 'exams') {
-            importLabel.style.display = 'inline-flex';
-            importLabel.setAttribute('for', 'excel-exam-file');
-            importText.innerText = 'Nhập Lịch Thi';
-        } else {
-            importLabel.style.display = 'none';
-        }
-    }
-
-    if (target === 'planner' && typeof initDayPlanner === 'function') {
-        initDayPlanner();
-        loadPlannerBlocks();
-    }
+    const target = localStorage.getItem(STORAGE_KEYS.targetTab);
+    localStorage.removeItem(STORAGE_KEYS.targetTab); 
+    if (!target || !document.querySelector(`[data-tab="${target}"]`)) return;
+    applyTabState(target);
 }
 
 // navigateWithFade() giờ nằm ở bg-sync.js (dùng chung với index.js, tránh lặp code)
@@ -613,13 +545,13 @@ function applyTargetTabInstant() {
 // 1.6b. VÀO PROFILE TỪ TKB — nhớ điểm quay về
 // =========================================
 window.goToProfileFromTkb = function() {
-    localStorage.setItem('profileReturnTo', '../tkb/calendar.html');
+    localStorage.setItem(STORAGE_KEYS.profileReturnTo, '../tkb/calendar.html');
 
     // Ghi nhớ luôn tab đang đứng (Thời Khóa Biểu/Lịch Thi/Cài Đặt) để applyTargetTabInstant()
     // tự khôi phục đúng tab đó khi quay lại, không chỉ mặc định về Thời Khóa Biểu
     const activePane = document.querySelector('.tab-pane.active');
     if (activePane && activePane.id) {
-        localStorage.setItem('targetTab', activePane.id.replace('tab-', ''));
+        localStorage.setItem(STORAGE_KEYS.targetTab, activePane.id.replace('tab-', ''));
     }
 
     navigateWithFade('../profile/profile.html');
@@ -629,7 +561,7 @@ window.goToProfileFromTkb = function() {
 // 2. RENDER LƯỚI TKB & IMPORT EXCEL
 // =========================================
 
-function initWeekSelector(maxW = 20) {
+function initWeekSelector(maxW = MAX_SEMESTER_WEEKS) {
     window.maxSemesterWeek = maxW;
     const selector = document.getElementById('week-selector');
     const customList = document.getElementById('week-options-list');
@@ -656,10 +588,7 @@ function initWeekSelector(maxW = 20) {
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
 
-        const startStr = `${weekStart.getDate().toString().padStart(2, '0')}/${(weekStart.getMonth()+1).toString().padStart(2, '0')}`;
-        const endStr = `${weekEnd.getDate().toString().padStart(2, '0')}/${(weekEnd.getMonth()+1).toString().padStart(2, '0')}`;
-
-        const text = `Tuần ${i} (Từ ${startStr} đến ${endStr})`;
+        const text = `Tuần ${i} (Từ ${fmtDM(weekStart)} đến ${fmtDM(weekEnd)})`;
 
         const option = document.createElement('option');
         option.value = i; option.text = text;
@@ -710,20 +639,14 @@ document.getElementById('excel-file').addEventListener('change', async function(
             // theo mốc tháng 5 cũ -> lịch trống trơn dù đã import đúng file. Giờ quét toàn bộ cột
             // "Thời gian học" để tìm ngày sớm nhất, lùi về đúng thứ Hai của tuần đó làm mốc "Tuần 1" mới,
             // rồi lưu lại vào Supabase để các lần đăng nhập sau vẫn giữ đúng mốc này.
-            const parseVNDate = (dStr) => {
-                const p = String(dStr).trim().split('/');
-                if (p.length !== 3) return null;
-                const y = p[2].length === 2 ? 2000 + parseInt(p[2]) : parseInt(p[2]);
-                const dt = new Date(y, parseInt(p[1]) - 1, parseInt(p[0]));
-                return isNaN(dt.getTime()) ? null : dt;
-            };
-
+            // parseVNExamDate() (shared.js): cùng 1 bộ phân tích ngày cho TKB + Lịch thi, có kiểm tra ngày
+            // thật (trước đây ở đây có 2 bản parse riêng không validate: "31/02" hay chuỗi rác -> Invalid Date).
             let earliestDate = null;
             for (let i = 0; i < jsonArray.length; i++) {
                 const rangeStr = String(jsonArray[i]['Thời gian học'] || '').trim();
                 if (!rangeStr.includes('đến')) continue;
                 const startStr = rangeStr.split('đến')[0].trim();
-                const sDate = parseVNDate(startStr);
+                const sDate = parseVNExamDate(startStr);
                 if (sDate && (!earliestDate || sDate < earliestDate)) earliestDate = sDate;
             }
 
@@ -738,9 +661,6 @@ document.getElementById('excel-file').addEventListener('change', async function(
             }
             const effectiveSemesterStart = pendingSemesterStart || semesterStartDate;
 
-            const sguStartTime = { 1:"07:00", 2:"07:50", 3:"09:00", 4:"09:50", 5:"10:40", 6:"13:00", 7:"13:50", 8:"15:00", 9:"15:50", 10:"16:40", 11:"17:40", 12:"18:30", 13:"19:20", 14:"20:10" };
-            const sguEndTime = { 1:"07:50", 2:"08:40", 3:"09:50", 4:"10:40", 5:"11:30", 6:"13:50", 7:"14:40", 8:"15:50", 9:"16:40", 10:"17:30", 11:"18:30", 12:"19:20", 13:"20:10", 14:"21:00" };
-            
             for (let i = 0; i < jsonArray.length; i++) {
                 const row = jsonArray[i];
                 
@@ -761,52 +681,41 @@ document.getElementById('excel-file').addEventListener('change', async function(
                 
                 if (timeSlot) {
                     const match = timeSlot.match(/Tiết\s*(\d+)\s*-\s*(\d+)/i);
-                    if (match) { startTiet = parseInt(match[1]); endTiet = parseInt(match[2]); }
+                    if (match) { startTiet = parseInt(match[1], 10); endTiet = parseInt(match[2], 10); }
                 } else if (row['Tiết bắt đầu'] !== undefined && row['Số tiết'] !== undefined) {
-                    startTiet = parseInt(row['Tiết bắt đầu']);
-                    endTiet = startTiet + parseInt(row['Số tiết']) - 1;
+                    startTiet = parseInt(row['Tiết bắt đầu'], 10);
+                    endTiet = startTiet + parseInt(row['Số tiết'], 10) - 1;
                     timeSlot = `Tiết ${startTiet}-${endTiet}`;
                 }
 
                 let exactTime = String(row['Thời gian'] || '').trim();
                 if (!exactTime && startTiet > 0 && endTiet > 0) {
-                    if (sguStartTime[startTiet] && sguEndTime[endTiet]) {
-                        exactTime = `${sguStartTime[startTiet]} -> ${sguEndTime[endTiet]}`;
+                    if (sguPeriodStartText(startTiet) && sguPeriodEndText(endTiet)) {
+                        exactTime = `${sguPeriodStartText(startTiet)} -> ${sguPeriodEndText(endTiet)}`;
                     }
                 }
 
                 let weeks = String(row['Tuần'] || row['Tuần học'] || '').trim();
                 let dateRangeStr = String(row['Thời gian học'] || '').trim();
                 
-                if (!weeks && dateRangeStr.includes('đến') && typeof semesterStartDate !== 'undefined') {
-                    try {
-                        const dates = dateRangeStr.split('đến').map(s => s.trim());
-                        if (dates.length === 2 && dates[0].includes('/')) {
-                            const parseDate = (dStr) => {
-                                const p = dStr.split('/');
-                                const y = p[2].length === 2 ? 2000 + parseInt(p[2]) : parseInt(p[2]);
-                                return new Date(y, parseInt(p[1]) - 1, parseInt(p[0]));
-                            };
-                            
-                            const sDate = parseDate(dates[0]);
-                            const eDate = parseDate(dates[1]);
-                            
-                            const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-                            const diffStart = Math.floor((sDate.getTime() - effectiveSemesterStart.getTime()) / msPerWeek);
-                            const diffEnd = Math.floor((eDate.getTime() - effectiveSemesterStart.getTime()) / msPerWeek);
-                            
-                            let weekArr = Array(20).fill('-');
-                            for (let w = Math.max(0, diffStart); w <= Math.min(19, diffEnd); w++) {
-                                weekArr[w] = ((w + 1) % 10).toString(); 
-                            }
-                            weeks = weekArr.join('');
+                if (!weeks && dateRangeStr.includes('đến')) {
+                    const dates = dateRangeStr.split('đến').map(s => s.trim());
+                    const sDate = dates.length === 2 ? parseVNExamDate(dates[0]) : null;
+                    const eDate = dates.length === 2 ? parseVNExamDate(dates[1]) : null;
+                    if (sDate && eDate) {
+                        // Số NGÀY LỊCH / 7 (calendarDayDiff) thay vì chênh mili-giây: không lệch khi qua giờ mùa hè.
+                        const diffStart = Math.floor(calendarDayDiff(sDate, effectiveSemesterStart) / 7);
+                        const diffEnd = Math.floor(calendarDayDiff(eDate, effectiveSemesterStart) / 7);
+
+                        const weekArr = Array(MAX_SEMESTER_WEEKS).fill('-');
+                        for (let w = Math.max(0, diffStart); w <= Math.min(MAX_SEMESTER_WEEKS - 1, diffEnd); w++) {
+                            weekArr[w] = ((w + 1) % 10).toString(); 
                         }
-                    } catch (dateErr) {
-                        console.warn("Bỏ qua lỗi dịch ngày tháng ở môn: ", subjectName, dateErr);
+                        weeks = weekArr.join('');
                     }
                 }
 
-                if (startTiet >= 1 && endTiet >= startTiet && endTiet <= 14) { // lưới tiết chỉ có 1..14
+                if (startTiet >= 1 && endTiet >= startTiet && endTiet <= SGU_PERIOD_COUNT) { // lưới tiết chỉ có 1..SGU_PERIOD_COUNT
                     formattedData.push({
                         user_id: currentUser.id, 
                         name: subjectName, 
@@ -846,7 +755,6 @@ document.getElementById('excel-file').addEventListener('change', async function(
             // ghép được mà vẫn còn ghi chú, sẽ được GIỮ LẠI không xoá để không mất dữ liệu.
             const oldSubjectIds = (oldRows || []).map(r => r.id);
             const keepOldIds = new Set();
-            let movedGroups = 0;
             if (oldSubjectIds.length) {
                 const remap = buildSubjectIdRemap(oldRows, insertedRows || []);
                 const { data: detailRows, error: detailErr } = await sbClient.from('subject_details')
@@ -863,7 +771,6 @@ document.getElementById('excel-file').addEventListener('change', async function(
                         const { error: moveErr } = await sbClient.from('subject_details')
                             .update({ subject_id: newId }).eq('subject_id', oldId).eq('user_id', currentUser.id);
                         if (moveErr) { keepOldIds.add(oldId); console.warn('[Import] Không chuyển được ghi chú của môn', oldId, moveErr.message); }
-                        else movedGroups++;
                     }));
                 }
             }
@@ -883,7 +790,7 @@ document.getElementById('excel-file').addEventListener('change', async function(
 
             if (pendingSemesterStart) {
                 semesterStartDate = pendingSemesterStart;
-                const ymd = `${semesterStartDate.getFullYear()}-${String(semesterStartDate.getMonth() + 1).padStart(2, '0')}-${String(semesterStartDate.getDate()).padStart(2, '0')}`;
+                const ymd = fmtLocalDate(semesterStartDate);
                 const { error: settingsErr } = await sbClient.from('user_settings')
                     .upsert({ user_id: currentUser.id, semester_start_date: ymd }, { onConflict: 'user_id' });
                 if (settingsErr) console.error('[Import] Lỗi lưu mốc học kỳ mới:', settingsErr);

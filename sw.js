@@ -10,15 +10,13 @@
 // FIX: Dùng path TƯƠNG ĐỐI (không có dấu / ở đầu) và tự tính theo self.registration.scope,
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
-const CACHE_NAME = 'sgu-workspace-v13'; // BUMP v8: gộp supabaseUrl/supabaseKey của index.js,
-// profile.js, tkb/calendar-1-core.js về 1 file chung 'supabase-config.js' (load trước mọi
-// script khác) -> thêm file mới này vào app shell để cache offline, đồng thời bump version
-// để SW install lại và không phục vụ nhầm bản index.js/profile.js/calendar-1-core.js cũ
-// (vẫn còn khai báo supabaseUrl/supabaseKey riêng, đã bị xoá) từ cache trước đó.
+// Tăng số version mỗi khi đổi DANH SÁCH file trong APP_SHELL_RELATIVE (hoặc muốn ép dọn cache cũ).
+const CACHE_NAME = 'sgu-workspace-v14';
+const CALENDAR_PAGE = 'tkb/calendar.html'; // trang mở khi bấm thông báo (trước đây gõ lặp ở 3 chỗ)
 const APP_SHELL_RELATIVE = [
     'index.html', 'index.css', 'index.js', 'supabase-config.js', 'shared.js', 'bg-sync.js',
     'profile/profile.html', 'profile/profile.css', 'profile/profile.js',
-    'tkb/calendar.html',
+    CALENDAR_PAGE,
     'tkb/calendar-1-base.css', 'tkb/calendar-2-notes-glass-lightmode.css', 'tkb/calendar-3-desktop-settings-dialog.css',
     'tkb/calendar-4-planner-overview.css', 'tkb/calendar-7-layout-refresh.css',
     'tkb/calendar-1-core.js', 'tkb/calendar-2-timetable-modal.js', 'tkb/calendar-3-personalization.js',
@@ -99,7 +97,7 @@ self.addEventListener('push', (event) => {
         icon: payload.icon || scopedUrl('icon-192.png'),
         badge: payload.badge || scopedUrl('icon-192.png'),
         tag: payload.tag || 'sgu-planner',
-        data: { url: payload.url || scopedUrl('tkb/calendar.html') },
+        data: { url: payload.url || scopedUrl(CALENDAR_PAGE) },
         vibrate: [100, 50, 100],
         requireInteraction: false,
     };
@@ -110,12 +108,12 @@ self.addEventListener('push', (event) => {
 // Bấm vào notification -> mở (hoặc focus) đúng trang Kế Hoạch Ngày
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const targetUrl = (event.notification.data && event.notification.data.url) || scopedUrl('tkb/calendar.html');
+    const targetUrl = (event.notification.data && event.notification.data.url) || scopedUrl(CALENDAR_PAGE);
 
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
             for (const client of clientList) {
-                if (client.url.includes('calendar.html') && 'focus' in client) {
+                if (client.url.includes(CALENDAR_PAGE) && 'focus' in client) {
                     return client.focus();
                 }
             }
