@@ -11,7 +11,7 @@ const PLANNER_OVERVIEW_MAX_CHIPS = 3;  // số chip tối đa mỗi ngày (phầ
 const PLANNER_OVERVIEW_DOW = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']; // lưới bắt đầu từ Thứ 2
 
 let plannerViewMode = (function () {
-    try { return localStorage.getItem('plannerViewMode') === 'overview' ? 'overview' : 'grid'; }
+    try { return lsGet(STORAGE_KEYS.plannerViewMode) === 'overview' ? 'overview' : 'grid'; }
     catch (e) { return 'grid'; }
 })();
 let plannerOverviewByDate = {}; // { 'YYYY-MM-DD': [ {kind:'plan'|'due', id, title, color, done, sort} ] }
@@ -57,14 +57,14 @@ async function loadPlannerOverview() {
     renderPlannerYearCard();
 
     const [plansRes, dueRes] = await Promise.all([
-        sbClient.from('daily_plans').select('*')
+        offlineRead(`plans:${startStr}:${endStr}`, () => sbClient.from('daily_plans').select('*')
             .eq('user_id', currentUser.id)
             .gte('plan_date', startStr).lte('plan_date', endStr)
-            .order('start_min', { ascending: true }),
-        sbClient.from('subject_details')
+            .order('start_min', { ascending: true })),
+        offlineRead(`due:${startStr}:${endStr}`, () => sbClient.from('subject_details')
             .select('id, content, type, due_date, priority')
             .eq('user_id', currentUser.id).eq('status', 'upcoming')
-            .gte('due_date', startStr).lte('due_date', endStr)
+            .gte('due_date', startStr).lte('due_date', endStr))
     ]);
 
     plannerOverviewByDate = {};
@@ -202,7 +202,7 @@ function plannerApplyViewHint() {
 
 window.setPlannerViewMode = function (mode) {
     plannerViewMode = mode === 'overview' ? 'overview' : 'grid';
-    try { localStorage.setItem('plannerViewMode', plannerViewMode); } catch (e) { /* bỏ qua */ }
+    lsSet(STORAGE_KEYS.plannerViewMode, plannerViewMode);
 
     const wrapper = document.getElementById('planner-wrapper');
     const overview = document.getElementById('planner-overview');

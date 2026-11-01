@@ -6,7 +6,6 @@
    (biến CSS mà các file sau dùng lại, ví dụ var(--text-main), var(--accent-color)...).
 */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 /* FIX SCALE TOÀN TRANG: trước đây file này KHÔNG có rule nào set font-size gốc cho <html>,
    nên toàn bộ đơn vị "rem" dùng khắp file (nút bấm, popup, tab Cài đặt, Kế hoạch ngày...)
@@ -28,13 +27,9 @@ html {
 
 :root {
     --text-main: #f5f5f7;
-    --text-muted: rgba(255, 255, 255, 0.45);
-    --accent: #ff4655; 
+    --text-muted: rgba(255, 255, 255, 0.45); 
 
     /* Motion token dùng chung toàn hệ thống (đồng bộ index.css / profile.css) */
-    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
-    --duration-fast: 0.2s;
-    --duration-normal: 0.35s;
     
     /* Biến của Bouncing Loader */
     --dot-size: 20px;
@@ -142,7 +137,7 @@ body.light-mode::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.32)
    1. BACKGROUND (TỐI ƯU GPU - HỖ TRỢ CUSTOM)
 ========================================= */
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--font-sans);
     background-color: #08090c;
     background-image: 
         radial-gradient(circle at 15% 15%, rgba(94, 23, 235, 0.15), transparent 40%),

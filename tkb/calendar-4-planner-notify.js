@@ -10,7 +10,8 @@
 //    Kéo/vẽ trực tiếp trên từng cột ngày (Thứ 2 -> Chủ Nhật) để tạo việc.
 //    Mỗi khối gắn với 1 ngày cụ thể (plan_date), lưu Supabase bảng "daily_plans".
 // =========================================
-const PLANNER_HOUR_PX = 64;       // chiều cao 1 giờ trên lưới (px) — phải khớp với calendar.css
+const PLANNER_HOUR_PX = 64;       // chiều cao 1 giờ trên lưới (px) — NGUỒN DUY NHẤT: được đẩy sang CSS qua biến --planner-hour-px ngay bên dưới
+document.documentElement.style.setProperty('--planner-hour-px', PLANNER_HOUR_PX + 'px');
 const PLANNER_SNAP_MIN = 15;      // bước làm tròn khi kéo (phút)
 const PLANNER_MIN_DURATION = 15;  // độ dài tối thiểu 1 khối việc (phút)
 const PLANNER_COLORS = ['#6C9BFF', '#4C7DFF', '#FF7A93', '#F5528C', '#3FC1A9', '#1DA88A', '#FFAE63', '#FF8A3D', '#B18AF5', '#8C5CF2', '#5FCBEB', '#2FA9D6', '#F5CC5C', '#E8A33D', '#8FE3A8', '#E86C6C', '#C9A0FF', '#7FD3C6'];
@@ -38,11 +39,11 @@ let plannerDeadlineTimer = null;
 // Trước đây bị cố định cứng "const PLANNER_NOTIF_LEAD_MIN = 5". Giờ đọc từ localStorage, người
 // dùng chọn ở Cài Đặt (savePlannerNotifLead), mặc định vẫn là 5 phút nếu chưa từng chọn.
 function getPlannerNotifLeadMin() {
-    const v = parseInt(localStorage.getItem('plannerNotifLeadMin'), 10);
+    const v = parseInt(lsGet(STORAGE_KEYS.plannerNotifLeadMin), 10);
     return Number.isFinite(v) && v > 0 ? v : 5;
 }
 window.savePlannerNotifLead = function(minutes) {
-    localStorage.setItem('plannerNotifLeadMin', minutes);
+    lsSet(STORAGE_KEYS.plannerNotifLeadMin, minutes);
 };
 
 // MỤC 3: 3 MỨC ĐỘ QUAN TRỌNG (PRIORITY_LEVELS + getPriorityInfo) giờ nằm ở shared.js, dùng chung với Dashboard.
@@ -149,7 +150,7 @@ function plannerCanNotify() {
 }
 
 function plannerNotifEnabled() {
-    return localStorage.getItem('plannerNotifEnabled') === '1';
+    return lsGet(STORAGE_KEYS.plannerNotifEnabled) === '1';
 }
 
 function plannerNotifStatusText() {
@@ -195,7 +196,7 @@ function initPlannerNotifications() {
                     perm = await Notification.requestPermission();
                 }
                 if (perm === 'granted') {
-                    localStorage.setItem('plannerNotifEnabled', '1');
+                    lsSet(STORAGE_KEYS.plannerNotifEnabled, '1');
                     // Tạo AudioContext NGAY TRONG cử chỉ bấm này (bắt buộc — trình duyệt chặn phát
                     // âm thanh không do người dùng chủ động bấm). Giữ lại để tái dùng lúc chuông
                     // reo sau này, dù lúc đó chỉ chạy từ setInterval (không có cử chỉ bấm mới).
@@ -208,16 +209,16 @@ function initPlannerNotifications() {
                     plannerShowNotification('Đã bật thông báo', { body: 'Mình sẽ báo trước ' + getPlannerNotifLeadMin() + ' phút cho việc trong Kế Hoạch Ngày, và báo Hạn cho Ghi chú/Công việc theo mức ưu tiên — kể cả khi bạn tắt trình duyệt.' });
                 } else {
                     this.checked = false;
-                    localStorage.setItem('plannerNotifEnabled', '0');
+                    lsSet(STORAGE_KEYS.plannerNotifEnabled, '0');
                 }
             } catch (e) {
                 this.checked = false;
-                localStorage.setItem('plannerNotifEnabled', '0');
+                lsSet(STORAGE_KEYS.plannerNotifEnabled, '0');
                 renderPlannerNotifStatus('Không xin được quyền thông báo: ' + e.message + ' (thử mở trang ở tab trình duyệt bình thường thay vì khung xem trước nhúng)');
                 return;
             }
         } else {
-            localStorage.setItem('plannerNotifEnabled', '0');
+            lsSet(STORAGE_KEYS.plannerNotifEnabled, '0');
             stopPlannerNotifPolling();
             await plannerUnsubscribePush();
         }
@@ -282,22 +283,23 @@ function stopPlannerNotifPolling() {
 // Tập id "đã báo" lưu localStorage — trước đây có 3 cặp hàm load/save gần như y hệt nhau.
 // keepKey(key, todayStr) quyết định mốc nào còn thuộc HÔM NAY (giữ lại), phần còn lại bị bỏ để không phình mãi.
 function loadIdSet(storageKey) {
-    try { return new Set(JSON.parse(localStorage.getItem(storageKey) || '[]')); }
+    try { return new Set(JSON.parse(lsGet(storageKey) || '[]')); }
     catch (e) { return new Set(); }
 }
 function saveIdSet(storageKey, set, keepKey) {
     const todayStr = fmtLocalDate(new Date());
-    try { localStorage.setItem(storageKey, JSON.stringify([...set].filter((k) => keepKey(k, todayStr)))); }
-    catch (e) { console.warn('[Notif] Không lưu được mốc đã báo:', e.message); }
+    if (!lsSet(storageKey, JSON.stringify([...set].filter((k) => keepKey(k, todayStr))))) console.warn('[Notif] Không lưu được mốc đã báo (bộ nhớ đầy/bị chặn).');
 }
 const startsWithToday = (key, todayStr) => key.startsWith(todayStr + '_');
-const includesToday = (key, todayStr) => key.includes(`_${todayStr}_`); // key dạng detail_<ngày>_<id> / plan_<ngày>_<id>
-function plannerNotifiedSet() { return loadIdSet('plannerNotifiedIds'); }
-function plannerSaveNotifiedSet(set) { saveIdSet('plannerNotifiedIds', set, startsWithToday); }
-function plannerAlarmFiredSet() { return loadIdSet('plannerAlarmFiredIds'); }
-function plannerSaveAlarmFiredSet(set) { saveIdSet('plannerAlarmFiredIds', set, startsWithToday); }
-function deadlineNotifiedSet() { return loadIdSet('deadlineNotifiedIds'); }
-function deadlineSaveNotifiedSet(set) { saveIdSet('deadlineNotifiedIds', set, includesToday); }
+// Mốc báo Hạn có dạng detail_<ngày hạn>_<id>_<lead|due> / plan_<ngày>_<id>_lead: giữ tới khi ngày hạn qua (trước đây key chứa NGÀY HÔM NAY
+// nên mỗi ngày trong cửa sổ báo trước lại bắn thêm 1 lần).
+const notPastDue = (key, todayStr) => { const m = key.match(/_(\d{4}-\d{2}-\d{2})_/); return !m || m[1] >= todayStr; };
+function plannerNotifiedSet() { return loadIdSet(STORAGE_KEYS.plannerNotifiedIds); }
+function plannerSaveNotifiedSet(set) { saveIdSet(STORAGE_KEYS.plannerNotifiedIds, set, startsWithToday); }
+function plannerAlarmFiredSet() { return loadIdSet(STORAGE_KEYS.plannerAlarmFiredIds); }
+function plannerSaveAlarmFiredSet(set) { saveIdSet(STORAGE_KEYS.plannerAlarmFiredIds, set, startsWithToday); }
+function deadlineNotifiedSet() { return loadIdSet(STORAGE_KEYS.deadlineNotifiedIds); }
+function deadlineSaveNotifiedSet(set) { saveIdSet(STORAGE_KEYS.deadlineNotifiedIds, set, notPastDue); }
 
 // =========================================
 // CHUÔNG BÁO ĐÚNG GIỜ (giống báo thức/Google Calendar) — TÁCH RIÊNG khỏi thông báo "báo trước
@@ -384,7 +386,7 @@ async function checkUpcomingPlannerNotifications(data, todayStr) {
     if (!data) {
         todayStr = fmtLocalDate(now);
         const { data: fetched, error } = await sbClient.from('daily_plans')
-            .select('id, title, start_min, end_min')
+            .select('id, title, start_min, end_min, is_done')
             .eq('user_id', currentUser.id)
             .eq('plan_date', todayStr);
         if (error || !fetched) return;
@@ -396,6 +398,7 @@ async function checkUpcomingPlannerNotifications(data, todayStr) {
     let changed = false;
 
     data.forEach(b => {
+        if (b.is_done) return; // việc đã tick xong thì khỏi báo (chuông đúng giờ + cron server vốn đã bỏ qua, riêng nhánh này trước đây quên)
         const minsUntil = b.start_min - nowMin;
         const key = `${todayStr}_${b.id}`;
         // Báo khi còn 0-5 phút nữa (kể cả khi vừa mới bắt đầu, phòng trường hợp máy đang tắt/app
@@ -440,13 +443,15 @@ async function checkUpcomingDeadlineNotifications() {
         details.forEach(item => {
             const daysUntil = daysBetweenDateStrings(todayStr, item.due_date);
             const leadDays = getPriorityInfo(item.priority).leadDays;
-            const key = `detail_${todayStr}_${item.id}`;
+            // 2 mốc / mục: 1 lần khi VÀO cửa sổ báo trước (lead) và 1 lần đúng ngày hạn (due) — không báo lại mỗi ngày.
+            const stage = daysUntil === 0 ? 'due' : 'lead';
+            const key = `detail_${item.due_date}_${item.id}_${stage}`;
             if (daysUntil >= 0 && daysUntil <= leadDays && !notified.has(key)) {
                 const label = item.type === 'task' ? 'Công việc' : 'Ghi chú';
                 const body = daysUntil === 0
                     ? `Hôm nay là hạn chót! (${getPriorityInfo(item.priority).label})`
                     : `Còn ${daysUntil} ngày nữa tới hạn — ${getPriorityInfo(item.priority).label}`;
-                plannerShowNotification(`${label}: ${item.content}`, { body, tag: key });
+                plannerShowNotification(`${label}: ${item.content || '(không có nội dung)'}`, { body, tag: key });
                 notified.add(key);
                 changed = true;
             }
@@ -461,6 +466,7 @@ async function checkUpcomingDeadlineNotifications() {
     const { data: plans, error: plansErr } = await sbClient.from('daily_plans')
         .select('id, title, plan_date, priority')
         .eq('user_id', currentUser.id)
+        .eq('is_done', false) // việc đã xong không cần nhắc
         .gte('plan_date', todayStr)
         .lte('plan_date', fmtLocalDate(futureLimit));
 
@@ -468,11 +474,10 @@ async function checkUpcomingDeadlineNotifications() {
         plans.forEach(item => {
             const daysUntil = daysBetweenDateStrings(todayStr, item.plan_date);
             const leadDays = getPriorityInfo(item.priority).leadDays;
-            const key = `plan_${todayStr}_${item.id}`;
-            if (daysUntil >= 0 && daysUntil <= leadDays && !notified.has(key)) {
-                const body = daysUntil === 0
-                    ? `Hôm nay là ngày đã lên kế hoạch! (${getPriorityInfo(item.priority).label})`
-                    : `Còn ${daysUntil} ngày nữa — ${getPriorityInfo(item.priority).label}`;
+            // Việc trong Kế Hoạch đã có báo theo PHÚT trong ngày -> ở đây chỉ báo 1 lần khi vào cửa sổ báo trước (không báo đúng ngày).
+            const key = `plan_${item.plan_date}_${item.id}_lead`;
+            if (daysUntil > 0 && daysUntil <= leadDays && !notified.has(key)) {
+                const body = `Còn ${daysUntil} ngày nữa — ${getPriorityInfo(item.priority).label}`;
                 plannerShowNotification(`Kế hoạch: ${item.title || 'Việc chưa đặt tên'}`, { body, tag: key });
                 notified.add(key);
                 changed = true;

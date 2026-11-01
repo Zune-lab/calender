@@ -434,7 +434,8 @@ document.getElementById('subject-modal').addEventListener('click', function(e) {
 let _detailsLoadSeq = 0;
 async function loadSubjectDetails(relatedSubjectIds) {
     const seq = ++_detailsLoadSeq;
-    const { data, error } = await sbClient.from('subject_details').select('*').in('subject_id', relatedSubjectIds).eq('user_id', currentUser.id);
+    const { data, error } = await offlineRead('details:' + [...relatedSubjectIds].sort().join(','), () =>
+        sbClient.from('subject_details').select('*').in('subject_id', relatedSubjectIds).eq('user_id', currentUser.id));
     // Đã mở/đóng môn khác trong lúc chờ -> bỏ kết quả cũ, kẻo ghi chú của môn A hiện dưới môn B
     if (seq !== _detailsLoadSeq) return;
     if (error) {

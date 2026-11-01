@@ -44,6 +44,7 @@ async function withRetry(queryFn, { retries = 2, baseDelayMs = 700 } = {}) {
         lastResult = await queryFn();
         if (!lastResult.error) return lastResult;
         if (!isTransient(lastResult)) return lastResult;
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return lastResult; // offline: thử lại vô ích, trả lỗi ngay để rơi về cache
         if (attempt < retries) {
             await new Promise((r) => setTimeout(r, baseDelayMs * (attempt + 1)));
         }
@@ -93,8 +94,15 @@ function parseLocalDateStr(str) {
     return m ? new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)) : null;
 }
 
-// Mốc bắt đầu học kỳ mặc định (thứ Hai 18/05/2026) — 1 nơi duy nhất cho cả Dashboard và TKB.
-function defaultSemesterStartDate() { return new Date(2026, 4, 18); }
+// Mốc bắt đầu học kỳ mặc định — 1 nơi duy nhất cho cả Dashboard và TKB. TRƯỚC ĐÂY cứng 18/05/2026 nên tài khoản
+// chưa có cài đặt bị tính tuần từ tháng 5 (đã quá 20 tuần). Giờ mặc định là THỨ HAI CỦA TUẦN HIỆN TẠI; khi nhập TKB,
+// mốc thật được dò từ file Excel và lưu vào user_settings (xem calendar-1-core.js).
+function defaultSemesterStartDate() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
+}
 
 // Tên môn gốc (bỏ phần "- nhóm", "(thực hành)"...) viết thường — dùng làm khoá gộp môn/màu môn.
 // Trước đây đoạn split('-')[0].split('(')[0].trim().toLowerCase() bị chép tay ở ~10 chỗ.
@@ -232,7 +240,7 @@ function getIsLightForCurrentThemeSetting() {
 if (window.matchMedia) {
     const _systemThemeMql = window.matchMedia('(prefers-color-scheme: dark)');
     const _onSystemThemeChange = function () {
-        if (localStorage.getItem(STORAGE_KEYS.theme) === 'system') {
+        if (lsGet(STORAGE_KEYS.theme) === 'system') {
             const isLight = applyTheme();
             window.dispatchEvent(new CustomEvent('themeChanged', { detail: { isLight } }));
         }
@@ -401,7 +409,140 @@ const STORAGE_KEYS = {
     subjectColors: 'subjectCustomColors',
     targetTab: 'targetTab',
     profileReturnTo: 'profileReturnTo',
+    // Các khoá trước đây viết chuỗi cứng rải rác ở calendar-4/5/5b/7:
+    plannerViewMode: 'plannerViewMode',
+    wallpaperSize: 'wallpaperSize',
+    plannerNotifLeadMin: 'plannerNotifLeadMin',
+    plannerNotifEnabled: 'plannerNotifEnabled',
+    plannerCleanupDay: 'plannerCleanupDay',
+    plannerNotifiedIds: 'plannerNotifiedIds',
+    plannerAlarmFiredIds: 'plannerAlarmFiredIds',
+    deadlineNotifiedIds: 'deadlineNotifiedIds',
+    offlineStore: 'sguOfflineV1',
 };
+
+// localStorage AN TOÀN: chế độ riêng tư / bị chặn lưu trữ làm getItem/setItem ném lỗi -> trước đây nhiều nơi gọi trần
+// và crash cả trang. Mọi chỗ đọc/ghi đơn giản nên dùng 3 hàm này.
+function lsGet(key, fallback = null) {
+    try { const v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; }
+}
+function lsSet(key, value) {
+    try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
+}
+function lsRemove(key) {
+    try { localStorage.removeItem(key); } catch (e) { /* bỏ qua */ }
+}
+
+// Đường dẫn các trang — 1 nơi duy nhất (trước đây gõ 'tkb/calendar.html' / '../index.html' ở ~12 chỗ, mỗi nơi 1 kiểu tương đối).
+// appUrl() trả URL TUYỆT ĐỐI tính từ thư mục gốc app nên dùng được ở cả trang gốc lẫn tkb/, profile/.
+const PAGES = { dashboard: 'index.html', calendar: 'tkb/calendar.html', profile: 'profile/profile.html' };
+function appUrl(page) { return new URL(PAGES[page] || page, APP_ROOT_URL || location.href).href; }
+
+// =========================================================
+// DỮ LIỆU OFFLINE — xem lại TKB / Lịch thi / Ghi chú / Kế hoạch khi mất mạng.
+// Cơ chế: mỗi truy vấn ĐỌC thành công được lưu bản sao vào localStorage (theo tài khoản); khi mạng lỗi thì trả bản
+// đã lưu (chỉ đọc) và hiện nhãn "Đang offline". Đăng xuất sẽ xoá sạch bản sao (xem OfflineStore.clear()).
+// =========================================================
+const OfflineStore = (() => {
+    const MAX_ENTRIES = 40; // giới hạn số mục (mỗi tuần kế hoạch là 1 mục) để không phình localStorage
+    let state = null;
+    function load() {
+        if (state) return state;
+        try { state = JSON.parse(lsGet(STORAGE_KEYS.offlineStore) || 'null'); } catch (e) { state = null; }
+        if (!state || typeof state !== 'object' || !state.entries) state = { user: null, entries: {} };
+        return state;
+    }
+    function persist() {
+        const s = load();
+        const keys = Object.keys(s.entries).sort((a, b) => s.entries[b].t - s.entries[a].t);
+        keys.slice(MAX_ENTRIES).forEach((k) => delete s.entries[k]);
+        if (lsSet(STORAGE_KEYS.offlineStore, JSON.stringify(s))) return;
+        // Đầy bộ nhớ: bỏ dần mục cũ nhất tới khi ghi được
+        for (let i = keys.length - 1; i >= 0; i--) {
+            delete s.entries[keys[i]];
+            if (lsSet(STORAGE_KEYS.offlineStore, JSON.stringify(s))) return;
+        }
+    }
+    return {
+        // Gọi mỗi khi có phiên đăng nhập hợp lệ: nhớ user (để mở lại offline) và bỏ dữ liệu của tài khoản khác.
+        setUser(user) {
+            if (!user || !user.id) return;
+            const s = load();
+            if (s.user && s.user.id !== user.id) s.entries = {};
+            s.user = { id: user.id, email: user.email, user_metadata: user.user_metadata || {} };
+            persist();
+        },
+        getUser() { const s = load(); return s.user || null; },
+        get(key) { return load().entries[key] || null; },
+        set(key, data) { load().entries[key] = { t: Date.now(), data }; persist(); },
+        clear() { state = { user: null, entries: {} }; lsRemove(STORAGE_KEYS.offlineStore); },
+    };
+})();
+
+function isLikelyOfflineResult(res) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    const err = res && res.error;
+    if (!err) return false;
+    const st = res.status;
+    return !st || st >= 500 || /fetch|network|timeout|load failed/i.test(String(err.message || err));
+}
+
+// Nhãn "Đang offline" (tự chèn, không cần sửa HTML từng trang). Khi có mạng lại, bấm vào để tải lại dữ liệu mới.
+let _offlineBadgeEl = null;
+function showOfflineBadge() {
+    if (!document.body) { document.addEventListener('DOMContentLoaded', showOfflineBadge, { once: true }); return; }
+    if (!document.getElementById('offline-badge-style')) {
+        const st = document.createElement('style');
+        st.id = 'offline-badge-style';
+        st.textContent = '#offline-badge{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:99999;'
+            + 'padding:9px 16px;border-radius:999px;font:600 0.82rem var(--font-sans,system-ui);color:#fff;background:rgba(30,32,38,.92);'
+            + 'border:1px solid rgba(255,255,255,.18);box-shadow:0 6px 24px rgba(0,0,0,.35);cursor:default;max-width:92vw;text-align:center}'
+            + '#offline-badge.online{background:#1f9d62;cursor:pointer}';
+        document.head.appendChild(st);
+    }
+    if (!_offlineBadgeEl) {
+        _offlineBadgeEl = document.createElement('div');
+        _offlineBadgeEl.id = 'offline-badge';
+        _offlineBadgeEl.setAttribute('role', 'status');
+        _offlineBadgeEl.onclick = () => { if (navigator.onLine) location.reload(); };
+        document.body.appendChild(_offlineBadgeEl);
+    }
+    _offlineBadgeEl.classList.remove('online');
+    _offlineBadgeEl.textContent = '⚠ Đang offline — xem dữ liệu đã lưu (chỉ đọc)';
+}
+function hideOfflineBadge() { if (_offlineBadgeEl) { _offlineBadgeEl.remove(); _offlineBadgeEl = null; } }
+window.addEventListener('offline', () => { if (OfflineStore.getUser()) showOfflineBadge(); });
+window.addEventListener('online', () => {
+    if (!_offlineBadgeEl) return;
+    _offlineBadgeEl.classList.add('online');
+    _offlineBadgeEl.textContent = '✓ Đã có mạng — bấm để tải dữ liệu mới';
+});
+
+// Đọc dữ liệu có dự phòng offline. queryFn trả {data, error} như supabase. Thành công -> lưu bản sao; lỗi mạng -> trả bản đã lưu.
+async function offlineRead(key, queryFn) {
+    let res;
+    try { res = await queryFn(); } catch (e) { res = { data: null, error: { message: (e && e.message) || String(e) } }; }
+    if (!res.error) { OfflineStore.set(key, res.data); return res; }
+    if (isLikelyOfflineResult(res)) {
+        const hit = OfflineStore.get(key);
+        if (hit) { showOfflineBadge(); return { data: hit.data, error: null, status: 200, fromCache: true, cachedAt: hit.t }; }
+    }
+    return res;
+}
+
+// Lấy phiên đăng nhập, dùng user đã nhớ khi offline / token không làm mới được. Trả {session, offline}.
+async function getSessionOrOffline(client) {
+    let session = null, err = null;
+    try { const r = await client.auth.getSession(); session = r.data && r.data.session; err = r.error; }
+    catch (e) { err = e; }
+    if (session) { OfflineStore.setUser(session.user); return { session, offline: false }; }
+    const cached = OfflineStore.getUser();
+    if (cached && (err || navigator.onLine === false)) {
+        showOfflineBadge();
+        return { session: { user: cached, offline: true }, offline: true };
+    }
+    return { session: null, offline: false };
+}
 
 // Số tuần tối đa của 1 học kỳ (lưới chọn tuần, mảng bitmap tuần của import Excel...).
 const MAX_SEMESTER_WEEKS = 20;

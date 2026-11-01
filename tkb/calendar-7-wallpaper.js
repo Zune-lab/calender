@@ -25,7 +25,7 @@ function wallpaperGenToken() {
 
 function wallpaperSize() {
     let saved = null;
-    try { saved = localStorage.getItem('wallpaperSize'); } catch (e) {}
+    saved = lsGet(STORAGE_KEYS.wallpaperSize);
     return WALLPAPER_SIZES[saved] ? saved : '1179x2556';
 }
 
@@ -84,7 +84,7 @@ function wallpaperRender() {
     wallpaperLoadPreview();
     document.getElementById('wallpaper-url').value = wallpaperUrl(false);
     document.getElementById('wallpaper-size').onchange = function () {
-        try { localStorage.setItem('wallpaperSize', this.value); } catch (e) {}
+        lsSet(STORAGE_KEYS.wallpaperSize, this.value);
         document.getElementById('wallpaper-url').value = wallpaperUrl(false);
         wallpaperLoadPreview();
     };

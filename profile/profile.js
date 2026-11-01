@@ -7,7 +7,7 @@ let base64Image = null;
 // LỐI TẮT CHUYỂN TRANG NHANH (Dashboard / TKB / Lịch Thi / Cài Đặt)
 // ==========================================
 window.navigateFromProfile = function(url, tabName) {
-    if (tabName) localStorage.setItem(STORAGE_KEYS.targetTab, tabName);
+    if (tabName) lsSet(STORAGE_KEYS.targetTab, tabName);
     window.location.href = url;
 };
 
@@ -15,8 +15,8 @@ window.navigateFromProfile = function(url, tabName) {
 // QUAY LẠI ĐÚNG NƠI ĐÃ VÀO PROFILE (TKB hoặc Dashboard)
 // ==========================================
 window.goBackFromProfile = function() {
-    const returnTo = localStorage.getItem(STORAGE_KEYS.profileReturnTo) || '../index.html';
-    localStorage.removeItem(STORAGE_KEYS.profileReturnTo);
+    const returnTo = lsGet(STORAGE_KEYS.profileReturnTo) || appUrl('dashboard');
+    lsRemove(STORAGE_KEYS.profileReturnTo);
     window.location.href = returnTo;
 };
 
@@ -160,7 +160,7 @@ async function bootProfile() {
     clearTimeout(loadWatchdog);
 
     if (!session) {
-        window.location.href = '../tkb/calendar.html';
+        window.location.href = appUrl('calendar');
         return;
     }
 
@@ -236,10 +236,11 @@ window.logoutFromProfile = async function() {
     try {
         if (window._sbClient) {
             await removePushSubscriptionFor(window._sbClient);
+            OfflineStore.clear(); // xoá bản sao dữ liệu offline của tài khoản này
             await window._sbClient.auth.signOut();
         }
     } catch (e) {}
-    window.location.href = '../tkb/calendar.html';
+    window.location.href = appUrl('calendar');
 };
 window.addEventListener('beforeunload', (e) => {
     if (profileDirty) { e.preventDefault(); e.returnValue = ''; }

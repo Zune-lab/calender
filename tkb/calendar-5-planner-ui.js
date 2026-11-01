@@ -233,8 +233,8 @@ async function loadPlannerBlocks() {
     // vẫn bị dọn đúng hạn. Cùng kiểu với cách loadExams() tự xóa lịch thi cũ quá 14 ngày.
     // Chỉ dọn tối đa 1 lần/ngày/thiết bị (trước đây 1 lệnh DELETE mỗi lần chuyển tab/đổi tuần).
     const cleanupDayKey = fmtLocalDate(new Date());
-    if (localStorage.getItem('plannerCleanupDay') !== cleanupDayKey) {
-        try { localStorage.setItem('plannerCleanupDay', cleanupDayKey); } catch (e) {}
+    if (navigator.onLine !== false && lsGet(STORAGE_KEYS.plannerCleanupDay) !== cleanupDayKey) {
+        lsSet(STORAGE_KEYS.plannerCleanupDay, cleanupDayKey);
         const cleanupCutoff = new Date(); cleanupCutoff.setHours(0, 0, 0, 0); cleanupCutoff.setDate(cleanupCutoff.getDate() - 7);
         sbClient.from('daily_plans').delete()
             .eq('user_id', currentUser.id).eq('is_done', true).lt('plan_date', fmtLocalDate(cleanupCutoff))
@@ -255,18 +255,18 @@ async function loadPlannerBlocks() {
 
     // 2 truy vấn độc lập -> chạy song song (trước đây nối đuôi nhau)
     const [{ data, error }, { data: dueItems, error: dueErr }] = await Promise.all([
-        sbClient.from('daily_plans')
+        offlineRead(`plans:${startStr}:${endStr}`, () => sbClient.from('daily_plans')
             .select('*')
             .eq('user_id', currentUser.id)
             .gte('plan_date', startStr)
             .lte('plan_date', endStr)
-            .order('start_min', { ascending: true }),
-        sbClient.from('subject_details')
+            .order('start_min', { ascending: true })),
+        offlineRead(`due:${startStr}:${endStr}`, () => sbClient.from('subject_details')
             .select('id, content, type, due_date, priority')
             .eq('user_id', currentUser.id)
             .eq('status', 'upcoming')
             .gte('due_date', startStr)
-            .lte('due_date', endStr)
+            .lte('due_date', endStr))
     ]);
     if (loadSeq !== _plannerLoadSeq) return; // đã có lần tải mới hơn (đổi tuần tiếp) -> bỏ kết quả cũ
 

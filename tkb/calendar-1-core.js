@@ -14,8 +14,8 @@
 // khi bất kỳ dòng nào khác kịp chạy. Dời việc khởi tạo có kiểm tra vào bên trong DOMContentLoaded
 // (đồng bộ với cách profile.js đang xử lý sự cố này).
 // URL thư viện nạp THEO NHU CẦU (không còn chặn trang lúc khởi động bằng ~1.2MB script ít khi dùng)
-const XLSX_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-const HTML2CANVAS_CDN_URL = 'https://cdn.jsdelivr.net/npm/html2canvas-pro@2.4.2/dist/html2canvas-pro.min.js';
+const XLSX_CDN_URL = new URL('../vendor/xlsx.full.min.js', document.currentScript ? document.currentScript.src : location.href).href;
+const HTML2CANVAS_CDN_URL = new URL('../vendor/html2canvas-pro.min.js', document.currentScript ? document.currentScript.src : location.href).href;
 let sbClient = null;
 
 let currentUser = null;
@@ -98,8 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    sbClient.auth.getSession().then(({ data: { session } }) => { handleSession(session); });
+    // getSessionOrOffline (shared.js): mất mạng / token không làm mới được -> dùng user đã nhớ để vẫn xem được dữ liệu đã lưu
+    getSessionOrOffline(sbClient).then(({ session }) => handleSession(session));
     sbClient.auth.onAuthStateChange((_event, session) => { handleSession(session); });
+    if (navigator.onLine === false && OfflineStore.getUser()) showOfflineBadge();
 
     updateDesktopClock();
     setInterval(() => { if (!document.hidden) updateDesktopClock(); }, 1000);
@@ -146,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (themeToggle) {
-        const isSystemModeNow = localStorage.getItem(STORAGE_KEYS.theme) === 'system';
+        const isSystemModeNow = lsGet(STORAGE_KEYS.theme) === 'system';
         if (themeSystemToggle) themeSystemToggle.checked = isSystemModeNow;
         syncManualSwitchLockState(isSystemModeNow);
 
@@ -326,7 +328,7 @@ function handleSession(session) {
         (async () => {
             try {
                 // maybeSingle(): chưa có dòng cài đặt là bình thường (không retry/không báo lỗi)
-                const { data, error } = await withRetry(() => sbClient.from('user_settings').select('semester_start_date').eq('user_id', currentUser.id).maybeSingle());
+                const { data, error } = await offlineRead('settings', () => withRetry(() => sbClient.from('user_settings').select('semester_start_date').eq('user_id', currentUser.id).maybeSingle()));
                 if (error) {
                     // Không chặn cả trang chỉ vì lỗi mốc ngày bắt đầu kỳ học — dùng tạm giá trị mặc định
                     // (semesterStartDate khai báo sẵn ở đầu file) và vẫn tiếp tục tải TKB/Lịch thi bên dưới.
@@ -350,6 +352,8 @@ function handleSession(session) {
         })();
 
     } else {
+        // Offline mà đã có user được nhớ: sự kiện auth "hết phiên" do KHÔNG làm mới được token không phải đăng xuất thật -> giữ nguyên màn hình.
+        if (navigator.onLine === false && OfflineStore.getUser()) return;
         currentUser = null;
         document.getElementById('auth-screen').classList.remove('hidden');
         document.getElementById('main-app').style.opacity = '0';
@@ -429,7 +433,7 @@ window.handleAuth = async function(e) {
     // handleSession còn được gọi mỗi lần MỞ SẴN calendar.html khi đã đăng nhập từ trước (vd bấm
     // thẳng link TKB) -> trường hợp đó vẫn phải hiện app TKB tại chỗ, không được tự động bắn về
     // index.html mỗi lần vào trang.
-    navigateWithFade('../index.html');
+    navigateWithFade(appUrl('dashboard'));
 }
 
 // =========================================
@@ -468,10 +472,11 @@ window.logout = async function() {
     // Nhớ Tab hiện tại trước khi Logout
     const activeTabLi = document.querySelector('.nav-links li.active');
     if (activeTabLi) {
-        localStorage.setItem(STORAGE_KEYS.targetTab, activeTabLi.dataset.tab || 'timetable');
+        lsSet(STORAGE_KEYS.targetTab, activeTabLi.dataset.tab || 'timetable');
     }
 
     await removePushSubscriptionFor(sbClient); // trước signOut để còn quyền xoá subscription
+    OfflineStore.clear(); // xoá bản sao dữ liệu offline TRƯỚC signOut (để sự kiện hết phiên không bị coi là "mất mạng")
     await sbClient.auth.signOut(); 
 }
 
@@ -533,8 +538,8 @@ window.switchTab = function(tabId, element, titleText) {
 }
 
 function applyTargetTabInstant() {
-    const target = localStorage.getItem(STORAGE_KEYS.targetTab);
-    localStorage.removeItem(STORAGE_KEYS.targetTab); 
+    const target = lsGet(STORAGE_KEYS.targetTab);
+    lsRemove(STORAGE_KEYS.targetTab); 
     if (!target || !document.querySelector(`[data-tab="${target}"]`)) return;
     applyTabState(target);
 }
@@ -545,16 +550,16 @@ function applyTargetTabInstant() {
 // 1.6b. VÀO PROFILE TỪ TKB — nhớ điểm quay về
 // =========================================
 window.goToProfileFromTkb = function() {
-    localStorage.setItem(STORAGE_KEYS.profileReturnTo, '../tkb/calendar.html');
+    lsSet(STORAGE_KEYS.profileReturnTo, appUrl('calendar'));
 
     // Ghi nhớ luôn tab đang đứng (Thời Khóa Biểu/Lịch Thi/Cài Đặt) để applyTargetTabInstant()
     // tự khôi phục đúng tab đó khi quay lại, không chỉ mặc định về Thời Khóa Biểu
     const activePane = document.querySelector('.tab-pane.active');
     if (activePane && activePane.id) {
-        localStorage.setItem(STORAGE_KEYS.targetTab, activePane.id.replace('tab-', ''));
+        lsSet(STORAGE_KEYS.targetTab, activePane.id.replace('tab-', ''));
     }
 
-    navigateWithFade('../profile/profile.html');
+    navigateWithFade(appUrl('profile'));
 };
 
 // =========================================
@@ -810,6 +815,19 @@ document.getElementById('excel-file').addEventListener('change', async function(
             const summary = `\n\nGiữ nguyên ${plan.matches.length - updatedCount - updateFailed} buổi, cập nhật ${updatedCount}, thêm mới ${insertedRows.length}, bỏ ${idsToDelete.length}.`
                 + (updateFailed ? `\n${updateFailed} buổi chưa cập nhật được thông tin mới (dữ liệu cũ vẫn còn, nhập lại để thử lại).` : '');
 
+            // Buổi cũ được GIỮ LẠI (vì còn ghi chú) có chuỗi `weeks` tính theo mốc kỳ học CŨ. Dời mốc sang kỳ mới thì phải dịch
+            // chuỗi này cùng số tuần, nếu không buổi cũ sẽ hiện lệch tuần.
+            if (pendingSemesterStart && keepOldIds.size) {
+                const offset = Math.round(calendarDayDiff(pendingSemesterStart, semesterStartDate) / 7);
+                if (offset !== 0) {
+                    await Promise.all(plan.unmatchedOld.filter(r => keepOldIds.has(r.id) && r.weeks).map(r => {
+                        let w = String(r.weeks);
+                        w = offset > 0 ? w.slice(offset) : '-'.repeat(-offset) + w;
+                        return sbClient.from('subjects').update({ weeks: w.slice(0, MAX_SEMESTER_WEEKS) }).eq('id', r.id).eq('user_id', currentUser.id);
+                    }));
+                }
+            }
+
             if (pendingSemesterStart) {
                 semesterStartDate = pendingSemesterStart;
                 const ymd = fmtLocalDate(semesterStartDate);
@@ -850,9 +868,9 @@ window.openModalById = function(id) {
 // các thao tác đó gọi renderTimetable() (không fetch mạng) thay vì gọi lại hàm này.
 async function loadTimetable() {
     if (!currentUser) return;
-    const { data: subjects, error } = await withRetry(() =>
+    const { data: subjects, error } = await offlineRead('subjects', () => withRetry(() =>
         sbClient.from('subjects').select('*').eq('user_id', currentUser.id)
-    );
+    ));
     if (error) {
         console.error('Lỗi tải TKB:', error);
         window.showAlert && window.showAlert(

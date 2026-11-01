@@ -20,15 +20,11 @@ html {
 :root {
     --bg-color: #08090c;
     --text-main: #ffffff;
-    --text-muted: #8b949e;
-    --accent: #ff4655; /* JS tự động đổi màu theo môn */
+    --text-muted: #8b949e; /* JS tự động đổi màu theo môn */
     --panel-bg: rgba(20, 20, 25, 0.45);
     --panel-border: rgba(255, 255, 255, 0.1);
 
     /* Motion token dùng chung toàn hệ thống (đồng bộ index.css / calendar.css / profile.css) */
-    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
-    --duration-fast: 0.2s;
-    --duration-normal: 0.35s;
 
     /* Biến của Bouncing Loader (đồng bộ với tkb/style.css) */
     --dot-size: 20px;
@@ -98,7 +94,7 @@ html {
 
 body {
     background-color: var(--bg-color);
-    color: var(--text-main); font-family: 'Inter', sans-serif;
+    color: var(--text-main); font-family: var(--font-sans);
     overflow: hidden; height: 100vh; width: 100vw;
 }
 

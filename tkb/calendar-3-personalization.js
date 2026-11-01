@@ -519,9 +519,9 @@ document.getElementById('excel-exam-file').addEventListener('change', async func
 
 window.loadExams = async function() {
     if (!currentUser) return;
-    const { data, error } = await withRetry(() =>
+    const { data, error, fromCache } = await offlineRead('exams', () => withRetry(() =>
         sbClient.from('exams').select('*').eq('user_id', currentUser.id)
-    );
+    ));
     if (error) {
         console.error('Lỗi tải Lịch Thi:', error);
         window.showAlert && window.showAlert(
@@ -545,10 +545,10 @@ window.loadExams = async function() {
             }
             return true;
         });
-        if (staleIds.length) {
+        if (staleIds.length && !fromCache) { // đang xem bản offline thì không gửi lệnh xoá
             // Xóa ngầm dưới nền, không cần đợi -> danh sách hiển thị (đã filter ở trên) mượt ngay,
             // không phải chờ round-trip mạng.
-            sbClient.from('exams').delete().in('id', staleIds).then(({ error: delErr }) => {
+            sbClient.from('exams').delete().in('id', staleIds).eq('user_id', currentUser.id).then(({ error: delErr }) => {
                 if (delErr) console.warn('[Exams] Lỗi tự xóa lịch thi cũ:', delErr.message);
             });
         }

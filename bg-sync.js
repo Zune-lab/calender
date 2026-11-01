@@ -149,7 +149,7 @@
 
     // Gọi 1 lần lúc trang khởi động để load lại ảnh đã lưu (nếu có).
     window.syncCustomBackground = function () {
-        const saved = localStorage.getItem(BG_KEY);
+        const saved = lsGet(BG_KEY);
         if (!saved) {
             bgRequestSeq++;
             clearFromBody();
@@ -164,12 +164,13 @@
     // Lưu ảnh mới (base64 upload hoặc dán link URL) rồi áp dụng ngay trên trang hiện tại.
     // Ném lỗi ra ngoài nếu bộ nhớ đầy để nơi gọi tự hiện thông báo phù hợp với ngữ cảnh trang đó.
     window.setCustomBackground = function (urlOrDataUri) {
-        localStorage.setItem(BG_KEY, urlOrDataUri); // ném lỗi đồng bộ nếu bộ nhớ đầy -> nơi gọi bắt
+        // Ném lỗi nếu bộ nhớ đầy / bị chặn -> nơi gọi bắt và báo người dùng (lsSet trả false thay vì ném)
+        if (!lsSet(BG_KEY, urlOrDataUri)) throw new Error('Không lưu được ảnh nền vào bộ nhớ trình duyệt');
         return loadAndNotify(urlOrDataUri);
     };
 
     window.clearCustomBackground = function () {
-        localStorage.removeItem(BG_KEY);
+        lsRemove(BG_KEY);
         bgRequestSeq++; // huỷ mọi yêu cầu nạp ảnh còn đang chạy dở
         clearFromBody();
         notifyChange(false);
@@ -178,7 +179,7 @@
     // Có ảnh nền tuỳ chỉnh đang bật hay không — cho các trang tự quyết định phần trang trí
     // riêng của mình (ẩn blob, bỏ gradient accent...) mà không cần tự đọc localStorage rải rác.
     window.hasCustomBackground = function () {
-        return !!localStorage.getItem(BG_KEY);
+        return !!lsGet(BG_KEY);
     };
 
     // ==========================================

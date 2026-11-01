@@ -11,7 +11,7 @@
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
 // Tăng số version mỗi khi đổi DANH SÁCH file trong APP_SHELL_RELATIVE (hoặc muốn ép dọn cache cũ).
-const CACHE_NAME = 'sgu-workspace-v14';
+const CACHE_NAME = 'sgu-workspace-v15';
 const CALENDAR_PAGE = 'tkb/calendar.html'; // trang mở khi bấm thông báo (trước đây gõ lặp ở 3 chỗ)
 const APP_SHELL_RELATIVE = [
     'index.html', 'index.css', 'index.js', 'supabase-config.js', 'shared.js', 'bg-sync.js',
@@ -23,7 +23,12 @@ const APP_SHELL_RELATIVE = [
     'tkb/calendar-4-planner-notify.js', 'tkb/calendar-5-planner-ui.js', 'tkb/calendar-5b-planner-overview.js',
     'tkb/calendar-6-export-capture.js',
     'tkb/calendar-7-wallpaper.js',
-    'manifest.json', 'icon-192.png', 'icon-512.png',
+    'manifest.json', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
+    // Thư viện + font tự host (trước đây nạp từ CDN -> mất mạng là mất icon/font/Supabase, app không chạy được)
+    'fonts.css', 'vendor/supabase.js',
+    'vendor/fonts/inter-latin-wght-normal.woff2', 'vendor/fonts/inter-latin-ext-wght-normal.woff2', 'vendor/fonts/inter-vietnamese-wght-normal.woff2',
+    'vendor/fa/css/all.min.css', 'vendor/fa/webfonts/fa-solid-900.woff2', 'vendor/fa/webfonts/fa-regular-400.woff2',
+    'vendor/fa/webfonts/fa-brands-400.woff2', 'vendor/fa/webfonts/fa-v4compatibility.woff2',
 ];
 
 // FIX BUG "SỬA/XÓA CODE XONG RELOAD LOCAL VẪN THẤY BẢN CŨ": khi chạy local (Live Server...),
@@ -31,6 +36,16 @@ const APP_SHELL_RELATIVE = [
 // (hoặc không bao giờ thấy nếu file đã bị xóa khỏi ổ đĩa mà cache vẫn còn). Ở local, SW không
 // can thiệp request và không giữ cache nào.
 const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '[::1]'].includes(self.location.hostname);
+
+// Trang HTML dự phòng khi offline: /tkb/ hoặc /tkb -> tkb/calendar.html, /profile/ -> profile/profile.html, còn lại index.html.
+function offlinePageFor(req) {
+    const path = new URL(req.url).pathname;
+    const rel = path.slice(new URL(self.registration.scope).pathname.length);
+    let target = 'index.html';
+    if (/^tkb\/?$/.test(rel)) target = CALENDAR_PAGE;
+    else if (/^profile\/?$/.test(rel)) target = 'profile/profile.html';
+    return caches.match(scopedUrl(target), { ignoreSearch: true }).then((c) => c || caches.match(scopedUrl('index.html')));
+}
 
 function scopedUrl(relativePath) {
     return new URL(relativePath, self.registration.scope).href;
@@ -42,8 +57,9 @@ self.addEventListener('install', (event) => {
     const appShell = APP_SHELL_RELATIVE.map(scopedUrl);
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then((cache) => cache.addAll(appShell))
-            .catch((e) => console.warn('[SW] Cache app shell lỗi (không sao, sẽ thử lại lần request sau):', e.message))
+            .then((cache) => Promise.all(appShell.map((u) =>
+                cache.add(new Request(u, { cache: 'reload' })).catch((e) => console.warn('[SW] Không precache được', u, e.message))
+            )))
     );
 });
 
@@ -67,7 +83,11 @@ self.addEventListener('fetch', (event) => {
     const isHTML = req.headers.get('accept')?.includes('text/html');
 
     event.respondWith(
-        fetch(req, { cache: 'no-cache' }).then((res) => {
+        // Mạng chập chờn (không báo offline nhưng treo) -> sau 6s coi như hỏng và dùng bản trong cache, khỏi kẹt màn hình trắng.
+        Promise.race([
+            fetch(req, { cache: 'no-cache' }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000)),
+        ]).then((res) => {
             // Chỉ cache phản hồi 200 đầy đủ (cache.put ném lỗi với 206 Partial) và nuốt lỗi ghi cache
             // để không sinh "unhandled rejection" / không ảnh hưởng phản hồi đang trả về.
             if (res.ok && res.status === 200) {
@@ -76,8 +96,9 @@ self.addEventListener('fetch', (event) => {
             }
             return res;
         }).catch(() => caches.match(req, { ignoreSearch: true }).then((c) =>
-            // respondWith(undefined) làm trình duyệt báo lỗi mạng khó hiểu -> trả Response lỗi có chủ đích
-            c || (isHTML ? caches.match(scopedUrl('index.html')) : null) || Response.error()
+            // Offline: ưu tiên đúng trang được hỏi (kể cả khi URL có thư mục không đuôi .html, vd '/tkb/'),
+            // rồi mới rơi về index.html. respondWith(undefined) làm trình duyệt báo lỗi khó hiểu -> trả Response lỗi có chủ đích.
+            c || (isHTML ? offlinePageFor(req) : null) || Response.error()
         ))
     );
 });

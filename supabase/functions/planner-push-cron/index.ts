@@ -38,15 +38,23 @@ Deno.serve(async () => {
     const { dateStr: todayStr, minutes: nowMin } = vnClock();
     const windowEnd = nowMin + NOTIF_LEAD_MIN;
 
-    // Lấy các việc HÔM NAY, bắt đầu trong khoảng [now, now+5phút], CHƯA được báo
-    const { data: plans, error: plansErr } = await supabase
+    // Lấy các việc bắt đầu trong khoảng [now, now+5 phút], CHƯA được báo, CHƯA xong.
+    // QUA NỬA ĐÊM: từ 23:55 trở đi cửa sổ tràn sang ngày mai (vd 23:57 -> tới 00:02) -> truy vấn thêm plan_date = ngày mai
+    // (trước đây chỉ xét hôm nay nên việc 00:00–00:04 không bao giờ được báo từ 23:56).
+    const tomorrowStr = new Date(Date.parse(todayStr + "T00:00:00Z") + 86400000).toISOString().slice(0, 10);
+    const baseQuery = () => supabase
         .from("daily_plans")
         .select("id, user_id, title, start_min, plan_date")
-        .eq("plan_date", todayStr)
         .eq("push_notified", false)
-        .eq("is_done", false) // việc đã tick xong thì khỏi đẩy thông báo (client cũng bỏ qua việc đã xong)
-        .gte("start_min", nowMin)
-        .lte("start_min", windowEnd);
+        .eq("is_done", false); // việc đã tick xong thì khỏi đẩy thông báo (client cũng bỏ qua việc đã xong)
+    const queries = [baseQuery().eq("plan_date", todayStr).gte("start_min", nowMin).lte("start_min", Math.min(windowEnd, 1439))];
+    if (windowEnd >= 1440) queries.push(baseQuery().eq("plan_date", tomorrowStr).gte("start_min", 0).lte("start_min", windowEnd - 1440));
+    const results = await Promise.all(queries);
+    const plansErr = results.find((r) => r.error)?.error;
+    const plans = results.flatMap((r) => (r.data ?? []).map((p) => ({
+        ...p,
+        minsLeft: (p.plan_date === todayStr ? p.start_min : p.start_min + 1440) - nowMin,
+    })));
 
     if (plansErr) {
         return new Response(JSON.stringify({ error: plansErr.message }), { status: 500 });
@@ -81,7 +89,7 @@ Deno.serve(async () => {
 
         const h = String(Math.floor(plan.start_min / 60)).padStart(2, "0");
         const m = String(plan.start_min % 60).padStart(2, "0");
-        const minsLeft = plan.start_min - nowMin;
+        const minsLeft = plan.minsLeft;
         const body = minsLeft > 0
             ? `Còn ${minsLeft} phút nữa tới giờ — bắt đầu lúc ${h}:${m}`
             : `Đã tới giờ (${h}:${m})`;
