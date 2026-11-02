@@ -1,0 +1,29 @@
+# Sinh file .xcodeproj bằng XcodeGen:  brew install xcodegen && xcodegen generate && open SGUWorkspace.xcodeproj
+name: SGUWorkspace
+options:
+  bundleIdPrefix: vn.sgu
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  SGUWorkspace:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: vn.sgu.workspace
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: SGU Workspace
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+  SGUWorkspaceTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: SGUWorkspace
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
