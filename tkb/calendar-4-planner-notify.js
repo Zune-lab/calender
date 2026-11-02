@@ -44,6 +44,63 @@ function getPlannerNotifLeadMin() {
 }
 window.savePlannerNotifLead = function(minutes) {
     lsSet(STORAGE_KEYS.plannerNotifLeadMin, minutes);
+    plannerSyncLeadToServer(); // server là bên gửi push nền -> phải biết số phút bạn chọn (trước đây chỉ lưu trên máy nên luôn báo 5 phút)
+};
+
+// Đẩy số phút báo trước lên user_settings.notif_lead_min (Edge Function đọc cột này). Chỉ ghi cột này: upsert không đụng
+// semester_start_date. Lỗi (offline...) bỏ qua — lần mở sau / lần bật thông báo sau sẽ đồng bộ lại.
+async function plannerSyncLeadToServer() {
+    try {
+        if (typeof currentUser === 'undefined' || !currentUser || !sbClient) return;
+        await sbClient.from('user_settings').upsert(
+            { user_id: currentUser.id, notif_lead_min: getPlannerNotifLeadMin() }, { onConflict: 'user_id' });
+    } catch (e) { /* bỏ qua */ }
+}
+
+// iPhone chỉ cho web push khi app được "Thêm vào Màn hình chính" và mở từ icon đó (iOS 16.4+).
+function plannerIsIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function plannerIsStandalone() {
+    return !!(navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+}
+
+// Nút "Gửi thông báo thử": nhờ server gửi 1 push thật tới máy này -> kiểm tra cả chuỗi (đăng ký thiết bị, VAPID, Apple/Google push).
+window.sendTestPush = async function() {
+    const out = document.getElementById('planner-push-test-result');
+    const btn = document.getElementById('planner-push-test-btn');
+    const say = (m) => { if (out) out.innerText = m; };
+    if (plannerIsIOS() && !plannerIsStandalone()) {
+        say('Trên iPhone: bấm Chia sẻ → "Thêm vào Màn hình chính", rồi mở app TỪ ICON đó (không mở bằng Safari) và bật thông báo ở đó.');
+        return;
+    }
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !plannerNotifEnabled()) {
+        say('Hãy bật công tắc Thông báo ở trên trước.');
+        return;
+    }
+    if (btn) btn.disabled = true;
+    say('Đang đăng ký thiết bị và gửi thử...');
+    try {
+        const ok = await plannerSubscribePush(); // đảm bảo thiết bị này đã nằm trong push_subscriptions
+        if (!ok) { say('Không đăng ký được thiết bị nhận push (xem Console). Thử tắt rồi bật lại công tắc Thông báo.'); return; }
+        await plannerSyncLeadToServer();
+        const { data, error } = await sbClient.functions.invoke('planner-push-cron', { body: { test: true } });
+        if (error) {
+            say('Không gọi được máy chủ push: ' + (error.message || error) + '. Có thể chưa deploy function "planner-push-cron" (xem supabase/push_setup.sql).');
+        } else if (data && data.reason === 'no_subscription') {
+            say('Máy chủ chưa thấy thiết bị nào của bạn. Tắt rồi bật lại công tắc Thông báo.');
+        } else if (data && data.ok) {
+            say('Đã gửi. Nếu vài giây sau vẫn không thấy: iPhone Cài đặt → Thông báo → SGU Workspace → bật "Cho phép thông báo".');
+        } else if (data && data.errors && data.errors.some((c) => c === 401 || c === 403)) {
+            say('Apple/Google từ chối khoá VAPID (mã ' + data.errors.join(',') + '). Kiểm tra secret VAPID_SUBJECT là email thật và cặp VAPID khớp khoá công khai trong app.');
+        } else {
+            say('Gửi thất bại' + (data && data.errors ? ' (mã ' + data.errors.join(',') + ')' : '') + '. Thử tắt/bật lại công tắc Thông báo.');
+        }
+    } catch (e) {
+        say('Lỗi: ' + (e.message || e));
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 };
 
 // MỤC 3: 3 MỨC ĐỘ QUAN TRỌNG (PRIORITY_LEVELS + getPriorityInfo) giờ nằm ở shared.js, dùng chung với Dashboard.
@@ -55,7 +112,7 @@ let plannerAlarmAudioCtx = null;
 
 // Khóa công khai VAPID — an toàn khi để lộ ở client (chỉ khóa RIÊNG TƯ mới cần giữ bí mật,
 // khóa đó nằm trong Edge Function secrets, không xuất hiện ở đây).
-const PLANNER_PUSH_VAPID_PUBLIC_KEY = 'BNxj9bZH3u_IXBvcohC9BGIToPpzwFJ5bbU2ukd1O7W_2rwLY9dHQ-6qPnnCEF_kh7rskNJ-myLraXerYXietfg';
+const PLANNER_PUSH_VAPID_PUBLIC_KEY = 'BCXQlGtO9PuaFC_ywqPcqSViUWZ6h2c6z9Tk0NK-pPZ21KtPKgorTGcZ4bEDp6mSaNlHTcR5uljXFR03aRKG4E8';
 
 // initPlannerNotifications() chạy lúc DOMContentLoaded, TRƯỚC khi phiên đăng nhập kịp khôi phục
 // (currentUser còn null) -> trước đây đăng ký push lúc mở trang luôn lỗi "reading 'id' of null" (bị
@@ -102,6 +159,16 @@ async function plannerSubscribePush() {
 
     try {
         let sub = await reg.pushManager.getSubscription();
+        // Đổi cặp khoá VAPID thì đăng ký CŨ (tạo bằng khoá cũ) bị push service từ chối. Phát hiện lệch khoá -> huỷ và đăng ký lại.
+        if (sub && sub.options && sub.options.applicationServerKey) {
+            const have = new Uint8Array(sub.options.applicationServerKey);
+            const want = plannerUrlBase64ToUint8Array(PLANNER_PUSH_VAPID_PUBLIC_KEY);
+            if (have.length !== want.length || have.some((b, i) => b !== want[i])) {
+                try { await sbClient.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); } catch (e) { /* bỏ qua */ }
+                await sub.unsubscribe();
+                sub = null;
+            }
+        }
         if (!sub) {
             sub = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
@@ -116,6 +183,7 @@ async function plannerSubscribePush() {
             auth: json.keys.auth,
         }, { onConflict: 'endpoint' });
         if (error) { console.warn('[PlannerPush] Lỗi lưu subscription:', error.message); return false; }
+        plannerSyncLeadToServer();
         return true;
     } catch (e) {
         console.warn('[PlannerPush] Không đăng ký được push:', e.message);
@@ -156,7 +224,8 @@ function plannerNotifEnabled() {
 function plannerNotifStatusText() {
     if (typeof Notification === 'undefined') return 'Trình duyệt này không hỗ trợ thông báo.';
     if (Notification.permission === 'denied') return 'Bạn đã chặn quyền thông báo — vào cài đặt trình duyệt để bật lại.';
-    if (Notification.permission === 'granted' && plannerNotifEnabled()) return 'Đang bật — báo Kế Hoạch trước ' + getPlannerNotifLeadMin() + ' phút, và báo Hạn Ghi chú/Công việc theo mức ưu tiên. Hoạt động kể cả khi tắt trình duyệt.';
+    if (plannerIsIOS() && !plannerIsStandalone()) return 'Trên iPhone: bấm Chia sẻ → "Thêm vào Màn hình chính", rồi mở app từ icon đó mới nhận được thông báo khi đã tắt app.';
+    if (Notification.permission === 'granted' && plannerNotifEnabled()) return 'Đang bật — báo Kế Hoạch trước ' + getPlannerNotifLeadMin() + ' phút, báo đúng giờ, và báo Hạn Ghi chú/Công việc theo mức ưu tiên. Máy chủ gửi nên nhận được kể cả khi đã tắt app.';
     return 'Đang tắt.';
 }
 

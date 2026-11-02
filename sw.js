@@ -11,7 +11,7 @@
 // để hoạt động đúng dù chạy ở domain gốc (Live Server) hay dưới 1 subpath khi deploy
 // (vd GitHub Pages: https://user.github.io/ten-repo/...).
 // Tăng số version mỗi khi đổi DANH SÁCH file trong APP_SHELL_RELATIVE (hoặc muốn ép dọn cache cũ).
-const CACHE_NAME = 'sgu-workspace-v15';
+const CACHE_NAME = 'sgu-workspace-v16';
 const CALENDAR_PAGE = 'tkb/calendar.html'; // trang mở khi bấm thông báo (trước đây gõ lặp ở 3 chỗ)
 const APP_SHELL_RELATIVE = [
     'index.html', 'index.css', 'index.js', 'supabase-config.js', 'shared.js', 'bg-sync.js',
@@ -118,6 +118,7 @@ self.addEventListener('push', (event) => {
         icon: payload.icon || scopedUrl('icon-192.png'),
         badge: payload.badge || scopedUrl('icon-192.png'),
         tag: payload.tag || 'sgu-planner',
+        renotify: true, // cùng tag (vd bấm "Gửi thử" nhiều lần) vẫn rung/kêu lại thay vì thay thế im lặng
         data: { url: payload.url || scopedUrl(CALENDAR_PAGE) },
         vibrate: [100, 50, 100],
         requireInteraction: false,

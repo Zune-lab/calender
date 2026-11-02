@@ -446,6 +446,12 @@
                             <input type="checkbox" id="planner-notif-toggle" class="rocker-toggle">
                             <span id="planner-notif-status" style="color: var(--text-muted); font-size: 0.82rem;"></span>
                         </div>
+                        <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <button type="button" id="planner-push-test-btn" class="import-btn" onclick="sendTestPush()" style="min-height: 36px; padding: 0 14px;">
+                                <span>Gửi thông báo thử</span>
+                            </button>
+                            <span id="planner-push-test-result" style="color: var(--text-muted); font-size: 0.82rem; max-width: 460px;"></span>
+                        </div>
                     </div>
 
                     <!-- ẢNH NỀN MÀN HÌNH KHOÁ TỰ CẬP NHẬT (calendar-7-wallpaper.js + Edge Function `wallpaper`) -->

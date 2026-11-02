@@ -142,3 +142,29 @@ body.light-mode .empty-td.today-col {
 .wallpaper-help summary { cursor: pointer; color: inherit; }
 .wallpaper-help ol { margin: 8px 0 8px 18px; padding: 0; }
 .wallpaper-help li { margin-bottom: 4px; }
+
+/* =========================================================
+   FIX BỐ CỤC ĐIỆN THOẠI (iPhone/Android, ≤760px) — 2 lỗi gốc:
+   (1) "Kéo lên thấy khoảng trắng": .desktop-environment có min-height:100vh CỘNG thêm padding (content-box) nên cao hơn màn hình
+       ~130px -> trang cuộn được, kéo lên là lộ phần nền trống bên dưới/trên khung. 100vh trên iOS còn lớn hơn vùng thấy được.
+   (2) "Nav sát khung Lịch": chiều cao khung tính calc(100dvh - 130px) KHÔNG trừ vùng an toàn (tai thỏ + thanh home) nên đáy khung
+       đè xuống thanh nav nổi.
+   Cách sửa: khoá đúng 1 màn hình (100dvh, border-box), tự chừa vùng an toàn trên + chừa chỗ rõ ràng cho nav ở dưới, khung chính
+   lấp đầy phần còn lại; chặn kéo-giãn (overscroll) và luôn có nền tối để nếu có giãn cũng không lộ khoảng trắng.
+   ========================================================= */
+html { background-color: #08090c; overscroll-behavior-y: none; }
+html:has(body.light-mode) { background-color: #eef0f5; }
+@media (max-width: 1180px) {
+    .desktop-environment { box-sizing: border-box; min-height: 100vh; min-height: 100dvh; }
+}
+@media (max-width: 760px) {
+    html, body { height: 100%; overscroll-behavior: none; }
+    body { overflow: hidden; }
+    .desktop-environment {
+        height: 100vh; height: 100dvh; min-height: 0;
+        align-items: stretch;
+        /* trên: vùng an toàn + 10px | dưới: nav nổi (14px lề + ~76px cao) + ~18px hở rõ ràng + vùng an toàn */
+        padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px calc(env(safe-area-inset-bottom, 0px) + 112px);
+    }
+    .main-glass-dashboard { height: 100%; max-height: none; min-height: 0; }
+}
