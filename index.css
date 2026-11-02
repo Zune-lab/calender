@@ -470,7 +470,8 @@ body.has-custom-bg.bg-photo-light .badge-status { background: rgba(255,255,255,0
     body { overflow-y: auto; overflow-x: hidden; height: auto; min-height: 100vh; }
     .desktop-container {
         display: flex; flex-direction: column; gap: 22px;
-        padding: 20px 5% 110px; min-height: 100vh; height: auto;
+        /* env(safe-area-inset-top): app mở từ icon Màn hình chính vẽ xuống dưới thanh trạng thái (status-bar-style=black-translucent) -> chừa chỗ cho giờ/pin. 0 ở trình duyệt thường. */
+        padding: calc(env(safe-area-inset-top, 0px) + 20px) 5% 110px; min-height: 100vh; height: auto;
         max-width: 100%; box-sizing: border-box;
     }
 

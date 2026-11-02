@@ -47,7 +47,8 @@ body {
 /* ---------- TOPBAR ---------- */
 .profile-topbar {
     width: 100%; display: flex; align-items: center; justify-content: space-between;
-    padding: 24px 6%; position: sticky; top: 0; z-index: 20;
+    /* + env(safe-area-inset-top): chừa chỗ cho thanh trạng thái khi mở từ icon Màn hình chính (0 ở trình duyệt thường) */
+    padding: calc(24px + env(safe-area-inset-top, 0px)) 6% 24px; position: sticky; top: 0; z-index: 20;
     /* Đã bỏ backdrop-filter + mask-image (kết hợp 2 thứ này bị lỗi render ở nhiều trình duyệt,
        ra 1 khối chữ nhật trắng có viền cứng như ảnh bạn gửi). Quay về đúng 1 lớp gradient màu
        scrim như ban đầu — màu/độ đậm của lớp này đã được profile.js tính theo ảnh nền rồi. */
@@ -267,7 +268,7 @@ body.light-mode .slider { background: rgba(0,0,0,0.12); }
 }
 
 @media (max-width: 480px) {
-    .profile-topbar { padding: 18px 5%; flex-wrap: wrap; gap: 12px; }
+    .profile-topbar { padding: calc(18px + env(safe-area-inset-top, 0px)) 5% 18px; flex-wrap: wrap; gap: 12px; }
     .topbar-shortcuts { order: 3; width: 100%; justify-content: flex-start; gap: 8px; }
     .profile-shell { padding: 10px 5% 60px; gap: 16px; }
     .profile-card { padding: 20px; }

@@ -220,6 +220,7 @@ function applyTheme() {
     // hiện tại của HĐH qua matchMedia('(prefers-color-scheme: dark)') mỗi lần hàm này chạy.
     const isLight = getIsLightForCurrentThemeSetting();
     document.body.classList.toggle('light-mode', isLight);
+    syncStatusBarArea(); // vùng trên cùng (status bar) đổi theo chế độ sáng/tối
     return isLight;
 }
 
@@ -248,6 +249,70 @@ if (window.matchMedia) {
     if (_systemThemeMql.addEventListener) _systemThemeMql.addEventListener('change', _onSystemThemeChange);
     else if (_systemThemeMql.addListener) _systemThemeMql.addListener(_onSystemThemeChange);
 }
+
+// ---------------------------------------------------------
+// VÙNG TRÊN CÙNG (thanh trạng thái / tai thỏ trên iPhone) — NGUỒN DUY NHẤT cho cả 3 trang.
+// Trước đây iOS tự tô 1 dải xám/trắng ở trên cùng khi mở app từ icon Màn hình chính vì:
+//   (1) chưa khai báo apple-mobile-web-app-status-bar-style=black-translucent -> iOS không cho nội dung
+//       (ảnh nền) vẽ xuống dưới thanh trạng thái (đã thêm meta ở 3 file HTML);
+//   (2) <meta theme-color> bị đặt cứng #08090c, không theo chế độ sáng/tối hay ảnh nền tuỳ chỉnh.
+// Hàm này: (a) đặt theme-color theo chế độ sáng/tối, rồi theo MÀU TRUNG BÌNH dải trên cùng của ảnh nền
+// tuỳ chỉnh nếu có (bg-sync.js -> measureImageStats); (b) thêm 1 lớp mờ dần cao đúng bằng vùng an toàn phía
+// trên (env(safe-area-inset-top) = 0 trên máy không tai thỏ/trình duyệt thường nên lớp này tự biến mất) để
+// giờ/pin màu trắng của iOS vẫn đọc được trên mọi ảnh nền, mà vẫn thấy ảnh chứ không còn mảng xám đặc.
+// ---------------------------------------------------------
+const STATUS_BAR_THEME_COLOR = { dark: '#08090c', light: '#e2e8f0' }; // = --bg-color của 3 trang (manifest dùng #08090c)
+let _statusBarSeq = 0; // yêu cầu đo ảnh cũ bị bỏ khi đã có yêu cầu mới (đổi ảnh/đổi theme liên tục)
+
+function setThemeColorMeta(color) {
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        document.head.appendChild(meta);
+    }
+    if (meta.getAttribute('content') !== color) meta.setAttribute('content', color);
+}
+
+function ensureStatusBarScrim() {
+    if (!document.getElementById('status-bar-scrim-style')) {
+        const st = document.createElement('style');
+        st.id = 'status-bar-scrim-style';
+        st.textContent = '#status-bar-scrim{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);z-index:99998;pointer-events:none;'
+            + 'background:linear-gradient(to bottom,var(--status-scrim,rgba(8,9,12,.45)),transparent)}';
+        document.head.appendChild(st);
+    }
+    let el = document.getElementById('status-bar-scrim');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'status-bar-scrim';
+        el.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+function syncStatusBarArea() {
+    if (!document.body) { document.addEventListener('DOMContentLoaded', syncStatusBarArea, { once: true }); return; }
+    const isLight = document.body.classList.contains('light-mode');
+    const bgUrl = lsGet(STORAGE_KEYS.customBg);
+    const seq = ++_statusBarSeq;
+
+    setThemeColorMeta(isLight ? STATUS_BAR_THEME_COLOR.light : STATUS_BAR_THEME_COLOR.dark);
+    // Ảnh nền bất kỳ (kể cả ảnh sáng) -> lớp mờ tối vừa đủ cho chữ trắng; nền sáng trơn -> nhạt hơn cho đỡ "xám".
+    ensureStatusBarScrim().style.setProperty('--status-scrim', bgUrl ? 'rgba(8,9,12,.42)' : (isLight ? 'rgba(30,41,59,.28)' : 'rgba(8,9,12,.45)'));
+
+    if (bgUrl && typeof window.measureImageStats === 'function') {
+        window.measureImageStats(bgUrl, 0.06).then((st) => { // 6% trên cùng của ảnh = đúng phần nằm dưới thanh trạng thái
+            if (seq === _statusBarSeq && st) setThemeColorMeta('rgb(' + st.r + ', ' + st.g + ', ' + st.b + ')');
+        });
+    }
+}
+window.addEventListener('customBackgroundChange', syncStatusBarArea); // bg-sync.js: đổi/xoá ảnh nền
+window.addEventListener('themeChanged', syncStatusBarArea);
+// KHÔNG gọi ngay: STORAGE_KEYS (const, khai báo phía dưới file này) chưa khởi tạo lúc đoạn này chạy -> đợi hết lượt nạp script.
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncStatusBarArea, { once: true });
+else setTimeout(syncStatusBarArea, 0);
 
 // ---------------------------------------------------------
 // Đọc/ghi màu tuỳ chỉnh theo môn học (localStorage 'subjectCustomColors') — gom về đây

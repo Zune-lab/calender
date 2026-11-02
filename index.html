@@ -11,6 +11,13 @@
     <link rel="stylesheet" href="index.css">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#08090c">
+    <!-- Cho nội dung/ảnh nền vẽ xuống DƯỚI thanh trạng thái (iPhone) thay vì để iOS tô dải xám/trắng ở trên cùng.
+         theme-color được shared.js (syncStatusBarArea) cập nhật theo ảnh nền/chế độ sáng-tối. Đổi các meta này
+         thì phải xoá app khỏi Màn hình chính rồi "Thêm vào Màn hình chính" lại thì iOS mới nhận. -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SGU Workspace">
     <link rel="icon" href="icon-192.png">
     <link rel="apple-touch-icon" href="icon-192.png">
     
