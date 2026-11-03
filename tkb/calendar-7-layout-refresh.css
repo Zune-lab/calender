@@ -158,13 +158,17 @@ html:has(body.light-mode) { background-color: #eef0f5; }
     .desktop-environment { box-sizing: border-box; min-height: 100vh; min-height: 100dvh; }
 }
 @media (max-width: 760px) {
+    /* Nav nổi chỉ cách mép dưới ~24px trên iPhone (vùng an toàn 34px - 10px: thanh home chồng nhẹ lên lề của nav, giống tab bar iOS),
+       thay vì 14px + 34px = 48px như trước -> bớt dải trống bên dưới nav. Máy không có thanh home: 10px. */
+    :root { --nav-bottom: max(10px, calc(env(safe-area-inset-bottom, 0px) - 10px)); --nav-h: 78px; --nav-gap: 10px; }
+    .mobile-bottom-nav { bottom: var(--nav-bottom); }
     html, body { height: 100%; overscroll-behavior: none; }
     body { overflow: hidden; }
     .desktop-environment {
         height: 100vh; height: 100dvh; min-height: 0;
         align-items: stretch;
-        /* trên: vùng an toàn + 10px | dưới: nav nổi (14px lề + ~76px cao) + ~18px hở rõ ràng + vùng an toàn */
-        padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px calc(env(safe-area-inset-bottom, 0px) + 112px);
+        /* trên: vùng an toàn + 6px | dưới: đúng chỗ nav nổi (lề + cao) + 10px hở -> khung TKB kéo xuống sát nav, không còn khoảng trống thừa */
+        padding: calc(env(safe-area-inset-top, 0px) + 6px) 12px calc(var(--nav-bottom) + var(--nav-h) + var(--nav-gap));
     }
     .main-glass-dashboard { height: 100%; max-height: none; min-height: 0; }
 }

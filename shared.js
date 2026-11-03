@@ -252,14 +252,12 @@ if (window.matchMedia) {
 
 // ---------------------------------------------------------
 // VÙNG TRÊN CÙNG (thanh trạng thái / tai thỏ trên iPhone) — NGUỒN DUY NHẤT cho cả 3 trang.
-// Trước đây iOS tự tô 1 dải xám/trắng ở trên cùng khi mở app từ icon Màn hình chính vì:
-//   (1) chưa khai báo apple-mobile-web-app-status-bar-style=black-translucent -> iOS không cho nội dung
-//       (ảnh nền) vẽ xuống dưới thanh trạng thái (đã thêm meta ở 3 file HTML);
-//   (2) <meta theme-color> bị đặt cứng #08090c, không theo chế độ sáng/tối hay ảnh nền tuỳ chỉnh.
-// Hàm này: (a) đặt theme-color theo chế độ sáng/tối, rồi theo MÀU TRUNG BÌNH dải trên cùng của ảnh nền
-// tuỳ chỉnh nếu có (bg-sync.js -> measureImageStats); (b) thêm 1 lớp mờ dần cao đúng bằng vùng an toàn phía
-// trên (env(safe-area-inset-top) = 0 trên máy không tai thỏ/trình duyệt thường nên lớp này tự biến mất) để
-// giờ/pin màu trắng của iOS vẫn đọc được trên mọi ảnh nền, mà vẫn thấy ảnh chứ không còn mảng xám đặc.
+// Dải xám/trắng ở trên cùng có 2 nguyên nhân: (1) thiếu apple-mobile-web-app-status-bar-style=black-translucent
+// (iOS tự tô thanh trạng thái, đã thêm meta ở 3 file HTML); (2) <html> có background-color sáng riêng nên nền của body
+// không lan ra dưới thanh trạng thái (bg-sync.js giờ gán cùng ảnh cho <html>).
+// Hàm này chỉ lo phần màu: theme-color + màu nền <html> theo chế độ sáng/tối, rồi theo MÀU TRUNG BÌNH dải trên cùng của
+// ảnh nền tuỳ chỉnh nếu có (bg-sync.js -> measureImageStats) để lúc ảnh chưa tải / khi kéo giãn vẫn liền màu với ảnh.
+// KHÔNG còn lớp mờ riêng đè lên thanh trạng thái (lớp đó chính là "mảng" lạ ở trên).
 // ---------------------------------------------------------
 const STATUS_BAR_THEME_COLOR = { dark: '#08090c', light: '#e2e8f0' }; // = --bg-color của 3 trang (manifest dùng #08090c)
 let _statusBarSeq = 0; // yêu cầu đo ảnh cũ bị bỏ khi đã có yêu cầu mới (đổi ảnh/đổi theme liên tục)
@@ -274,24 +272,6 @@ function setThemeColorMeta(color) {
     if (meta.getAttribute('content') !== color) meta.setAttribute('content', color);
 }
 
-function ensureStatusBarScrim() {
-    if (!document.getElementById('status-bar-scrim-style')) {
-        const st = document.createElement('style');
-        st.id = 'status-bar-scrim-style';
-        st.textContent = '#status-bar-scrim{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);z-index:99998;pointer-events:none;'
-            + 'background:linear-gradient(to bottom,var(--status-scrim,rgba(8,9,12,.45)),transparent)}';
-        document.head.appendChild(st);
-    }
-    let el = document.getElementById('status-bar-scrim');
-    if (!el) {
-        el = document.createElement('div');
-        el.id = 'status-bar-scrim';
-        el.setAttribute('aria-hidden', 'true');
-        document.body.appendChild(el);
-    }
-    return el;
-}
-
 function syncStatusBarArea() {
     if (!document.body) { document.addEventListener('DOMContentLoaded', syncStatusBarArea, { once: true }); return; }
     const isLight = document.body.classList.contains('light-mode');
@@ -299,12 +279,15 @@ function syncStatusBarArea() {
     const seq = ++_statusBarSeq;
 
     setThemeColorMeta(isLight ? STATUS_BAR_THEME_COLOR.light : STATUS_BAR_THEME_COLOR.dark);
-    // Ảnh nền bất kỳ (kể cả ảnh sáng) -> lớp mờ tối vừa đủ cho chữ trắng; nền sáng trơn -> nhạt hơn cho đỡ "xám".
-    ensureStatusBarScrim().style.setProperty('--status-scrim', bgUrl ? 'rgba(8,9,12,.42)' : (isLight ? 'rgba(30,41,59,.28)' : 'rgba(8,9,12,.45)'));
+    // Không có ảnh nền tuỳ chỉnh: trả màu nền <html> về CSS (tối/sáng theo theme).
+    if (!bgUrl) document.documentElement.style.backgroundColor = '';
 
     if (bgUrl && typeof window.measureImageStats === 'function') {
         window.measureImageStats(bgUrl, 0.06).then((st) => { // 6% trên cùng của ảnh = đúng phần nằm dưới thanh trạng thái
-            if (seq === _statusBarSeq && st) setThemeColorMeta('rgb(' + st.r + ', ' + st.g + ', ' + st.b + ')');
+            if (seq !== _statusBarSeq || !st) return;
+            const c = 'rgb(' + st.r + ', ' + st.g + ', ' + st.b + ')';
+            setThemeColorMeta(c);
+            document.documentElement.style.backgroundColor = c;
         });
     }
 }

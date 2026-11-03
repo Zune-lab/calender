@@ -44,16 +44,32 @@
     // (hoặc hiện lại ngay sau khi người dùng bấm "Khôi phục mặc định").
     let bgRequestSeq = 0;
 
+    // Gán ảnh cho CẢ <html>: html có background-color riêng (xám sáng #eef0f5 ở chế độ sáng) nên nền của body KHÔNG còn lan ra
+    // toàn màn hình -> phần nằm DƯỚI thanh trạng thái / thanh home của iPhone lộ ra đúng màu xám/trắng đó (dải xám phía trên).
+    // Cho html cùng ảnh (cùng cover/center) thì vùng đó là ảnh thật, liền mạch với body.
     function applyToBody(url) {
         document.body.style.backgroundImage = cssUrl(url);
         document.body.style.backgroundSize = 'cover';
         document.body.style.backgroundPosition = 'center';
+        const root = document.documentElement.style;
+        root.backgroundImage = cssUrl(url);
+        root.backgroundSize = 'cover';
+        root.backgroundPosition = 'center';
+        root.backgroundRepeat = 'no-repeat';
+        root.backgroundAttachment = 'fixed';
     }
 
     function clearFromBody() {
         document.body.style.backgroundImage = '';
         document.body.style.backgroundSize = '';
         document.body.style.backgroundPosition = '';
+        const root = document.documentElement.style;
+        root.backgroundImage = '';
+        root.backgroundSize = '';
+        root.backgroundPosition = '';
+        root.backgroundRepeat = '';
+        root.backgroundAttachment = '';
+        root.backgroundColor = '';
     }
 
     // ---------------------------------------------------------
